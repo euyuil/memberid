@@ -31,6 +31,8 @@ jobs:
       - name: Check and build
         shell: bash
         run: sh scripts/check.sh
+      - name: Compile optional interoperability checks
+        run: go test -tags=interop ./internal/interop
       - name: Package native executable
         shell: bash
         run: |
