@@ -26,7 +26,7 @@ type Handler struct {
 	routes   *http.ServeMux
 }
 
-func New(store *identity.Store, secretSHA256 string) (*Handler, error) {
+func New(store *identity.Store, secretSHA256 string, applications *identity.DingTalkApplications) (*Handler, error) {
 	verifier, err := hex.DecodeString(secretSHA256)
 	if err != nil || len(verifier) != sha256.Size || store == nil {
 		return nil, errors.New("management requires a store and a credential verifier")
@@ -68,6 +68,9 @@ func New(store *identity.Store, secretSHA256 string) (*Handler, error) {
 		respond(w, http.StatusOK, value, err)
 	})
 	h.routes.HandleFunc("POST /v1/eligibility", h.eligibility)
+	if applications != nil {
+		h.dingTalkRoutes(applications)
+	}
 	return h, nil
 }
 
@@ -123,6 +126,8 @@ func respond(w http.ResponseWriter, status int, value any, err error) {
 			problem(w, http.StatusUnprocessableEntity, "member_id_conflict")
 		case errors.Is(err, identity.ErrConflict):
 			problem(w, http.StatusConflict, "conflict")
+		case errors.Is(err, identity.ErrProviderUnavailable):
+			problem(w, http.StatusServiceUnavailable, "provider_unavailable")
 		case errors.Is(err, identity.ErrIneligible):
 			problem(w, http.StatusForbidden, "ineligible")
 		default:

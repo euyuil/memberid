@@ -15,7 +15,7 @@ func TestOIDCAndManagementCredentialsAreSeparate(t *testing.T) {
 	f := newFixture(t)
 	tokens := f.tokens()
 	managementSecret := config.RandomSecret()
-	handler, err := management.New(f.store, config.SecretHash(managementSecret))
+	handler, err := management.New(f.store, config.SecretHash(managementSecret), nil)
 	if err != nil {
 		t.Fatal(err)
 	}

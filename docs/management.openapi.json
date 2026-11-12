@@ -584,6 +584,75 @@
           }
         }
       }
+    },
+    "/v1/organizations/{organizationId}/dingtalk-application": {
+      "get": {
+        "operationId": "getDingTalkApplication",
+        "parameters": [
+          {
+            "name": "organizationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/OrganizationID"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current DingTalk application metadata; never includes credentials.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DingTalkApplication"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "put": {
+        "operationId": "configureDingTalkApplication",
+        "description": "Verifies DingTalk authorization and configures or rotates organization application credentials with an expected revision. Does not enable interactive DingTalk login in this increment.",
+        "parameters": [
+          {
+            "name": "organizationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/OrganizationID"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DingTalkApplicationInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Current DingTalk application metadata; never includes credentials.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DingTalkApplication"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -596,7 +665,7 @@
     },
     "responses": {
       "Error": {
-        "description": "400 invalid request; 401 missing or invalid management credential; 403 browser access denied or ineligible factor; 404 record not found; 409 identifier or binding conflict; 415 JSON required; 422 candidate Member identifier collision; 500 internal error. Unknown routes and unsupported methods may use ordinary HTTP errors.",
+        "description": "400 invalid request; 401 missing or invalid management credential; 403 browser access denied or ineligible factor; 404 record not found; 409 identifier or binding conflict; 415 JSON required; 422 candidate Member identifier collision; 500 internal error; 503 provider verification unavailable. Unknown routes and unsupported methods may use ordinary HTTP errors.",
         "content": {
           "application/json": {
             "schema": {
@@ -1071,6 +1140,82 @@
           "bindingId",
           "authenticationFactorId",
           "createdAt"
+        ]
+      },
+      "DingTalkApplicationInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "corpId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,256}$"
+          },
+          "clientId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,256}$"
+          },
+          "clientSecret": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096,
+            "writeOnly": true,
+            "description": "At most 4096 UTF-8 bytes; no control characters or leading/trailing whitespace."
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "maximum": 9223372036854775806,
+            "description": "0 for initial configuration; current revision for rotation."
+          }
+        },
+        "required": [
+          "corpId",
+          "clientId",
+          "clientSecret",
+          "expectedRevision"
+        ]
+      },
+      "DingTalkApplication": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "organizationId": {
+            "$ref": "#/components/schemas/OrganizationID"
+          },
+          "namespace": {
+            "type": "string"
+          },
+          "corpId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,256}$"
+          },
+          "clientId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,256}$"
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "organizationId",
+          "namespace",
+          "corpId",
+          "clientId",
+          "revision",
+          "createdAt",
+          "updatedAt"
         ]
       }
     }

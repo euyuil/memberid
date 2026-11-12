@@ -91,3 +91,7 @@ Grant metadata includes the client, subject, organization when applicable, facto
 Revocation targets exactly one grant and serializes with refresh rotation on that grant's database row. It invalidates the grant's Refresh Token family and its access tokens at online verifiers. Repeating the command preserves the first revocation timestamp. It does not revoke another grant, end the parent browser SSO session, remove an application's local session, or erase identity records. A new authorization flow may create a new grant if login and consent policy permit it. Already issued JWTs remain usable at offline verifiers until their short expiry. Use standard RP-initiated logout when the intended operation is to end the associated MemberID SSO session and its grants.
 
 Missing grants fail explicitly. There is no bulk revoke, expiry-extension, restore, or credential-export command. Keep database access limited to trusted operators; knowing a grant identifier is not authorization to administer it.
+
+## Configure an optional DingTalk application
+
+Use `memberid dingtalk configure` and `memberid dingtalk inspect` to manage an organization application with protected secret files and explicit configuration revisions. The same operation is available through the private management API. See [DingTalk application configuration](dingtalk.md) for authorization checks, encryption, rotation, and the current login limitations.
