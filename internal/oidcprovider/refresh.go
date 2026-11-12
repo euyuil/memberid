@@ -77,6 +77,7 @@ func (s *storage) rotateRefresh(ctx context.Context, request *refreshRequest, se
 	accessID, nextSecret := newID(), config.RandomSecret()
 	expiry := minimum(now.Add(accessLifetime), request.AbsoluteExpiry)
 	replayed := false
+	observation, observationErr := s.observeDirectory(ctx, &request.grant)
 	err = pgx.BeginFunc(ctx, s.service.store.Database(), func(tx pgx.Tx) error {
 		var sessionID string
 		// A refresh does not depend on a browser cookie or the browser SSO idle deadline.
@@ -99,6 +100,9 @@ func (s *storage) rotateRefresh(ctx context.Context, request *refreshRequest, se
 		}
 		if !request.AbsoluteExpiry.After(now.Add(5 * time.Minute)) {
 			return oidc.ErrInvalidGrant()
+		}
+		if err := s.validateDirectory(ctx, tx, observation, observationErr); err != nil {
+			return err
 		}
 		if err := s.eligible(ctx, tx, &request.grant); err != nil {
 			return err

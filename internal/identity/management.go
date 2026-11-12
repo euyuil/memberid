@@ -84,7 +84,7 @@ func (store *Store) UpdateMember(ctx context.Context, organizationID, memberID s
 	if !ValidID(organizationID, OrganizationKind) || !ValidID(memberID, MemberKind) || change.DisplayName == nil && change.ManualBlocked == nil || change.DisplayName != nil && !validText(*change.DisplayName, 128) {
 		return Member{}, ErrInvalid
 	}
-	return readMember(store.pool.QueryRow(ctx, "UPDATE members SET display_name=COALESCE($3,display_name),manual_block=COALESCE($4,manual_block),updated_at=clock_timestamp() WHERE id=$1 AND organization_id=$2 RETURNING "+memberColumns, memberID, organizationID, change.DisplayName, change.ManualBlocked))
+	return readMember(store.pool.QueryRow(ctx, "UPDATE members SET display_name=COALESCE($3,display_name),manual_block=COALESCE($4,manual_block),eligibility_revision=eligibility_revision+CASE WHEN $4 IS NOT NULL AND manual_block<>$4 THEN 1 ELSE 0 END,updated_at=clock_timestamp() WHERE id=$1 AND organization_id=$2 RETURNING "+memberColumns, memberID, organizationID, change.DisplayName, change.ManualBlocked))
 }
 
 func (store *Store) Bindings(ctx context.Context, organizationID, memberID string) ([]Binding, error) {

@@ -117,7 +117,7 @@ func (store *Store) setMemberBlock(ctx context.Context, organizationID, memberID
 	if !ValidID(organizationID, OrganizationKind) || !ValidID(memberID, MemberKind) {
 		return Member{}, ErrInvalid
 	}
-	return readMember(store.pool.QueryRow(ctx, "UPDATE members SET "+column+"=$3,updated_at=clock_timestamp() WHERE id=$1 AND organization_id=$2 RETURNING "+memberColumns, memberID, organizationID, value))
+	return readMember(store.pool.QueryRow(ctx, "UPDATE members SET "+column+"=$3,eligibility_revision=eligibility_revision+CASE WHEN "+column+"<>$3 THEN 1 ELSE 0 END,updated_at=clock_timestamp() WHERE id=$1 AND organization_id=$2 RETURNING "+memberColumns, memberID, organizationID, value))
 }
 
 // EnsureFactor records provider-verified evidence; it never infers a Member binding.

@@ -36,6 +36,15 @@ func (client *Client) Login(ctx context.Context, corpID, clientID, secret, code 
 	if err := client.request(ctx, http.MethodGet, "https://api.dingtalk.com/v1.0/contact/users/me", nil, token.AccessToken, false, &user); err != nil || !validValue(user.UnionID, 512) {
 		return Member{}, ErrUnavailable
 	}
+	return client.VerifyMember(ctx, corpID, clientID, secret, user.UnionID)
+}
+
+// VerifyMember obtains current directory evidence for an already known provider subject.
+// An unavailable lookup does not establish that the person left the organization.
+func (client *Client) VerifyMember(ctx context.Context, corpID, clientID, secret, unionID string) (Member, error) {
+	if !ValidCredentials(corpID, clientID, secret) || !validValue(unionID, 512) {
+		return Member{}, ErrUnavailable
+	}
 	applicationToken, err := client.applicationToken(ctx, corpID, clientID, secret)
 	if err != nil {
 		return Member{}, err
@@ -46,7 +55,13 @@ func (client *Client) Login(ctx context.Context, corpID, clientID, secret, code 
 			ContactType json.RawMessage `json:"contact_type"`
 		} `json:"result"`
 	}
-	if err := client.request(ctx, http.MethodPost, "https://oapi.dingtalk.com/topapi/user/getbyunionid?access_token="+url.QueryEscape(applicationToken), map[string]string{"unionid": user.UnionID}, "", false, &mapping); err != nil || !validValue(mapping.Result.UserID, 512) || !zero(mapping.Result.ContactType) {
+	if err := client.request(ctx, http.MethodPost, "https://oapi.dingtalk.com/topapi/user/getbyunionid?access_token="+url.QueryEscape(applicationToken), map[string]string{"unionid": unionID}, "", false, &mapping); err != nil || !validValue(mapping.Result.UserID, 512) {
+		return Member{}, ErrUnavailable
+	}
+	if string(mapping.Result.ContactType) == "1" || string(mapping.Result.ContactType) == `"1"` {
+		return Member{}, ErrNotMember
+	}
+	if !zero(mapping.Result.ContactType) {
 		return Member{}, ErrUnavailable
 	}
 	var detail struct {
@@ -57,10 +72,13 @@ func (client *Client) Login(ctx context.Context, corpID, clientID, secret, code 
 			Departments json.RawMessage `json:"dept_id_list"`
 		} `json:"result"`
 	}
-	if err := client.request(ctx, http.MethodPost, "https://oapi.dingtalk.com/topapi/v2/user/get?access_token="+url.QueryEscape(applicationToken), map[string]string{"userid": mapping.Result.UserID}, "", false, &detail); err != nil || detail.Result.UserID != mapping.Result.UserID || detail.Result.UnionID != user.UnionID {
+	if err := client.request(ctx, http.MethodPost, "https://oapi.dingtalk.com/topapi/v2/user/get?access_token="+url.QueryEscape(applicationToken), map[string]string{"userid": mapping.Result.UserID}, "", false, &detail); err != nil || !validValue(detail.Result.UserID, 512) || !validValue(detail.Result.UnionID, 512) {
 		return Member{}, ErrUnavailable
 	}
-	return Member{UnionID: user.UnionID, UserID: detail.Result.UserID, DisplayName: detail.Result.Name, DepartmentIDs: departments(detail.Result.Departments)}, nil
+	if detail.Result.UserID != mapping.Result.UserID || detail.Result.UnionID != unionID {
+		return Member{}, ErrIdentityConflict
+	}
+	return Member{UnionID: unionID, UserID: detail.Result.UserID, DisplayName: detail.Result.Name, DepartmentIDs: departments(detail.Result.Departments)}, nil
 }
 
 // Missing or malformed optional attributes do not invalidate otherwise verified membership.

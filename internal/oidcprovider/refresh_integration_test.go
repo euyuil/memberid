@@ -239,7 +239,7 @@ func TestRefreshAcrossProviderInstances(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer independentStore.Close()
-	independent, err := New(f.service.configuration, independentStore, f.service.phone, nil)
+	independent, err := New(f.service.configuration, independentStore, f.service.phone, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

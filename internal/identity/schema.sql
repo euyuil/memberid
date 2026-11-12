@@ -1,7 +1,7 @@
 CREATE TABLE memberid_schema (
-    version integer PRIMARY KEY CHECK (version = 8)
+    version integer PRIMARY KEY CHECK (version = 9)
 );
-INSERT INTO memberid_schema(version) VALUES (8);
+INSERT INTO memberid_schema(version) VALUES (9);
 
 CREATE TABLE organizations (
     id text COLLATE "C" PRIMARY KEY CHECK (id ~ '^org_[0-9bcdfghjkmnpqrstvwxz]{27}$'),
@@ -18,6 +18,7 @@ CREATE TABLE members (
     display_name text NOT NULL CHECK (char_length(display_name) BETWEEN 1 AND 128),
     manual_block boolean NOT NULL DEFAULT false,
     external_departure boolean NOT NULL DEFAULT false,
+    eligibility_revision bigint NOT NULL DEFAULT 0 CHECK (eligibility_revision >= 0),
     created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
     updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
     UNIQUE (id, organization_id)

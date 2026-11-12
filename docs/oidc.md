@@ -40,7 +40,7 @@ ID Tokens authenticate the user to a client. They do not work as UserInfo or app
 
 For a registered evidence scope, the access token includes `authentication` facts (`factorId`, `factorType`, `method`, `authenticatedAt`, `expiresAt`), plus `organizationId`, `memberId`, and `bindingId` when a Member is selected. This is an optional identity-claim extension to the standard access token, not another credential or authorization protocol. No business roles, administrative privileges, or resource grants are issued by MemberID.
 
-Current organization, Member, factor, and binding eligibility is checked during code issuance/redemption and online UserInfo/introspection. An authorization code is bound to its client, redirect URI, PKCE verifier, and browser transaction. It expires after at most one minute and may be redeemed once. A detected valid code replay revokes the resulting grant, including concurrent duplicate redemption. A failed client or PKCE check does not consume another client's legitimate code.
+Current organization, Member, factor, and binding eligibility is checked during code issuance/redemption, refresh, and online UserInfo/introspection. For admitted DingTalk-linked Members, code redemption and refresh also perform [current directory verification](dingtalk.md#current-directory-verification-at-token-issuance), with distinct policies for unknown provider outages and definitive contradictions. An authorization code is bound to its client, redirect URI, PKCE verifier, and browser transaction. It expires after at most one minute and may be redeemed once. A detected valid code replay revokes the resulting grant, including concurrent duplicate redemption. A failed client or PKCE check does not consume another client's legitimate code.
 
 ## Lifetimes, revocation, and logout
 
@@ -81,7 +81,7 @@ Follow [operator setup](operations.md) to initialize a new dedicated database an
 memberid serve --directory .local/memberid --listen 127.0.0.1:8080
 ```
 
-Phone and DingTalk can be enabled independently. DingTalk-only login requires no SMS credentials. Omitting `--directory` starts health-only mode. File configuration and client-policy changes take effect after a restart; organization DingTalk credentials are loaded with explicit revision checks. This initial schema is version 8; startup refuses older schemas, and no existing database is reset or migrated automatically.
+Phone and DingTalk can be enabled independently. DingTalk-only login requires no SMS credentials. Omitting `--directory` starts health-only mode. File configuration and client-policy changes take effect after a restart; organization DingTalk credentials are loaded with explicit revision checks. This initial schema is version 9; startup refuses older schemas, and no existing database is reset or migrated automatically.
 
 For the first Member, create its organization and Member through the operator CLI, then let the person verify their phone in an application login. Verification creates only the factor. An authorized operator can inspect that existing factor and explicitly bind it:
 
