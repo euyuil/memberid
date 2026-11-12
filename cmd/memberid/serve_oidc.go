@@ -75,6 +75,11 @@ func authenticationHandler(ctx context.Context, directory string) (http.Handler,
 	}
 	cleanup, cancel := context.WithCancel(ctx)
 	finished := make(chan struct{})
+	synchronized := make(chan struct{})
+	go func() {
+		defer close(synchronized)
+		directoryVerifier.RunSynchronization(cleanup, func() { slog.Warn("DingTalk background synchronization incomplete") })
+	}()
 	go func() {
 		defer close(finished)
 		ticker := time.NewTicker(time.Minute)
@@ -92,5 +97,5 @@ func authenticationHandler(ctx context.Context, directory string) (http.Handler,
 			}
 		}
 	}()
-	return provider, func() { cancel(); <-finished; store.Close() }, nil
+	return provider, func() { cancel(); <-finished; <-synchronized; store.Close() }, nil
 }
