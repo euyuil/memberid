@@ -4,7 +4,7 @@ MemberID provides independent Member identities within each organization through
 
 ## Current status
 
-The repository contains an independently buildable Go executable, process health checks, local contribution hooks, and CI. PostgreSQL organization, Member, factor, and binding storage and basic operator commands are implemented with integration tests. Authentication providers, OIDC endpoints, and HTTP management are not implemented yet.
+The repository contains an independently buildable Go executable, process health checks, local contribution hooks, and CI. PostgreSQL organization, Member, factor, and binding storage and basic operator commands are implemented with integration tests. Protected installation initialization, signing-key validation, and file-backed confidential-client registration and secret rotation are also available. Authentication providers, OIDC endpoints, and HTTP management are not implemented yet.
 
 ## Delivery sequence
 
