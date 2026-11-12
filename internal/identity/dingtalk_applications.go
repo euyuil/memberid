@@ -23,6 +23,7 @@ type DingTalkApplication struct {
 	AuthorizationStatus     string    `json:"authorizationStatus"`
 	AuthorizationRevision   int64     `json:"authorizationRevision"`
 	AuthorizationVerifiedAt time.Time `json:"authorizationVerifiedAt"`
+	directoryRevision       int64
 	organizationRevision    int64
 	OrganizationID          string    `json:"organizationId"`
 	Namespace               string    `json:"namespace"`
@@ -70,12 +71,12 @@ func NewDingTalkApplications(store *Store, key []byte, checker DingTalkAuthoriza
 	return &DingTalkApplications{store, encrypted, checker}, nil
 }
 
-const applicationColumns = "organization_id,namespace,corp_id,client_id,revision,created_at,updated_at,secret_ciphertext,authorization_status,authorization_revision,authorization_verified_at"
+const applicationColumns = "organization_id,namespace,corp_id,client_id,revision,created_at,updated_at,secret_ciphertext,authorization_status,authorization_revision,authorization_verified_at,directory_revision"
 
 func readApplication(row pgx.Row) (DingTalkApplication, []byte, error) {
 	var app DingTalkApplication
 	var encrypted []byte
-	err := row.Scan(&app.OrganizationID, &app.Namespace, &app.CorpID, &app.ClientID, &app.Revision, &app.CreatedAt, &app.UpdatedAt, &encrypted, &app.AuthorizationStatus, &app.AuthorizationRevision, &app.AuthorizationVerifiedAt)
+	err := row.Scan(&app.OrganizationID, &app.Namespace, &app.CorpID, &app.ClientID, &app.Revision, &app.CreatedAt, &app.UpdatedAt, &encrypted, &app.AuthorizationStatus, &app.AuthorizationRevision, &app.AuthorizationVerifiedAt, &app.directoryRevision)
 	app.CreatedAt, app.UpdatedAt = app.CreatedAt.UTC(), app.UpdatedAt.UTC()
 	app.AuthorizationVerifiedAt = app.AuthorizationVerifiedAt.UTC()
 	return app, encrypted, storageError(err)

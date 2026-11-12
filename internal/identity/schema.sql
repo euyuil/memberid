@@ -1,7 +1,7 @@
 CREATE TABLE memberid_schema (
-    version integer PRIMARY KEY CHECK (version = 9)
+    version integer PRIMARY KEY CHECK (version = 10)
 );
-INSERT INTO memberid_schema(version) VALUES (9);
+INSERT INTO memberid_schema(version) VALUES (10);
 
 CREATE TABLE organizations (
     id text COLLATE "C" PRIMARY KEY CHECK (id ~ '^org_[0-9bcdfghjkmnpqrstvwxz]{27}$'),
@@ -132,6 +132,7 @@ CREATE TABLE dingtalk_applications (
     secret_ciphertext bytea NOT NULL,
     authorization_status text NOT NULL DEFAULT 'active' CHECK (authorization_status IN ('active', 'revoked')),
     authorization_revision bigint NOT NULL DEFAULT 1 CHECK (authorization_revision > 0),
+    directory_revision bigint NOT NULL DEFAULT 0 CHECK (directory_revision >= 0),
     authorization_verified_at timestamptz NOT NULL DEFAULT clock_timestamp(),
     created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
     updated_at timestamptz NOT NULL DEFAULT clock_timestamp()
@@ -144,8 +145,18 @@ CREATE TABLE dingtalk_identities (
     external_member_id text COLLATE "C" NOT NULL,
     department_ids jsonb CHECK (department_ids IS NULL OR jsonb_typeof(department_ids)='array'),
     verified_at timestamptz NOT NULL,
+    last_event_time bigint NOT NULL DEFAULT 0 CHECK (last_event_time >= 0),
+    last_event_departure boolean NOT NULL DEFAULT false,
     FOREIGN KEY (member_id,organization_id) REFERENCES members(id,organization_id),
     UNIQUE (organization_id,union_id),
     UNIQUE (organization_id,external_member_id)
 );
 CREATE UNIQUE INDEX oidc_dingtalk_state ON oidc_authorization_requests ((data->'dingtalk'->>'stateHash')) WHERE data->'dingtalk' IS NOT NULL;
+
+CREATE TABLE dingtalk_events (
+    organization_id text COLLATE "C" NOT NULL REFERENCES dingtalk_applications(organization_id),
+    event_id text COLLATE "C" NOT NULL,
+    event_hash bytea NOT NULL CHECK (octet_length(event_hash) = 32),
+    received_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+    PRIMARY KEY (organization_id,event_id)
+);

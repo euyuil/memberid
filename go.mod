@@ -3,6 +3,7 @@ module github.com/euyuil/memberid
 go 1.27.4
 
 require (
+	github.com/coder/websocket v1.8.15
 	github.com/go-jose/go-jose/v4 v4.1.9
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/rs/cors v1.11.1

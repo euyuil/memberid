@@ -116,7 +116,7 @@ func (verifier *DingTalkVerifier) Admit(ctx context.Context, tx pgx.Tx, proof Di
 	if err != nil {
 		return Verification{}, err
 	}
-	if current.Revision != app.Revision || current.AuthorizationRevision != app.AuthorizationRevision || current.AuthorizationStatus != "active" || current.Namespace != app.Namespace || current.CorpID != app.CorpID || current.ClientID != app.ClientID {
+	if current.Revision != app.Revision || current.AuthorizationRevision != app.AuthorizationRevision || current.directoryRevision != app.directoryRevision || current.AuthorizationStatus != "active" || current.Namespace != app.Namespace || current.CorpID != app.CorpID || current.ClientID != app.ClientID {
 		return Verification{}, ErrConflict
 	}
 	rows, err := tx.Query(ctx, "SELECT member_id,union_id FROM dingtalk_identities WHERE organization_id=$1 AND (union_id=$2 OR external_member_id=$3) FOR UPDATE", app.OrganizationID, proof.member.UnionID, proof.member.UserID)

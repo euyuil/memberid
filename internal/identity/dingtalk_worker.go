@@ -63,7 +63,9 @@ func (directory *DingTalkDirectory) synchronizeAsLeader(ctx context.Context, tim
 			}
 		}
 	}()
-	defer func() { finish(); <-heartbeatDone }()
+	streamsDone := make(chan struct{})
+	go func() { defer close(streamsDone); directory.superviseStreams(work, timing, report) }()
+	defer func() { finish(); <-heartbeatDone; <-streamsDone }()
 	for work.Err() == nil {
 		if err := directory.reconcileAll(work); err != nil && work.Err() == nil && report != nil {
 			report()

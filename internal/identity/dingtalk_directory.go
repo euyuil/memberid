@@ -125,6 +125,13 @@ func (observation *DingTalkDirectoryObservation) Validate(ctx context.Context, d
 	if observation == nil || observation.directory == nil || observation.observedAt.After(observation.directory.now()) || !observation.observedAt.Add(time.Minute).After(observation.directory.now()) {
 		return ErrIneligible
 	}
+	// Event acceptance takes the same organization's exclusive lock. Keep this
+	// shared lock until the caller commits token issuance, so departure and
+	// issuance have a definite order even after snapshot validation.
+	var organizationID string
+	if err := database.QueryRow(ctx, "SELECT id FROM organizations WHERE id=$1 FOR SHARE", observation.organizationID).Scan(&organizationID); err != nil {
+		return storageError(err)
+	}
 	current, err := readDirectorySnapshot(ctx, database, observation.organizationID, observation.memberID)
 	if err != nil {
 		return err
