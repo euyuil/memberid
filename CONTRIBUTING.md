@@ -25,6 +25,12 @@ The check script disables parent Go workspaces, checks formatting, runs vet and 
 
 The executable can serve process health alone or the configured [OIDC provider](docs/oidc.md); operator commands and the separate [management process](docs/management-api.md) manage stored organizations, Members, and explicit factor bindings. See [the implementation plan](docs/implementation-plan.md) for the remaining identity and OIDC work.
 
+## Local distributions
+
+After the checks, run `sh scripts/package.sh VERSION NEW_OUTPUT_DIRECTORY` from the repository root. The output parent must exist. Packaging supports Linux and Windows amd64, includes notices and file checksums, and refuses existing destinations. The Linux package includes a container recipe that uses the same executable. See [distribution and deployment](docs/distribution.md) for cross-building, trust-store mounts, runtime configuration, and verification. These commands create local artifacts only.
+
+CI builds each native package, verifies its checksums and version, and checks that an existing destination cannot be overwritten. On Linux it also runs the minimal image and compares its executable with the native package. Runtime secrets, CA bundles, and databases are supplied separately.
+
 ## Pull requests
 
 Create a focused purpose-named branch from current `main`. Submit one independently reviewable outcome with its tests and documentation. Wait for CI and resolve blocking review findings before squash merging. Start dependent work from the updated `main`; do not accumulate completed PRs.

@@ -31,6 +31,27 @@ jobs:
       - name: Check and build
         shell: bash
         run: sh scripts/check.sh
+      - name: Package native executable
+        shell: bash
+        run: |
+          sh scripts/package.sh ci dist/package
+          (cd dist/package && sha256sum --check --quiet SHA256SUMS)
+          if [ "$RUNNER_OS" = Windows ]; then binary=memberid.exe; else binary=memberid; fi
+          test "$(./dist/package/$binary version)" = "MemberID ci"
+          if sh scripts/package.sh ci dist/package; then
+            printf 'Packaging overwrote an existing destination.\n' >&2
+            exit 1
+          fi
+          (cd dist/package && sha256sum --check --quiet SHA256SUMS)
+      - name: Verify container uses the packaged executable
+        if: runner.os == 'Linux'
+        run: |
+          docker build --tag memberid:ci dist/package
+          test "$(docker run --rm --read-only --network none --cap-drop ALL --security-opt no-new-privileges memberid:ci version)" = "MemberID ci"
+          container=$(docker create memberid:ci version)
+          trap 'docker rm "$container"' EXIT
+          docker cp "$container:/usr/local/bin/memberid" dist/from-container
+          cmp dist/package/memberid dist/from-container
       - name: Race tests
         if: runner.os == 'Linux'
         run: go test -race ./...
