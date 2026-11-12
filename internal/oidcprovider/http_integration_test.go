@@ -516,6 +516,16 @@ func TestRestartWithSigningKeyRollover(t *testing.T) {
 	if err := json.Unmarshal([]byte(keys.body), &bundle); err != nil || len(bundle.Keys) != 2 {
 		t.Fatal("retained verification keys unavailable", err)
 	}
+	for _, expected := range configuration.JWKS().Keys {
+		found := bundle.Key(expected.KeyID)
+		if len(found) != 1 || !found[0].IsPublic() || found[0].Algorithm != expected.Algorithm || found[0].Use != expected.Use {
+			t.Fatal("published JWKS differs from offline export metadata")
+		}
+		public, ok := found[0].Key.(*rsa.PublicKey)
+		if !ok || !public.Equal(expected.Key) {
+			t.Fatal("published JWKS differs from offline export key material")
+		}
+	}
 	parsed, err := jwt.ParseSigned(oldToken, []jose.SignatureAlgorithm{jose.RS256})
 	if err != nil {
 		t.Fatal(err)

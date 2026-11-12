@@ -90,6 +90,18 @@ Private keys may be PKCS#8 or PKCS#1 PEM, with RSA keys of at least 2048 bits. N
 
 Retain old public keys when preparing a rollover, and retain old private material only in protected backups if operationally required. Do not remove verification keys while issued tokens can still be accepted. The configured public bundle is published through JWKS. Coordinate private-key replacement, retained public keys, and server restarts; deployed rollover acceptance remains pending.
 
+## Export public verification keys
+
+```sh
+memberid config export-jwks --directory .local/memberid > public-jwks.json
+```
+
+This read-only command validates the installation and writes one standard JSON Web Key Set to standard output. It includes the active and retained public keys with the same `kid`, `alg`, and `use` values as the OIDC JWKS endpoint, sorted by key identifier for stable output. It does not write configuration, rotate keys, read a database, contact a provider, or start a listener. Private signing parameters, installation secrets, management credentials, and client credentials are never included. Incomplete or invalid installations fail without a partial key set.
+
+Use this export when an offline verifier needs an operator-distributed trust file before startup. OIDC clients should normally use Discovery and its `jwks_uri`. A JWKS is public material, not proof of its own origin or issuer: deliver it through a trusted configuration channel and configure the verifier's exact issuer and intended token audience separately. Do not accept a key set supplied by the party presenting a token.
+
+The export is a snapshot of the selected installation on disk, not a check of what running replicas have loaded. Re-export after an intentional key change and coordinate verifier updates and server restarts. Preserve retained keys until issued tokens can no longer be accepted; exporting alone does not perform rollover or change an existing verifier's cache.
+
 ## Inspect and revoke OIDC grants
 
 These commands use the operator's direct `MEMBERID_DATABASE_URL` access. They do not need an OIDC login or provider configuration:

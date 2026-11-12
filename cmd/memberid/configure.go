@@ -18,13 +18,29 @@ func (values *repeatedFlag) Set(value string) error { *values = append(*values, 
 
 func configure(args []string, stdout, stderr io.Writer) error {
 	if len(args) < 2 {
-		return errors.New("usage: memberid config <init|check|rotate-management-secret> | client <add|rotate-secret>")
+		return errors.New("usage: memberid config <init|check|export-jwks|rotate-management-secret> | client <add|rotate-secret>")
 	}
 	flags := flag.NewFlagSet(args[0]+" "+args[1], flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	directory := flags.String("directory", "", "protected installation directory")
 	switch args[0] {
 	case "config":
+		if args[1] == "export-jwks" {
+			if err := flags.Parse(args[2:]); err != nil {
+				if errors.Is(err, flag.ErrHelp) {
+					return nil
+				}
+				return err
+			}
+			if *directory == "" || flags.NArg() != 0 {
+				return errors.New("--directory is required; positional arguments are not accepted")
+			}
+			loaded, err := config.Load(*directory)
+			if err != nil {
+				return err
+			}
+			return json.NewEncoder(stdout).Encode(loaded.JWKS())
+		}
 		if args[1] == "rotate-management-secret" {
 			outputFile := flags.String("output-file", "", "new credential file in a protected directory; existing files are refused")
 			if err := flags.Parse(args[2:]); err != nil {
