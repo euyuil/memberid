@@ -1,6 +1,6 @@
 # DingTalk authentication
 
-An installation may configure a DingTalk application for an existing enabled MemberID organization without SMS, Members, or OIDC clients. Application configuration is implemented through the operator CLI and the separate management API. Interactive DingTalk login and verified Member admission are implemented. Explicit application-authorization synchronization and current employee-directory checks at token issuance are available. Automated directory event processing remains a subsequent increment.
+An installation may configure a DingTalk application for an existing enabled MemberID organization without SMS, Members, or OIDC clients. Application configuration is implemented through the operator CLI and the separate management API. Interactive DingTalk login and verified Member admission are implemented. Explicit application-authorization synchronization, current employee-directory checks at token issuance, and periodic directory reconciliation are available. Provider event processing remains a subsequent increment.
 
 ## Configure and inspect
 
@@ -86,9 +86,9 @@ A fresh application token establishes active authorization. Only the application
 
 Each accepted synchronization advances the observation revision, even when the status is unchanged. A newer observation, credential change, or organization lifecycle change prevents an older in-flight result from applying. A conflict requires a fresh provider check; MemberID does not blindly retry a stale write. Pending DingTalk callbacks and admission proofs are invalidated by a new observation. New requests use the current revision.
 
-A fresh successful synchronization or accepted credential configuration can restore application authorization. It does not clear manual Member blocks, external-departure evidence, revoked bindings, or revoked grants. Known revocation is checked during identity selection, token issuance, refresh, UserInfo, introspection, and management eligibility queries. Previously issued JWTs can still be accepted by offline verifiers until their short expiry. Synchronization is not a logout or an authentication-time reset; existing unrevoked grants retain their original limits.
+A fresh successful application-authorization check, whether explicit or in the background, or accepted credential configuration can restore application authorization. That check alone does not clear manual Member blocks, external-departure evidence, revoked bindings, or revoked grants. Known revocation is checked during identity selection, token issuance, refresh, UserInfo, introspection, and management eligibility queries. Previously issued JWTs can still be accepted by offline verifiers until their short expiry. Synchronization is not a logout or an authentication-time reset; existing unrevoked grants retain their original limits.
 
-This increment provides explicit checks and definitive-denial handling during login and token issuance, without periodic background reconciliation or provider streams. Operators can invoke the command through their own scheduler when needed. Tests cover unknown-failure preservation, recovery, rejected candidate credentials, delayed observations, credential rotation, disable/re-enable cycles, phone grant eligibility, and CLI/management metadata. The upstream provider remains simulated in automated tests.
+Application checks also run as part of periodic reconciliation below. Provider streams are not yet implemented. Tests cover unknown-failure preservation, recovery, rejected candidate credentials, delayed observations, credential rotation, disable/re-enable cycles, phone grant eligibility, and CLI/management metadata. The upstream provider remains simulated in automated tests.
 
 ## Current directory verification at token issuance
 
@@ -109,3 +109,25 @@ Provider I/O has a total 15-second deadline and occurs before the token transact
 When an unavailable lookup rejects issuance, it leaves a first-use code or Refresh Token unconsumed. Replay handling still runs when the provider fails: a replayed code or Refresh Token revokes the issued grant. UserInfo, introspection, and management eligibility use stored facts rather than calling the provider for every read. Previously issued offline JWTs remain usable until their expiry.
 
 Automated tests cover phone fallback, definitive denial, directory-only transport, bounded observation lifetime, code/refresh retry after a failed lookup, replay revocation during outages, and concurrent changes to organization, Member, binding, application credentials, and authorization observations. These tests simulate DingTalk; they are not live provider acceptance.
+
+## Periodic reconciliation
+
+The configured authentication process (`serve --directory`) starts a reconciliation worker. The elected worker checks enabled organizations with a configured DingTalk application on startup, then waits 15 minutes after each completed pass. Applications configured during a pass are picked up by that or a subsequent pass. It checks stored application credentials first, including recovery of previously revoked authorization. For an active application, it visits admitted external identities that retain an active DingTalk binding, in bounded pages. It does not enumerate arbitrary provider users, provision new Members, restore revoked bindings, or create login sessions and grants.
+
+A matching internal employee refreshes optional department evidence and the directory verification timestamp, and can clear the independent external-departure block. A manual block and locally managed display name remain unchanged. A definitive external-contact result establishes current nonmembership and sets the external-departure block. Unknown provider errors, missing visibility, and conflicting or changed identifiers leave the existing Member evidence unchanged; changed employee identifiers still require fresh login. In particular, a failed lookup is not proof of departure. Immediate leave-event handling is not implemented by periodic reconciliation.
+
+The worker performs provider I/O before write transactions. Application, organization, Member eligibility, factor, and binding facts are rechecked under row locks before applying each result. Configuration changes, block/unblock cycles, fresh login, or binding revocation during a lookup reject that result. Partial failures do not roll back already accepted Members or prevent checking other Members and organizations. No synchronization changes the authentication time or absolute deadline of existing grants.
+
+Multiple authentication replicas share a PostgreSQL session advisory lock for background work. Coordination uses one additional database connection, separate from the ordinary query pool, with a heartbeat every five seconds and a five-second database timeout. Loss of that connection cancels the current pass; a replica retries leadership after ten seconds. Shutdown cancels provider work and releases the connection before closing the store. Use direct PostgreSQL connections or a proxy that preserves session affinity; transaction-pooling proxies cannot preserve this coordination lock. Manual operator checks can overlap background work, with revision checks rejecting stale results.
+
+The worker logs a generic warning on incomplete work without recording credentials, provider messages, Member identifiers, or raw database errors. Disabling interactive DingTalk login does not stop reconciliation of already configured applications. An installation with no DingTalk applications makes no provider calls. Health-only mode and the separate management process do not start this worker.
+
+For an immediate one-organization pass, without starting OIDC:
+
+```sh
+memberid dingtalk reconcile --directory .local/memberid --organization "$ORGANIZATION_ID"
+```
+
+The command requires the protected installation and operator database access. It returns current `application` metadata and `checked`, `present`, `departed`, `unavailable`, and `conflicts` counts. It emits available summary JSON even when some work failed, then exits unsuccessfully; inspect both the exit status and summary. A confirmed application revocation stops that organization's member work and is a successful observation with `application.authorizationStatus: revoked`. It is not a claim that every Member was checked. Counts describe the current pass, not a durable audit history. No credential, token, contact value, or individual Member identifier is returned.
+
+Automated tests cover independent manual/departure blocks, preserved identity and names, optional attribute updates, unknown/conflicting evidence, stale writes, pagination with partial failures, single-leader operation with a one-connection query pool, leadership handoff, coordination-connection loss, and provider cancellation on shutdown. Provider responses are simulated and all database tests use isolated disposable databases.

@@ -101,7 +101,15 @@ func TestDingTalkOperatorCommands(t *testing.T) {
 			t.Fatal("invalid or secret-bearing synchronization result")
 		}
 	}
-	if calls != 3 {
+	output.Reset()
+	if err := run(t.Context(), []string{"dingtalk", "reconcile", "--directory", directory, "--organization", organization.ID}, &output, &diagnostic); err != nil {
+		t.Fatal(err)
+	}
+	var reconciliation identity.DingTalkReconciliation
+	if json.Unmarshal(output.Bytes(), &reconciliation) != nil || reconciliation.Application.OrganizationID != organization.ID || reconciliation.Application.AuthorizationStatus != "active" || reconciliation.Checked != 0 || strings.Contains(output.String()+diagnostic.String(), secret) {
+		t.Fatal("invalid reconciliation output")
+	}
+	if calls != 4 {
 		t.Fatal("synchronization did not make fresh authorization checks")
 	}
 }

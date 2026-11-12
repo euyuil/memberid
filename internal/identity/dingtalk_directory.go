@@ -27,23 +27,24 @@ func NewDingTalkDirectory(applications *DingTalkApplications, provider DingTalkD
 }
 
 type directorySnapshot struct {
-	organizationRevision, memberRevision, applicationRevision, authorizationRevision int64
-	authorizationStatus, namespace, bindingID, factorNamespace, unionID, employeeID  string
+	organizationRevision, memberRevision, applicationRevision, authorizationRevision                        int64
+	authorizationStatus, namespace, bindingID, factorID, factorNamespace, factorStatus, unionID, employeeID string
+	manualBlocked, externalDeparture                                                                        bool
 }
 
 func readDirectorySnapshot(ctx context.Context, database queryer, organizationID, memberID string) (directorySnapshot, error) {
 	var value directorySnapshot
 	err := database.QueryRow(ctx, `SELECT o.lifecycle_revision,m.eligibility_revision,
  COALESCE(a.revision,0),COALESCE(a.authorization_revision,0),COALESCE(a.authorization_status,''),COALESCE(a.namespace,''),
- COALESCE(b.id::text,''),COALESCE(f.namespace,''),COALESCE(i.union_id,''),COALESCE(i.external_member_id,'')
+ COALESCE(b.id::text,''),COALESCE(f.id,''),COALESCE(f.namespace,''),COALESCE(f.status,''),COALESCE(i.union_id,''),COALESCE(i.external_member_id,''),m.manual_block,m.external_departure
  FROM members m JOIN organizations o ON o.id=m.organization_id
  LEFT JOIN dingtalk_applications a ON a.organization_id=o.id
  LEFT JOIN member_auth_factor_bindings b ON b.member_id=m.id AND b.factor_type='dingtalk' AND b.status='active'
  LEFT JOIN authentication_factors f ON f.id=b.authentication_factor_id
  LEFT JOIN dingtalk_identities i ON i.member_id=m.id AND i.organization_id=o.id
- WHERE m.id=$1 AND o.id=$2 AND o.status='enabled' AND NOT m.manual_block AND NOT m.external_departure`, memberID, organizationID).Scan(
+ WHERE m.id=$1 AND o.id=$2 AND o.status='enabled'`, memberID, organizationID).Scan(
 		&value.organizationRevision, &value.memberRevision, &value.applicationRevision, &value.authorizationRevision, &value.authorizationStatus, &value.namespace,
-		&value.bindingID, &value.factorNamespace, &value.unionID, &value.employeeID)
+		&value.bindingID, &value.factorID, &value.factorNamespace, &value.factorStatus, &value.unionID, &value.employeeID, &value.manualBlocked, &value.externalDeparture)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return value, ErrIneligible
 	}
@@ -71,6 +72,9 @@ func (directory *DingTalkDirectory) Observe(ctx context.Context, organizationID,
 	snapshot, err := readDirectorySnapshot(ctx, directory.applications.store.pool, organizationID, memberID)
 	if err != nil {
 		return nil, err
+	}
+	if snapshot.manualBlocked || snapshot.externalDeparture {
+		return nil, ErrIneligible
 	}
 	observation := &DingTalkDirectoryObservation{directory, organizationID, memberID, snapshot, directory.now()}
 	if snapshot.bindingID == "" || snapshot.unionID == "" && snapshot.employeeID == "" {
@@ -124,6 +128,9 @@ func (observation *DingTalkDirectoryObservation) Validate(ctx context.Context, d
 	current, err := readDirectorySnapshot(ctx, database, observation.organizationID, observation.memberID)
 	if err != nil {
 		return err
+	}
+	if current.manualBlocked || current.externalDeparture {
+		return ErrIneligible
 	}
 	if current != observation.snapshot {
 		return ErrConflict

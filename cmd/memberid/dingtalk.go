@@ -16,8 +16,8 @@ import (
 )
 
 func manageDingTalk(ctx context.Context, args []string, stdout, stderr io.Writer) error {
-	if len(args) == 0 || args[0] != "inspect" && args[0] != "configure" && args[0] != "sync" {
-		return errors.New("usage: memberid dingtalk <inspect|configure|sync>")
+	if len(args) == 0 || args[0] != "inspect" && args[0] != "configure" && args[0] != "sync" && args[0] != "reconcile" {
+		return errors.New("usage: memberid dingtalk <inspect|configure|sync|reconcile>")
 	}
 	flags := flag.NewFlagSet("dingtalk "+args[0], flag.ContinueOnError)
 	flags.SetOutput(stderr)
@@ -71,8 +71,22 @@ func manageDingTalk(ctx context.Context, args []string, stdout, stderr io.Writer
 	if err != nil {
 		return err
 	}
-	applications, err := identity.NewDingTalkApplications(store, key, dingtalk.New())
+	client := dingtalk.New()
+	applications, err := identity.NewDingTalkApplications(store, key, client)
 	if err != nil {
+		return err
+	}
+	if args[0] == "reconcile" {
+		directory, err := identity.NewDingTalkDirectory(applications, client)
+		if err != nil {
+			return err
+		}
+		result, err := directory.Reconcile(ctx, *organizationID)
+		if result.Application.OrganizationID != "" {
+			if encodeErr := json.NewEncoder(stdout).Encode(result); encodeErr != nil {
+				return encodeErr
+			}
+		}
 		return err
 	}
 	var result identity.DingTalkApplication
