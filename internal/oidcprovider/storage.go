@@ -316,7 +316,12 @@ func (s *storage) SetIntrospectionFromToken(ctx context.Context, info *oidc.Intr
 	return nil
 }
 func (s *storage) RevokeToken(ctx context.Context, id, subject, clientID string) *oidc.Error {
-	_, err := s.service.store.Database().Exec(ctx, "UPDATE oidc_grants SET revoked_at=$3 WHERE client_id=$1 AND id IN (SELECT grant_id FROM oidc_access_tokens WHERE id=$2 UNION SELECT grant_id FROM oidc_refresh_tokens WHERE id=$2)", clientID, id, s.service.now())
+	// The protocol adapter also calls this for unrecognized input. A bare identifier
+	// is not a verified token and must never reach the revocation mutation.
+	if !validTokenID(id) || !identity.ValidID(subject, identity.MemberKind) && !identity.ValidID(subject, identity.FactorKind) {
+		return nil
+	}
+	_, err := s.service.store.Database().Exec(ctx, "UPDATE oidc_grants SET revoked_at=$3 WHERE client_id=$1 AND COALESCE(NULLIF(data->>'memberId',''),data->>'factorId')=$4 AND id IN (SELECT grant_id FROM oidc_access_tokens WHERE id=$2 UNION SELECT grant_id FROM oidc_refresh_tokens WHERE id=$2)", clientID, id, s.service.now(), subject)
 	if err != nil {
 		return oidc.ErrServerError()
 	}

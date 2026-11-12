@@ -64,6 +64,8 @@ func New(configuration *config.Loaded, store *identity.Store, phone *identity.Ph
 		scopes = append(scopes, "offline_access")
 	}
 	options := []op.Option{
+		// MemberID has no legacy opaque ciphertext requiring unauthenticated fallback.
+		op.WithCrypto(op.NewAES256GCMCrypto(key, "")),
 		op.WithCORSOptions(&cors.Options{AllowedOrigins: []string{configuration.Issuer}, AllowedMethods: []string{"GET", "POST"}, AllowedHeaders: []string{"Authorization", "Content-Type"}}),
 		op.WithCustomAuthEndpoint(op.NewEndpoint("/oauth/authorize")), op.WithCustomUserinfoEndpoint(op.NewEndpoint("/oauth/userinfo")),
 		op.WithCustomRevocationEndpoint(op.NewEndpoint("/oauth/revoke")), op.WithCustomEndSessionEndpoint(op.NewEndpoint("/oauth/logout")),
@@ -149,6 +151,15 @@ func (service *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			op.RequestError(w, r, oidc.ErrInvalidRequest().WithDescription("Use one registered client authentication method"), nil)
 			return
 		}
+	}
+	if r.URL.Path == "/oauth/revoke" {
+		if r.Form.Get("token") == "" {
+			op.RequestError(w, r, oidc.ErrInvalidRequest().WithDescription("token is required"), nil)
+			return
+		}
+		// A hint must not prevent lookup of another supported token type (RFC 7009).
+		r.Form.Del("token_type_hint")
+		r.PostForm.Del("token_type_hint")
 	}
 	browser := service.cookieValue(r, "browser")
 	interactive := r.URL.Path == "/login" || strings.HasPrefix(r.URL.Path, "/oauth/authorize")
