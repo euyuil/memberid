@@ -26,9 +26,11 @@ func main() {
 
 func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	if len(args) == 0 {
-		return errors.New("usage: memberid <version|serve|serve-management|config|client|database|organization|member|factor>")
+		return errors.New("usage: memberid <version|serve|serve-management|config|client|database|organization|member|factor|grant>")
 	}
 	switch args[0] {
+	case "grant":
+		return manageGrant(ctx, args[1:], stdout, stderr)
 	case "config", "client":
 		return configure(args, stdout, stderr)
 	case "database", "organization", "member", "factor":
