@@ -1,0 +1,7 @@
+**
+!Dockerfile
+!.dockerignore
+!memberid
+!BUILDINFO
+!third_party/
+!third_party/**
