@@ -4,7 +4,7 @@ The project license remains undecided. This inventory records third-party obliga
 
 ## Runtime and toolchain
 
-The initial executable uses only the Go 1.27.4 standard library and has no external Go module dependencies. The [upstream stable release index](https://go.dev/dl/?mode=json) and exact `go1.27.4` license files were reviewed.
+The executable uses Go 1.27.4 and the reviewed PostgreSQL driver dependencies listed below. The [upstream stable release index](https://go.dev/dl/?mode=json) and exact `go1.27.4` license files were reviewed.
 
 Go is distributed under BSD-3-Clause with an additional patent grant. Standard-library vendored `golang.org/x/crypto`, `x/net`, `x/sys`, and `x/text` carry BSD-3-Clause notices and patent grants. Retained notices are under `third_party/go/` and must accompany distributed binaries. No Go source is modified. Default builds do not enable the optional BoringCrypto implementation.
 
@@ -26,3 +26,11 @@ Upstream records labelled `other` were inspected individually: the reviewed `@ac
 CI downloads the exact Gitleaks Linux x64 archive and verifies SHA-256 `551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb`. The archive contains the binary, README, and upstream MIT license; those files remain together in the runner's tool directory. Its compiled dependency versions and inspected license families are recorded in [the scanner inventory](gitleaks-components.md), including the conditions for external-tool-only MPL-2.0 usage. Review changes to the scanner and its distribution before updating this pin.
 
 No third-party fonts, icons, browser bundles, copied UI components, or generated client libraries are included in this initial implementation.
+
+## PostgreSQL driver and tests
+
+The runtime uses pgx v5.11.0 (MIT), selected from its upstream stable release. Its resolved runtime dependencies are pgpassfile v1.0.0 (MIT), pgservicefile v0.0.0-20240606120523-5a60cdf6a761 (MIT), puddle/v2 v2.2.3 (MIT), golang.org/x/sync v0.25.0 (BSD-3-Clause), and golang.org/x/text v0.44.0 (BSD-3-Clause). Exact module license texts and applicable Go patent grants were reviewed and retained under `third_party/modules/`. No dependency source is modified. Built distributions include these notices.
+
+The module checksum file also records upstream dependency-test modules that are not linked into the executable. Checksum retention does not copy their source into MemberID. Reassess the inventory when adding dependencies or distributing additional tooling.
+
+PostgreSQL 18.6 is the current supported stable PostgreSQL line at this review, per [upstream's version table](https://www.postgresql.org/support/versioning/). Integration tests use the unmodified official image `postgres:18.6@sha256:bd5dfa494a5a259704365813dbfa5fa6b3e69be7348d43b547f540c730478583`. PostgreSQL runs as a separate process and is not linked into MemberID. Its PostgreSQL, Debian packaging, and installed system-component notices remain in the upstream image. The image is used only for disposable tests and is neither modified nor republished by this repository. PostgreSQL's own permissive license does not replace the separate BSD, MIT, Tcl, Artistic, GPL, LGPL, and other notices in its distribution. Redistributing a database or base image requires its own complete notice and source-offer review.
