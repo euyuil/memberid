@@ -61,7 +61,7 @@ Clients default to independent Member subjects. Optional `--organization ORGANIZ
 
 An evidence policy uses an operator-chosen custom scope and a fixed resource URL audience. Both must be configured together. Clients cannot set their own audience or claim policy through authorization-request parameters. Standard scopes cannot be repurposed as evidence scopes. Evidence contains identity facts, not application roles or resource permissions. `--preauthorized` records an operator's explicit consent decision for the registered scope policy; omit it when interactive consent is required.
 
-Client configuration is file-backed and requires an explicit server restart. This is operator registration, not OAuth dynamic client registration. The implemented profile uses Authorization Code with PKCE S256 and `client_secret_basic`. The `--refresh` flag records future policy; refresh issuance is not enabled yet.
+Client configuration is file-backed and requires an explicit server restart. This is operator registration, not OAuth dynamic client registration. The implemented profile uses Authorization Code with PKCE S256 and `client_secret_basic`. The `--refresh` flag permits `offline_access` and standard rotating Refresh Tokens; omit it for clients that should not retain a refresh grant.
 
 Registry edits acquire an exclusive `.clients.lock`, validate the whole configuration, and replace the registry atomically. Concurrent edits fail without modifying the registry. A crashed operator can leave a lock: remove it only after confirming no registration command is running. Keep the installation directory writable only by trusted operators and coordinate hand-edited changes with the same maintenance boundary.
 

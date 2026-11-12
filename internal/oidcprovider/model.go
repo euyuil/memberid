@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"slices"
 	"time"
 
 	"github.com/euyuil/memberid/internal/config"
@@ -35,13 +36,25 @@ func (c client) AuthMethod() oidc.AuthMethod         { return oidc.AuthMethodBas
 func (c client) ResponseTypes() []oidc.ResponseType {
 	return []oidc.ResponseType{oidc.ResponseTypeCode}
 }
-func (c client) GrantTypes() []oidc.GrantType        { return []oidc.GrantType{oidc.GrantTypeCode} }
+func (c client) GrantTypes() []oidc.GrantType {
+	grants := []oidc.GrantType{oidc.GrantTypeCode}
+	if c.registration.Refresh {
+		grants = append(grants, oidc.GrantTypeRefreshToken)
+	}
+	return grants
+}
 func (c client) LoginURL(id string) string           { return "/login?request=" + url.QueryEscape(id) }
 func (c client) AccessTokenType() op.AccessTokenType { return op.AccessTokenTypeJWT }
 func (c client) IDTokenLifetime() time.Duration      { return 5 * time.Minute }
 func (c client) DevMode() bool                       { return c.loopback }
 func (c client) RestrictAdditionalIdTokenScopes() func([]string) []string {
-	return func(scopes []string) []string { return scopes }
+	return func(scopes []string) []string {
+		// A refreshed ID Token retains core session claims even when access scopes narrow.
+		if slices.Contains(scopes, "openid") {
+			return scopes
+		}
+		return append(slices.Clone(scopes), "openid")
+	}
 }
 func (c client) RestrictAdditionalAccessTokenScopes() func([]string) []string {
 	return func(scopes []string) []string { return scopes }
@@ -126,6 +139,8 @@ func requestGrant(request op.TokenRequest) (*grant, error) {
 	switch value := request.(type) {
 	case *authorizationRequest:
 		return &value.grant, nil
+	case *refreshRequest:
+		return &value.grant, nil
 	case *grant:
 		return value, nil
 	}
@@ -195,13 +210,4 @@ func (s *storage) GetKeyByIDAndClientID(context.Context, string, string) (*jose.
 }
 func (s *storage) ValidateJWTProfileScopes(context.Context, string, []string) ([]string, error) {
 	return nil, oidc.ErrUnsupportedGrantType()
-}
-func (s *storage) CreateAccessAndRefreshTokens(context.Context, op.TokenRequest, string) (string, string, time.Time, error) {
-	return "", "", time.Time{}, oidc.ErrUnsupportedGrantType()
-}
-func (s *storage) TokenRequestByRefreshToken(context.Context, string) (op.RefreshTokenRequest, error) {
-	return nil, oidc.ErrUnsupportedGrantType()
-}
-func (s *storage) GetRefreshTokenInfo(context.Context, string, string) (string, string, error) {
-	return "", "", op.ErrInvalidRefreshToken
 }

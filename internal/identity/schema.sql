@@ -1,7 +1,7 @@
 CREATE TABLE memberid_schema (
-    version integer PRIMARY KEY CHECK (version = 3)
+    version integer PRIMARY KEY CHECK (version = 4)
 );
-INSERT INTO memberid_schema(version) VALUES (3);
+INSERT INTO memberid_schema(version) VALUES (4);
 
 CREATE TABLE organizations (
     id text COLLATE "C" PRIMARY KEY CHECK (id ~ '^org_[0-9bcdfghjkmnpqrstvwxz]{27}$'),
@@ -100,3 +100,13 @@ CREATE INDEX oidc_requests_expiry ON oidc_authorization_requests(expires_at);
 CREATE INDEX oidc_sessions_expiry ON oidc_sessions(expires_at);
 CREATE INDEX oidc_grants_expiry ON oidc_grants(expires_at);
 CREATE INDEX oidc_access_expiry ON oidc_access_tokens(expires_at);
+
+CREATE TABLE oidc_refresh_tokens (
+    id text COLLATE "C" PRIMARY KEY,
+    secret_hash text NOT NULL UNIQUE,
+    grant_id text COLLATE "C" NOT NULL REFERENCES oidc_grants(id) ON DELETE CASCADE,
+    data jsonb NOT NULL,
+    created_at timestamptz NOT NULL,
+    consumed_at timestamptz
+);
+CREATE INDEX oidc_refresh_family ON oidc_refresh_tokens(grant_id);

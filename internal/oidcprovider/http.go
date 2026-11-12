@@ -51,12 +51,17 @@ func New(configuration *config.Loaded, store *identity.Store, phone *identity.Ph
 	decoded, _ := base64.StdEncoding.DecodeString(configuration.Secrets.ProtocolKey)
 	copy(key[:], decoded)
 	scopes := []string{"openid", "profile", "email", "phone"}
+	refreshEnabled := false
 	seen := map[string]bool{}
 	for _, client := range configuration.Clients {
+		refreshEnabled = refreshEnabled || client.Refresh
 		if client.EvidenceScope != "" && !seen[client.EvidenceScope] {
 			scopes = append(scopes, client.EvidenceScope)
 			seen[client.EvidenceScope] = true
 		}
+	}
+	if refreshEnabled {
+		scopes = append(scopes, "offline_access")
 	}
 	options := []op.Option{
 		op.WithCORSOptions(&cors.Options{AllowedOrigins: []string{configuration.Issuer}, AllowedMethods: []string{"GET", "POST"}, AllowedHeaders: []string{"Authorization", "Content-Type"}}),
@@ -67,7 +72,7 @@ func New(configuration *config.Loaded, store *identity.Store, phone *identity.Ph
 	if configuration.AllowLoopbackHTTP {
 		options = append(options, op.WithAllowInsecure())
 	}
-	provider, err := op.NewProvider(&op.Config{CryptoKey: key, CodeMethodS256: true, SupportedScopes: scopes, SupportedClaims: []string{"iss", "sub", "aud", "exp", "iat", "auth_time", "nonce", "amr", "at_hash", "c_hash", "client_id", "azp", "sid", "name", "preferred_username", "phone_number", "phone_number_verified"}, DefaultLogoutRedirectURI: configuration.Issuer + "/signed-out"}, service.storage, op.StaticIssuer(configuration.Issuer), options...)
+	provider, err := op.NewProvider(&op.Config{CryptoKey: key, CodeMethodS256: true, GrantTypeRefreshToken: refreshEnabled, SupportedScopes: scopes, SupportedClaims: []string{"iss", "sub", "aud", "exp", "iat", "auth_time", "nonce", "amr", "at_hash", "c_hash", "client_id", "azp", "sid", "name", "preferred_username", "phone_number", "phone_number_verified"}, DefaultLogoutRedirectURI: configuration.Issuer + "/signed-out"}, service.storage, op.StaticIssuer(configuration.Issuer), options...)
 	if err != nil {
 		return nil, err
 	}
@@ -165,6 +170,9 @@ func (service *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// The library defaults include flows that this deployment profile does not enable.
 		metadata.ResponseTypesSupported = []string{"code"}
 		metadata.GrantTypesSupported = []oidc.GrantType{oidc.GrantTypeCode}
+		if service.protocol.GrantTypeRefreshTokenSupported() {
+			metadata.GrantTypesSupported = append(metadata.GrantTypesSupported, oidc.GrantTypeRefreshToken)
+		}
 		metadata.TokenEndpointAuthMethodsSupported = []oidc.AuthMethod{oidc.AuthMethodBasic}
 		metadata.RevocationEndpointAuthMethodsSupported = []oidc.AuthMethod{oidc.AuthMethodBasic}
 		metadata.DeviceAuthorizationEndpoint = ""
@@ -189,10 +197,14 @@ func (service *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (service *Service) Cleanup(ctx context.Context) error {
-	for _, table := range []string{"oidc_access_tokens", "oidc_authorization_requests", "oidc_grants", "oidc_sessions"} {
+	for _, table := range []string{"oidc_access_tokens", "oidc_authorization_requests", "oidc_grants"} {
 		if _, err := service.store.Database().Exec(ctx, "DELETE FROM "+table+" WHERE expires_at<$1", service.now()); err != nil {
 			return err
 		}
+	}
+	// Expired browser SSO does not end an actively renewed client grant.
+	if _, err := service.store.Database().Exec(ctx, "DELETE FROM oidc_sessions s WHERE s.absolute_expires_at<$1 OR (s.expires_at<$1 AND NOT EXISTS(SELECT 1 FROM oidc_grants g WHERE g.session_id=s.id))", service.now()); err != nil {
+		return err
 	}
 	return service.store.CleanupPhoneChallenges(ctx)
 }

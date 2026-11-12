@@ -29,6 +29,9 @@ func (s *storage) CreateAuthRequest(ctx context.Context, input *oidc.AuthRequest
 		return nil, oidc.ErrInvalidScope()
 	}
 	for _, scope := range input.Scopes {
+		if scope == "offline_access" && registered.registration.Refresh {
+			continue
+		}
 		if !slices.Contains([]string{"openid", "profile", "email", "phone"}, scope) && !registered.IsScopeAllowed(scope) {
 			return nil, oidc.ErrInvalidScope()
 		}
@@ -37,6 +40,9 @@ func (s *storage) CreateAuthRequest(ctx context.Context, input *oidc.AuthRequest
 		if !slices.Contains([]string{"none", "login", "consent", "select_account"}, prompt) {
 			return nil, oidc.ErrInvalidRequest()
 		}
+	}
+	if slices.Contains(input.Scopes, "offline_access") && !registered.registration.Preauthorized && !slices.Contains(input.Prompt, "consent") && !slices.Contains(input.Prompt, "none") {
+		input.Prompt = append(input.Prompt, "consent")
 	}
 	browser, _ := ctx.Value(browserKey{}).(string)
 	if browser == "" {
@@ -121,6 +127,20 @@ func (s *storage) eligible(ctx context.Context, database databaseReader, g *gran
 	if err != nil {
 		return err
 	}
+	for _, scope := range g.Scopes {
+		if scope == "offline_access" && registered.registration.Refresh {
+			continue
+		}
+		if !slices.Contains([]string{"openid", "profile", "email", "phone"}, scope) && !registered.IsScopeAllowed(scope) {
+			return oidc.ErrInvalidGrant()
+		}
+	}
+	if len(g.Audience) != 1 || g.Audience[0] != s.service.configuration.Issuer+"/oauth/userinfo" && (registered.registration.EvidenceAudience == "" || g.Audience[0] != registered.registration.EvidenceAudience) {
+		return oidc.ErrInvalidGrant()
+	}
+	if registered.registration.EvidenceScope != "" && slices.Contains(g.Scopes, registered.registration.EvidenceScope) && g.Audience[0] != registered.registration.EvidenceAudience {
+		return oidc.ErrInvalidGrant()
+	}
 	var factorType string
 	if err := database.QueryRow(ctx, "SELECT type FROM authentication_factors WHERE id=$1 AND status='active'", g.FactorID).Scan(&factorType); err != nil || factorType != g.FactorType {
 		return oidc.ErrInvalidGrant()
@@ -144,12 +164,26 @@ func (s *storage) eligible(ctx context.Context, database databaseReader, g *gran
 
 func (s *storage) CreateAccessToken(ctx context.Context, input op.TokenRequest) (string, time.Time, error) {
 	request, ok := input.(*authorizationRequest)
-	if !ok || !request.Complete {
+	if !ok {
 		return "", time.Time{}, oidc.ErrInvalidGrant()
 	}
+	access, _, expiry, err := s.createCodeTokens(ctx, request, false)
+	return access, expiry, err
+}
+func (s *storage) createCodeTokens(ctx context.Context, request *authorizationRequest, withRefresh bool) (string, string, time.Time, error) {
+	if !request.Complete {
+		return "", "", time.Time{}, oidc.ErrInvalidGrant()
+	}
 	now := s.service.now()
+	if !request.AbsoluteExpiry.After(now.Add(5 * time.Minute)) {
+		return "", "", time.Time{}, oidc.ErrInvalidGrant()
+	}
 	expiry := minimum(now.Add(accessLifetime), request.AbsoluteExpiry)
 	tokenID := newID()
+	refreshSecret := ""
+	if withRefresh {
+		refreshSecret = config.RandomSecret()
+	}
 	replayed := false
 	err := pgx.BeginFunc(ctx, s.service.store.Database(), func(tx pgx.Tx) error {
 		var sessionID string
@@ -177,16 +211,15 @@ func (s *storage) CreateAccessToken(ctx context.Context, input op.TokenRequest) 
 		if _, err := tx.Exec(ctx, "INSERT INTO oidc_grants(id,client_id,session_id,data,expires_at,absolute_expires_at) VALUES($1,$2,$3,$4,$5,$6)", request.ID, request.ClientID, request.SessionID, data, minimum(now.Add(sessionIdleLifetime), request.AbsoluteExpiry), request.AbsoluteExpiry); err != nil {
 			return err
 		}
-		_, err = tx.Exec(ctx, "INSERT INTO oidc_access_tokens(id,grant_id,data,expires_at) VALUES($1,$2,$3,$4)", tokenID, request.ID, data, expiry)
-		return err
+		return s.persistTokens(ctx, tx, &request.grant, tokenID, refreshSecret, expiry)
 	})
 	if err != nil {
-		return "", time.Time{}, err
+		return "", "", time.Time{}, err
 	}
 	if replayed {
-		return "", time.Time{}, oidc.ErrInvalidGrant()
+		return "", "", time.Time{}, oidc.ErrInvalidGrant()
 	}
-	return tokenID, expiry, nil
+	return tokenID, refreshSecret, expiry, nil
 }
 
 func (s *storage) accessGrant(ctx context.Context, id, subject string) (*grant, error) {
@@ -283,7 +316,7 @@ func (s *storage) SetIntrospectionFromToken(ctx context.Context, info *oidc.Intr
 	return nil
 }
 func (s *storage) RevokeToken(ctx context.Context, id, subject, clientID string) *oidc.Error {
-	_, err := s.service.store.Database().Exec(ctx, "UPDATE oidc_grants SET revoked_at=$3 WHERE client_id=$1 AND id IN (SELECT grant_id FROM oidc_access_tokens WHERE id=$2)", clientID, id, s.service.now())
+	_, err := s.service.store.Database().Exec(ctx, "UPDATE oidc_grants SET revoked_at=$3 WHERE client_id=$1 AND id IN (SELECT grant_id FROM oidc_access_tokens WHERE id=$2 UNION SELECT grant_id FROM oidc_refresh_tokens WHERE id=$2)", clientID, id, s.service.now())
 	if err != nil {
 		return oidc.ErrServerError()
 	}

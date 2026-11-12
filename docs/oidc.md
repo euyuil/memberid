@@ -18,7 +18,7 @@ Discover configuration at `ISSUER/.well-known/openid-configuration`.
 
 Authorization uses `response_type=code`, mandatory PKCE `S256`, and the `openid` scope. Token exchange, introspection, and revocation require a form-encoded POST body and `client_secret_basic`. Query-string credentials, body client secrets, and combined client-authentication methods are rejected. ID Tokens and JWT access tokens use RS256 and a public-key-derived `kid`. Discovery advertises only the enabled profile, including the registered custom evidence scopes.
 
-Rotating Refresh Tokens are the next implementation step. `offline_access` and refresh grants are currently rejected, even if a client registration already contains the future `refresh` policy. There is no private renewal endpoint. Implicit flow, password grants, client credentials, token exchange, dynamic registration, request objects, device flow, and iframe session checks are not enabled.
+Clients explicitly registered with `refresh=true` can request `offline_access` and use rotating Refresh Tokens at the standard token endpoint. Other clients cannot obtain or use refresh grants. Discovery advertises refresh only when at least one registered client enables it. There is no private renewal endpoint. Implicit flow, password grants, client credentials, token exchange, dynamic registration, request objects, device flow, and iframe session checks are not enabled.
 
 ## Login and independent subjects
 
@@ -44,13 +44,32 @@ Current organization, Member, factor, and binding eligibility is checked during 
 
 ## Lifetimes, revocation, and logout
 
-Authorization transactions expire after ten minutes. Access tokens last at most ten minutes and never outlive the source session deadline. ID Tokens last five minutes. SSO sessions currently last seven days, bounded by 365 days from the original authentication; ordinary page requests do not extend them. These are MemberID policies, not durations mandated by OIDC. The forthcoming refresh implementation must preserve the original authentication time and absolute deadline.
+Authorization transactions expire after ten minutes. Access tokens last at most ten minutes and never outlive the original authentication deadline. ID Tokens last five minutes. Browser SSO lasts seven days. A client grant expires after seven days without a successful refresh and cannot extend past 365 days from the original authentication. Ordinary page requests and token introspection do not extend either deadline. These are MemberID policies, not durations mandated by OIDC.
 
-Session credentials and authorization-code values are retained only as hashes. Authorization, session, grant, and token records persist in PostgreSQL, and expired records are cleaned periodically. A server restart does not require a new login when its configuration, keys, database, and browser cookies are retained. Protect the database, private keys, provider credentials, client secrets, and backups.
+Session credentials, authorization-code values, and random Refresh Token credentials are retained only as hashes. Authorization, session, grant, and token records persist in PostgreSQL, and expired records are cleaned periodically. A server restart does not require a new login when its configuration, keys, database, and browser cookies are retained. Protect the database, private keys, provider credentials, client secrets, and backups.
 
-Revocation affects the authenticated client's grant. Introspection is restricted to that client. RP-initiated logout requires a valid `id_token_hint`, validates any registered post-logout destination, revokes the associated MemberID SSO session and grants, and clears the browser session cookie. It does not erase another application's local session. Back-channel logout is not implemented. Already issued JWTs accepted only through offline signature validation remain usable until expiry; use online introspection where immediate revocation is required.
+Revocation affects the authenticated client's grant. Access-token introspection is restricted to that client; Refresh Token introspection is not provided. Refresh Token revocation invalidates its entire grant, including its access tokens at online verifiers. RP-initiated logout requires a valid `id_token_hint`, validates any registered post-logout destination, revokes the associated MemberID SSO session and grants, and clears the browser session cookie. It does not erase another application's local session. Back-channel logout is not implemented. Already issued JWTs accepted only through offline signature validation remain usable until expiry; use online introspection where immediate revocation is required.
 
 Production cookies use `Secure`, `HttpOnly`, `SameSite=Lax`, and the `__Host-` prefix. Production requires an HTTPS issuer. The explicit `127.0.0.1` development exception uses non-Secure local cookies. Serve authentication through a trusted TLS endpoint, preserve the configured issuer origin, and avoid logging authorization headers, token responses, cookies, codes, or login form bodies.
+
+## Standard refresh
+
+Request `offline_access` during authorization only for a client whose operator registration enables refresh. MemberID obtains explicit consent during that login unless a preauthorized policy supplies the operator's prior consent decision. Once the grant exists, refresh does not require another confirmation, browser navigation, iframe, SSO cookie, or shared origin:
+
+```sh
+curl --request POST "$ISSUER/oauth/token" \
+  --user "$CLIENT_ID:$CLIENT_SECRET" \
+  --data-urlencode grant_type=refresh_token \
+  --data-urlencode "refresh_token=$REFRESH_TOKEN"
+```
+
+The application backend must protect both credentials and redact command/request logs. Each successful response replaces the previous Refresh Token. Persist the returned token securely before another refresh. Serialize refresh for the same grant across browser tabs and application replicas. Retrying an already consumed token, including after a lost successful response, revokes the family and requires a new authorization flow. There is no replay grace window or private recovery token.
+
+A refresh may retain or narrow its scope; it cannot add a scope or regain a removed one through a later rotation. The original subject, authentication time, client binding, and absolute deadline remain fixed. MemberID rechecks current identity eligibility and registered client policy before issuing tokens. Rotation and replay revocation are database transactions, so multiple MemberID replicas share the same result.
+
+Browser SSO and client grants have separate idle behavior. An actively renewed grant remains usable after the browser's MemberID cookie expires, and cleanup retains the associated session record while unexpired grant records still reference it. This does not extend browser SSO or reset fresh authentication. The server requires fresh authorization when five minutes or less remain before the absolute deadline. Access-token and grant expirations are capped at that deadline; each application remains responsible for its own local-session lifetime.
+
+An application can refresh automatically when foreground activity needs an almost-expired Access Token. Avoid refreshing from background polling. MemberID cannot determine whether an arbitrary RP's refresh originated from human foreground activity; that scheduling policy belongs to the client. On `invalid_grant`, discard local token state and start a new standard authorization flow instead of repeatedly retrying a consumed or expired token. Follow [OAuth security guidance on refresh protection](https://www.rfc-editor.org/rfc/rfc9700.html#name-refresh-token-protection).
 
 ## Running the provider
 
@@ -60,7 +79,7 @@ Follow [operator setup](operations.md) to initialize a new dedicated database an
 memberid serve --directory .local/memberid --listen 127.0.0.1:8080
 ```
 
-The current interactive implementation requires the phone adapter; another independent authentication adapter is still being implemented. Omitting `--directory` starts health-only mode. Configuration and client-policy changes take effect after a restart. This initial schema is version 3; startup refuses older schemas, and no existing database is reset or migrated automatically.
+The current interactive implementation requires the phone adapter; another independent authentication adapter is still being implemented. Omitting `--directory` starts health-only mode. Configuration and client-policy changes take effect after a restart. This initial schema is version 4; startup refuses older schemas, and no existing database is reset or migrated automatically.
 
 For the first Member, create its organization and Member through the operator CLI, then let the person verify their phone in an application login. Verification creates only the factor. An authorized operator can inspect that existing factor and explicitly bind it:
 
@@ -73,4 +92,4 @@ Confirm the intended organization and person through the administrator's enrollm
 
 ## Validation status
 
-Automated HTTP tests use the actual provider, RSA tokens, browser cookie jars, and disposable PostgreSQL databases. They exercise login, discovery, client/PKCE/redirect checks, CSRF and browser binding, consent, distinct organization subjects, factor-only subjects, concurrent code replay, current eligibility, introspection, revocation, logout, authentication age, and persisted SSO/JWKS behavior across a signing-key rollover restart. SMS delivery is simulated in these tests. Real GitLab interoperability and deployed provider acceptance remain separate pending checks; this is not a claim of OpenID certification.
+Automated HTTP tests use the actual provider, RSA tokens, browser cookie jars, and disposable PostgreSQL databases. They exercise login, discovery, client/PKCE/redirect checks, CSRF and browser binding, consent, distinct organization subjects, factor-only subjects, concurrent code replay, current eligibility, introspection, revocation, logout, authentication age, persisted SSO/JWKS behavior across a signing-key rollover restart, refresh rotation and scope narrowing, concurrent family replay, independent provider instances, and transactional rollback on issuance failure. SMS delivery is simulated in these tests. Real GitLab interoperability and deployed provider acceptance remain separate pending checks; this is not a claim of OpenID certification.
