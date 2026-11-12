@@ -122,6 +122,14 @@ func (store *Store) setMemberBlock(ctx context.Context, organizationID, memberID
 
 // EnsureFactor records provider-verified evidence; it never infers a Member binding.
 func (store *Store) EnsureFactor(ctx context.Context, kind, namespace, subject string) (Factor, error) {
+	return ensureFactor(ctx, store.pool, kind, namespace, subject)
+}
+
+type queryer interface {
+	QueryRow(context.Context, string, ...any) pgx.Row
+}
+
+func ensureFactor(ctx context.Context, database queryer, kind, namespace, subject string) (Factor, error) {
 	if !validFactorType(kind) || !validText(namespace, 512) || !validText(subject, 512) {
 		return Factor{}, ErrInvalid
 	}
@@ -129,7 +137,7 @@ func (store *Store) EnsureFactor(ctx context.Context, kind, namespace, subject s
 	if err != nil {
 		return Factor{}, err
 	}
-	factor, err := readFactor(store.pool.QueryRow(ctx, "INSERT INTO authentication_factors(id,type,namespace,subject) VALUES($1,$2,$3,$4) ON CONFLICT(type,namespace,subject) DO UPDATE SET subject=EXCLUDED.subject RETURNING "+factorColumns, id, kind, namespace, subject))
+	factor, err := readFactor(database.QueryRow(ctx, "INSERT INTO authentication_factors(id,type,namespace,subject) VALUES($1,$2,$3,$4) ON CONFLICT(type,namespace,subject) DO UPDATE SET subject=EXCLUDED.subject RETURNING "+factorColumns, id, kind, namespace, subject))
 	if err == nil && factor.Status != "active" {
 		return Factor{}, ErrIneligible
 	}

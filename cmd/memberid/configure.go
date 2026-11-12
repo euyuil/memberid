@@ -5,8 +5,10 @@ import (
 	"errors"
 	"flag"
 	"io"
+	"os"
 
 	"github.com/euyuil/memberid/internal/config"
+	"github.com/euyuil/memberid/internal/sms"
 )
 
 type repeatedFlag []string
@@ -48,7 +50,11 @@ func configure(args []string, stdout, stderr io.Writer) error {
 		if err != nil {
 			return err
 		}
-		return json.NewEncoder(stdout).Encode(map[string]any{"valid": true, "issuer": loaded.Issuer, "keyId": loaded.KeyID, "clients": len(loaded.Clients)})
+		phone, err := sms.FromEnvironment(os.Getenv)
+		if err != nil {
+			return err
+		}
+		return json.NewEncoder(stdout).Encode(map[string]any{"valid": true, "issuer": loaded.Issuer, "keyId": loaded.KeyID, "clients": len(loaded.Clients), "phoneEnabled": phone != nil})
 	case "client":
 		if args[1] != "add" && args[1] != "rotate-secret" {
 			return errors.New("unknown client operation")
