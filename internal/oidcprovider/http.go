@@ -164,7 +164,7 @@ func (service *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		r.PostForm.Del("token_type_hint")
 	}
 	browser := service.cookieValue(r, "browser")
-	interactive := r.URL.Path == "/login" || strings.HasPrefix(r.URL.Path, "/oauth/authorize")
+	interactive := r.URL.Path == "/account/link/dingtalk" || r.URL.Path == "/login" || strings.HasPrefix(r.URL.Path, "/oauth/authorize")
 	if interactive && len(browser) != 43 {
 		browser = config.RandomSecret()
 		service.cookie(w, "browser", browser, sessionIdleLifetime)
@@ -191,6 +191,12 @@ func (service *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		metadata.DeviceAuthorizationEndpoint = ""
 		op.Discover(w, metadata)
 		return
+	case "/account/link/dingtalk":
+		service.accountDingTalk(w, r)
+		return
+	case "/account/dingtalk/callback":
+		service.accountDingTalkCallback(w, r)
+		return
 	case "/login/dingtalk/callback":
 		service.dingTalkCallback(w, r)
 		return
@@ -213,7 +219,7 @@ func (service *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (service *Service) Cleanup(ctx context.Context) error {
-	for _, table := range []string{"oidc_access_tokens", "oidc_authorization_requests", "oidc_grants"} {
+	for _, table := range []string{"account_link_requests", "oidc_access_tokens", "oidc_authorization_requests", "oidc_grants"} {
 		if _, err := service.store.Database().Exec(ctx, "DELETE FROM "+table+" WHERE expires_at<$1", service.now()); err != nil {
 			return err
 		}

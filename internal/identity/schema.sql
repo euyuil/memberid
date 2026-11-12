@@ -1,7 +1,7 @@
 CREATE TABLE memberid_schema (
-    version integer PRIMARY KEY CHECK (version = 10)
+    version integer PRIMARY KEY CHECK (version = 11)
 );
-INSERT INTO memberid_schema(version) VALUES (10);
+INSERT INTO memberid_schema(version) VALUES (11);
 
 CREATE TABLE organizations (
     id text COLLATE "C" PRIMARY KEY CHECK (id ~ '^org_[0-9bcdfghjkmnpqrstvwxz]{27}$'),
@@ -160,3 +160,14 @@ CREATE TABLE dingtalk_events (
     received_at timestamptz NOT NULL DEFAULT clock_timestamp(),
     PRIMARY KEY (organization_id,event_id)
 );
+
+CREATE TABLE account_link_requests (
+    id text COLLATE "C" PRIMARY KEY,
+    session_id text COLLATE "C" NOT NULL REFERENCES oidc_sessions(id) ON DELETE CASCADE,
+    data jsonb NOT NULL,
+    state text NOT NULL CHECK (state IN ('ready','pending','consumed','completed','canceled')),
+    state_hash text UNIQUE,
+    expires_at timestamptz NOT NULL
+);
+CREATE INDEX account_link_session ON account_link_requests(session_id,expires_at);
+CREATE INDEX account_link_expiry ON account_link_requests(expires_at);
