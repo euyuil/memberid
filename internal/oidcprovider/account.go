@@ -30,6 +30,9 @@ type accountRequest struct {
 	accountDetails
 }
 type accountDetails struct {
+	Kind           string                        `json:"kind"`
+	PhoneNumber    string                        `json:"phoneNumber,omitempty"`
+	ChallengeID    string                        `json:"challengeId,omitempty"`
 	MemberID       string                        `json:"memberId"`
 	OrganizationID string                        `json:"organizationId"`
 	FactorID       string                        `json:"factorId"`
@@ -111,7 +114,7 @@ func (service *Service) readAccount(r *http.Request, field, value string) (accou
 	if err == nil {
 		err = json.Unmarshal(data, &request.accountDetails)
 	}
-	if err == nil && (len(accountBrowser(r)) != 43 || !service.accountClient(request.accountDetails) || !sameSecret(request.BrowserHash, config.SecretHash(accountBrowser(r)))) {
+	if err == nil && ((request.Kind != "phone" && request.Kind != "dingtalk") || len(accountBrowser(r)) != 43 || !service.accountClient(request.accountDetails) || !sameSecret(request.BrowserHash, config.SecretHash(accountBrowser(r)))) {
 		err = identity.ErrIneligible
 	}
 	return request, err
@@ -122,7 +125,7 @@ func accountAddress(request accountDetails) string {
 		query.Set("client_id", request.ClientID)
 		query.Set("returnUri", request.ReturnURI)
 	}
-	return accountPath + "?" + query.Encode()
+	return "/account/link/" + request.Kind + "?" + query.Encode()
 }
 
 func (service *Service) accountDingTalk(w http.ResponseWriter, r *http.Request) {
@@ -144,25 +147,32 @@ func (service *Service) accountDingTalk(w http.ResponseWriter, r *http.Request) 
 		service.accountDingTalkPost(w, r, session)
 		return
 	}
+	request, member, ok := service.openAccount(w, r, session, "dingtalk")
+	if ok {
+		service.renderAccount(w, r, request, session, member, "")
+	}
+}
+
+func (service *Service) openAccount(w http.ResponseWriter, r *http.Request, session accountSession, kind string) (accountRequest, identity.Member, bool) {
 	if !accountFields(r, "memberId", "client_id", "returnUri") || !identity.ValidID(r.Form.Get("memberId"), identity.MemberKind) {
 		http.Error(w, "Invalid account request", 400)
-		return
+		return accountRequest{}, identity.Member{}, false
 	}
 	member, binding, err := service.accountMember(r, session, r.Form.Get("memberId"))
 	if err != nil {
 		http.Error(w, "This Member identity is not available to the current session.", 403)
-		return
+		return accountRequest{}, identity.Member{}, false
 	}
-	details := accountDetails{MemberID: member.ID, OrganizationID: member.OrganizationID, FactorID: session.verified.Factor.ID, BindingID: binding, ClientID: r.Form.Get("client_id"), ReturnURI: r.Form.Get("returnUri"), BrowserHash: config.SecretHash(accountBrowser(r))}
+	details := accountDetails{Kind: kind, MemberID: member.ID, OrganizationID: member.OrganizationID, FactorID: session.verified.Factor.ID, BindingID: binding, ClientID: r.Form.Get("client_id"), ReturnURI: r.Form.Get("returnUri"), BrowserHash: config.SecretHash(accountBrowser(r))}
 	if !service.accountClient(details) {
 		http.Error(w, "Invalid account return destination or client", 400)
-		return
+		return accountRequest{}, identity.Member{}, false
 	}
 	request := accountRequest{SessionID: session.id, accountDetails: details}
 	// Reopening a pending flow preserves its cancel action and original destination.
 	var existing string
 	err = service.store.Database().QueryRow(r.Context(), `SELECT id FROM account_link_requests WHERE session_id=$1 AND expires_at>$2 AND state IN ('ready','pending','consumed')
-  AND data->>'memberId'=$3 AND data->>'browserHash'=$4 AND COALESCE(data->>'clientId','')=$5 AND COALESCE(data->>'returnUri','')=$6 ORDER BY expires_at DESC LIMIT 1`, session.id, service.now(), member.ID, details.BrowserHash, details.ClientID, details.ReturnURI).Scan(&existing)
+  AND data->>'kind'=$7 AND data->>'memberId'=$3 AND data->>'browserHash'=$4 AND COALESCE(data->>'clientId','')=$5 AND COALESCE(data->>'returnUri','')=$6 ORDER BY expires_at DESC LIMIT 1`, session.id, service.now(), member.ID, details.BrowserHash, details.ClientID, details.ReturnURI, kind).Scan(&existing)
 	if err == nil {
 		request, err = service.readAccount(r, "id", existing)
 	} else if errors.Is(err, pgx.ErrNoRows) {
@@ -176,9 +186,9 @@ func (service *Service) accountDingTalk(w http.ResponseWriter, r *http.Request) 
 	}
 	if err != nil {
 		http.Error(w, "Account management temporarily unavailable", 503)
-		return
+		return accountRequest{}, identity.Member{}, false
 	}
-	service.renderAccount(w, r, request, session, member, "")
+	return request, member, true
 }
 
 func (service *Service) accountDingTalkPost(w http.ResponseWriter, r *http.Request, session accountSession) {
@@ -188,7 +198,7 @@ func (service *Service) accountDingTalkPost(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	request, err := service.readAccount(r, "id", r.PostForm.Get("request"))
-	if err != nil || request.SessionID != session.id || !sameSecret(request.CSRF, r.PostForm.Get("csrf")) {
+	if err != nil || request.Kind != "dingtalk" || request.SessionID != session.id || !sameSecret(request.CSRF, r.PostForm.Get("csrf")) {
 		http.Error(w, "Invalid or expired account request", 403)
 		return
 	}
@@ -263,7 +273,7 @@ func (service *Service) accountDingTalkCallback(w http.ResponseWriter, r *http.R
 	}
 	request, err := service.readAccount(r, "state_hash", config.SecretHash(r.Form.Get("state")))
 	session, sessionErr := service.accountSession(r, service.store.Database(), false)
-	if err != nil || sessionErr != nil || request.SessionID != session.id || request.State != "pending" || !service.freshAccountSession(session) {
+	if err != nil || request.Kind != "dingtalk" || sessionErr != nil || request.SessionID != session.id || request.State != "pending" || !service.freshAccountSession(session) {
 		http.Error(w, "Invalid or expired account callback", 400)
 		return
 	}
