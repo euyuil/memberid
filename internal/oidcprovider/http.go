@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"mime"
 	"net/http"
 	"strings"
 	"time"
@@ -120,6 +121,27 @@ func (service *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	for _, values := range r.Form {
 		if len(values) != 1 {
 			http.Error(w, "Repeated parameter", http.StatusBadRequest)
+			return
+		}
+	}
+	if r.URL.Path == "/oauth/token" || r.URL.Path == "/oauth/introspect" || r.URL.Path == "/oauth/revoke" {
+		if r.Method != http.MethodPost {
+			w.Header().Set("Allow", "POST")
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+		if err != nil || mediaType != "application/x-www-form-urlencoded" || r.URL.RawQuery != "" {
+			op.RequestError(w, r, oidc.ErrInvalidRequest().WithDescription("Use a form-encoded POST body"), nil)
+			return
+		}
+		if _, _, ok := r.BasicAuth(); !ok {
+			w.Header().Set("WWW-Authenticate", `Basic realm="MemberID"`)
+			op.RequestError(w, r, oidc.ErrInvalidClient().WithDescription("client_secret_basic is required"), nil)
+			return
+		}
+		if r.Form.Has("client_secret") || r.Form.Has("client_assertion") {
+			op.RequestError(w, r, oidc.ErrInvalidRequest().WithDescription("Use one registered client authentication method"), nil)
 			return
 		}
 	}

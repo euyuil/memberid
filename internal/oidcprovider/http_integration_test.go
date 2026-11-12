@@ -536,3 +536,21 @@ func TestRestartWithSigningKeyRollover(t *testing.T) {
 		t.Fatal("rollover changed subject")
 	}
 }
+
+func TestConfidentialEndpointTransportAndAuthentication(t *testing.T) {
+	f := newFixture(t)
+	tokens := f.tokens()
+	basic := map[string]string{"Authorization": "Basic " + base64.StdEncoding.EncodeToString([]byte("example-web:"+f.secret))}
+	for _, path := range []string{"/oauth/token", "/oauth/introspect", "/oauth/revoke"} {
+		f.status(f.call(browserClient(), "GET", path, nil, basic), 405)
+		body := url.Values{"client_id": {"example-web"}, "client_secret": {f.secret}, "token": {tokens["access_token"].(string)}}
+		response := f.call(browserClient(), "POST", path, body, nil)
+		f.status(response, 401)
+		if jsonObject(t, response)["error"] != "invalid_client" || response.header.Get("WWW-Authenticate") == "" {
+			t.Fatal("missing client authentication challenge")
+		}
+		f.status(f.call(browserClient(), "POST", path, body, basic), 400)
+		f.status(f.call(browserClient(), "POST", path+"?token=untrusted", url.Values{"token": {"example"}}, basic), 400)
+	}
+	f.status(f.userinfo(tokens["access_token"].(string)), 200)
+}

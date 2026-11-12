@@ -16,7 +16,7 @@ Discover configuration at `ISSUER/.well-known/openid-configuration`.
 | Token revocation | `/oauth/revoke` |
 | RP-initiated logout | `/oauth/logout` |
 
-Authorization uses `response_type=code`, mandatory PKCE `S256`, and the `openid` scope. Token exchange, introspection, and revocation use `client_secret_basic`. ID Tokens and JWT access tokens use RS256 and a public-key-derived `kid`. Discovery advertises only the enabled profile, including the registered custom evidence scopes.
+Authorization uses `response_type=code`, mandatory PKCE `S256`, and the `openid` scope. Token exchange, introspection, and revocation require a form-encoded POST body and `client_secret_basic`. Query-string credentials, body client secrets, and combined client-authentication methods are rejected. ID Tokens and JWT access tokens use RS256 and a public-key-derived `kid`. Discovery advertises only the enabled profile, including the registered custom evidence scopes.
 
 Rotating Refresh Tokens are the next implementation step. `offline_access` and refresh grants are currently rejected, even if a client registration already contains the future `refresh` policy. There is no private renewal endpoint. Implicit flow, password grants, client credentials, token exchange, dynamic registration, request objects, device flow, and iframe session checks are not enabled.
 
