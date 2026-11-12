@@ -34,6 +34,8 @@ Authenticated non-GET operations emit the fixed management principal, HTTP metho
 | `GET /v1/organizations/{organizationId}/members` | Paged Members in exactly that organization, including blocked Members. |
 | `GET /v1/organizations/{organizationId}/members/{memberId}` | One Member in the specified organization. |
 | `PATCH /v1/organizations/{organizationId}/members/{memberId}` | At least one of `displayName` or boolean `manualBlocked`. |
+| `PUT /v1/organizations/{organizationId}/members/{memberId}/updates/{updateId}` | Apply a Member update once and retain its immutable receipt. |
+| `GET /v1/organizations/{organizationId}/members/{memberId}/updates/{updateId}` | Read that historical receipt without changing the Member. |
 | `GET /v1/organizations/{organizationId}/members/{memberId}/bindings` | All explicit relationships for this Member, including revoked ones. |
 | `POST /v1/organizations/{organizationId}/members/{memberId}/bindings` | `authenticationFactorId` of an existing, active, provider-verified factor. Returns the binding. |
 | `DELETE /v1/organizations/{organizationId}/members/{memberId}/bindings/{factorId}` | Revokes an existing relationship; 204, including a repeated revocation. |
@@ -45,6 +47,18 @@ Creation generates an identifier when `id` is omitted. An explicitly supplied id
 Every Member lookup or mutation is constrained by its organization. A Member in another organization returns 404. Disabling an organization prevents its Members from passing current eligibility without deleting their identities. Manual unblock preserves an independent external-departure block. An organization's enabled status and the Member's own status are separate facts; inspect eligibility for the complete binding decision.
 
 Binding requires an existing verified factor ID. This API does not create a factor from a phone number, verify a contact attribute, create a login session, or infer that two Members represent the same person. Repeating an active identical binding preserves its identity. A conflicting or revoked relationship remains reserved and returns 409 instead of transferring access. One factor can be explicitly bound to independent Members in different organizations, but cannot be shared by different Members in the same organization.
+
+## Retrying Member updates
+
+Use the immutable update resource when an integration must recover from an uncertain response. Generate and durably save a fresh UUID `updateId` and the complete intended request before sending `PUT /v1/organizations/{organizationId}/members/{memberId}/updates/{updateId}`. The body has the same allowed fields as Member PATCH: at least one of `displayName` and `manualBlocked`. The ID is installation-wide; reuse it only for the same organization, Member, and field values. UUID casing and JSON object field order do not change operation identity.
+
+The update and receipt commit in one database transaction. The first success returns 201 and a canonical relative `Location`; exact retries return 200 with the same receipt. Reusing an accepted ID with different input returns 409. Concurrent identical requests apply the update once, while conflicting requests cannot replace an accepted operation. Invalid or failed transactions do not consume the ID or leave a partial Member change.
+
+The receipt contains `id`, `organizationId`, `memberId`, the resulting `member` snapshot, and `createdAt`. Read it through GET at the same resource URI after an uncertain response, or repeat the saved PUT. Replaying an old update does not undo a later rename, manual block/unblock, or provider departure event. The receipt is historical acceptance, not current eligibility: query the Member and its binding eligibility separately. This resource uses [HTTP PUT semantics](https://www.rfc-editor.org/rfc/rfc9110.html#section-9.3.4); it does not change OIDC or OAuth behavior.
+
+Receipts persist across restarts and have no automatic expiry or deletion endpoint. Include them in database backups and capacity planning. Deleting receipts directly would destroy the safe-retry guarantee. A new intentional update uses a new ID. Ordinary PATCH remains available, but repeating PATCH after an uncertain result can overwrite an intervening update; it does not provide an immutable receipt.
+
+Updates use the same installation management credential and organization-bound lookup as other management operations. They do not impersonate an initiating Member or assign application permissions. The fresh-install schema is version 12; startup rejects older schemas without resetting or migrating existing data.
 
 ## Directory pagination
 

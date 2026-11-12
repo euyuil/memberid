@@ -38,7 +38,7 @@ The Member's identifier and locally managed display name remain unchanged. The s
 
 Successful linking adds verified DingTalk evidence to the selected Member. It does not change the source session, create an OIDC grant, reset authentication time, extend deadlines, or replace the current browser cookie. Existing grants retain their original factor provenance and limits; subsequent eligibility checks observe the new binding and directory evidence. A later standard DingTalk login resolves to the same Member subject in that organization. The result page offers the registered return link, or tells the user they can close the page when no client destination was supplied.
 
-The fresh-install schema is version 11. Existing databases are rejected without automatic migration or reset. Account requests become eligible for cleanup after five minutes. The running authentication process removes them during normal expiry cleanup; removing an expired session also removes its account requests. No upstream authorization code or provider token is stored in these requests.
+The fresh-install schema is version 12. Existing databases are rejected without automatic migration or reset. Account requests become eligible for cleanup after five minutes. The running authentication process removes them during normal expiry cleanup; removing an expired session also removes its account requests. No upstream authorization code or provider token is stored in these requests.
 
 ## Validation boundary
 

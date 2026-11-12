@@ -54,6 +54,8 @@ func New(store *identity.Store, secretSHA256 string, applications *identity.Ding
 		respond(w, http.StatusOK, value, err)
 	})
 	h.routes.HandleFunc("PATCH /v1/organizations/{organizationId}/members/{memberId}", h.updateMember)
+	h.routes.HandleFunc("GET "+memberUpdateRoute, h.memberUpdate)
+	h.routes.HandleFunc("PUT "+memberUpdateRoute, h.putMemberUpdate)
 	h.routes.HandleFunc("GET /v1/organizations/{organizationId}/members/{memberId}/bindings", func(w http.ResponseWriter, r *http.Request) {
 		value, err := h.store.Bindings(r.Context(), r.PathValue("organizationId"), r.PathValue("memberId"))
 		respond(w, http.StatusOK, map[string]any{"items": value}, err)
