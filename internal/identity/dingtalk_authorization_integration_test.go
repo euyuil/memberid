@@ -49,6 +49,12 @@ func TestDingTalkAuthorizationEvidenceAndPhoneEligibility(t *testing.T) {
 	if value, err := store.Eligibility(t.Context(), organization.ID, member.ID, factor.ID, "phone"); err != nil || value.Eligible {
 		t.Fatal("phone bypassed confirmed organization revocation", err)
 	}
+	if ids, err := store.EligibleMemberIDs(t.Context(), organization.ID, []string{member.ID}); err != nil || len(ids) != 0 {
+		t.Fatal("aggregate query bypassed confirmed organization revocation", err)
+	}
+	if ids, err := store.EligibleMemberIDs(t.Context(), other.ID, []string{otherMember.ID}); err != nil || len(ids) != 1 {
+		t.Fatal("organization revocation affected an independent Member", err)
+	}
 	if _, err := MemberEvidence(t.Context(), store.pool, factor.ID, member.ID, organization.ID); !errors.Is(err, ErrNotFound) {
 		t.Fatal("issuance evidence bypassed revocation", err)
 	}

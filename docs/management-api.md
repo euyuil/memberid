@@ -41,6 +41,7 @@ Authenticated non-GET operations emit the fixed management principal, HTTP metho
 | `DELETE /v1/organizations/{organizationId}/members/{memberId}/bindings/{factorId}` | Revokes an existing relationship; 204, including a repeated revocation. |
 | `GET /v1/factors/{factorId}` | Existing factor identity and status. Contains sensitive provider subject data; restrict its disclosure. |
 | `POST /v1/eligibility` | Checks an explicit organization, Member, factor, and factor type. |
+| `POST /v1/organizations/{organizationId}/member-eligibility` | Returns requested Members with at least one currently eligible binding. |
 
 Creation generates an identifier when `id` is omitted. An explicitly supplied identifier must use the [identity model](identity-model.md) format and must be unused. Duplicate creation returns 409; it does not update, merge, or reassign an identity. Display names are nonblank text of at most 128 Unicode code points without control characters. Changing a name preserves the stable Member subject.
 
@@ -82,6 +83,14 @@ An eligibility request contains:
 Replace identifier placeholders with actual returned IDs. `authenticationFactorType` is `phone` or `dingtalk`. A current active factor and binding, enabled organization, and unblocked Member produce `{"eligible": true, "bindingId": "..."}`. A missing relationship, wrong organization or factor type, revoked binding, disabled factor or organization, or blocked Member produces `{"eligible": false}`. Malformed identifiers or unsupported factor types return 400. The lookup evaluates these facts in one database query.
 
 Eligibility is not proof of a new authentication event and grants no business permissions. A resource server must separately validate the OIDC access token's signature, issuer, audience, lifetime, and claims, then apply its own authorization policy. The query supplies current identity facts; it cannot retract already issued JWTs from offline verifiers before their short expiry.
+
+### Candidate Member eligibility
+
+Trusted integrations can query `POST /v1/organizations/{organizationId}/member-eligibility` with `{"memberIds":["MEMBER_ID"]}`. Supply 1 through 100 distinct, valid Member IDs. Empty lists, duplicate IDs, malformed IDs, unknown fields, and query parameters are rejected with 400. The response is `{"eligibleMemberIds":["MEMBER_ID"]}` with unique identifiers in ascending order; it is an empty array when none qualify. A missing organization, missing Member, or Member belonging to another organization contributes no result. This is a bounded candidate query, not an unrestricted directory or contact-attribute lookup.
+
+A Member qualifies when at least one of its explicit bindings passes the same stored eligibility rules used by login selection and the specific-binding query: an active binding and factor, an enabled organization, no manual or external-departure block, an applicable DingTalk namespace for a DingTalk factor, and no recorded organization application revocation. Multiple usable factors produce one Member ID. A revoked factor binding does not make another independent binding unusable; a recorded organization application revocation still denies the organization's phone fallback.
+
+The candidates and eligibility gates are evaluated in one SQL statement and therefore share one database snapshot. Separate requests or batches do not share a snapshot or reserve future eligibility. This query performs no fresh upstream provider verification and does not establish an authentication time, authenticate a token's specific factor, or grant application permissions. Resource servers must still verify the presented token and check its explicit binding through `POST /v1/eligibility`. Applications retain their own permission rules and coordination for subsequent changes.
 
 Domain failures return a JSON `error` code with 400 (`invalid_request`), 401 (`unauthorized`), 403 (`ineligible` or `browser_access_denied`), 404 (`not_found`), 409 (`conflict`), 415 (`json_required`), 422 (`member_id_conflict`), 500 (`internal_error`), or 503 (`provider_unavailable`). Internal database details are not returned. Unknown routes and unsupported methods may use ordinary HTTP errors. Do not retry non-idempotent creation blindly after an uncertain network outcome: use an explicit identifier and inspect its existing record before deciding whether to retry.
 

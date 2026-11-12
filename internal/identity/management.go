@@ -2,9 +2,6 @@ package identity
 
 import (
 	"context"
-	"errors"
-
-	"github.com/jackc/pgx/v5"
 )
 
 type Page[T any] struct {
@@ -113,31 +110,4 @@ func (store *Store) Bindings(ctx context.Context, organizationID, memberID strin
 		result = append(result, binding)
 	}
 	return result, rows.Err()
-}
-
-type Eligibility struct {
-	Eligible  bool   `json:"eligible"`
-	BindingID string `json:"bindingId,omitempty"`
-}
-
-// Eligibility is a current binding check, not authentication or business authorization.
-func (store *Store) Eligibility(ctx context.Context, organizationID, memberID, factorID, factorType string) (Eligibility, error) {
-	if !ValidID(organizationID, OrganizationKind) || !ValidID(memberID, MemberKind) || !ValidID(factorID, FactorKind) || !validFactorType(factorType) {
-		return Eligibility{}, ErrInvalid
-	}
-	var result Eligibility
-	err := store.pool.QueryRow(ctx, `SELECT b.id::text FROM member_auth_factor_bindings b
-        JOIN members m ON m.id=b.member_id AND m.organization_id=b.organization_id
-        JOIN organizations o ON o.id=m.organization_id
-        JOIN authentication_factors f ON f.id=b.authentication_factor_id
-        WHERE b.organization_id=$1 AND b.member_id=$2 AND b.authentication_factor_id=$3 AND f.type=$4
-        AND b.status='active' AND f.status='active' AND o.status='enabled'
-        AND (f.type<>'dingtalk' OR EXISTS(SELECT 1 FROM dingtalk_applications da WHERE da.organization_id=o.id AND da.namespace=f.namespace))
-        AND NOT EXISTS(SELECT 1 FROM dingtalk_applications revoked WHERE revoked.organization_id=o.id AND revoked.authorization_status='revoked')
-        AND NOT m.manual_block AND NOT m.external_departure`, organizationID, memberID, factorID, factorType).Scan(&result.BindingID)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return result, nil
-	}
-	result.Eligible = err == nil
-	return result, err
 }

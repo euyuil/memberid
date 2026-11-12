@@ -780,6 +780,48 @@
           }
         }
       }
+    },
+    "/v1/organizations/{organizationId}/member-eligibility": {
+      "post": {
+        "operationId": "queryEligibleMembers",
+        "responses": {
+          "200": {
+            "description": "Successful operation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberEligibilityResult"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MemberEligibilityRequest"
+              }
+            }
+          }
+        },
+        "summary": "Query candidate Members with at least one eligible binding",
+        "description": "One current stored snapshot, constrained to the requested organization and 1 through 100 unique Member IDs. Missing, foreign, or ineligible identities are omitted. This does not authenticate a specific factor or grant application permissions.",
+        "parameters": [
+          {
+            "name": "organizationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/OrganizationID"
+            }
+          }
+        ]
+      }
     }
   },
   "components": {
@@ -1392,6 +1434,42 @@
           "memberId",
           "member",
           "createdAt"
+        ]
+      },
+      "MemberEligibilityRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "memberIds": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MemberID"
+            },
+            "minItems": 1,
+            "maxItems": 100,
+            "uniqueItems": true
+          }
+        },
+        "required": [
+          "memberIds"
+        ]
+      },
+      "MemberEligibilityResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "eligibleMemberIds": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MemberID"
+            },
+            "maxItems": 100,
+            "uniqueItems": true,
+            "description": "Requested eligible Member IDs in ascending identifier order; an empty array when none qualify."
+          }
+        },
+        "required": [
+          "eligibleMemberIds"
         ]
       }
     }
