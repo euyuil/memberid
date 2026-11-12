@@ -523,6 +523,67 @@
           }
         }
       }
+    },
+    "/v1/organization-enrollments": {
+      "post": {
+        "operationId": "enrollOrganization",
+        "description": "Atomically creates a new organization, initial independent Member, and binding to an existing active verified phone factor. Does not grant application roles.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrganizationEnrollment"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Original accepted enrollment receipt, including exact replays.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnrollmentReceipt"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/v1/organizations/{organizationId}/enrollment": {
+      "get": {
+        "operationId": "getOrganizationEnrollment",
+        "parameters": [
+          {
+            "name": "organizationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/OrganizationID"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Original accepted enrollment receipt, including exact replays.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnrollmentReceipt"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -535,7 +596,7 @@
     },
     "responses": {
       "Error": {
-        "description": "400 invalid request; 401 missing or invalid management credential; 403 browser access denied or ineligible factor; 404 record not found; 409 identifier or binding conflict; 415 JSON required; 500 internal error. Unknown routes and unsupported methods may use ordinary HTTP errors.",
+        "description": "400 invalid request; 401 missing or invalid management credential; 403 browser access denied or ineligible factor; 404 record not found; 409 identifier or binding conflict; 415 JSON required; 422 candidate Member identifier collision; 500 internal error. Unknown routes and unsupported methods may use ordinary HTTP errors.",
         "content": {
           "application/json": {
             "schema": {
@@ -947,6 +1008,69 @@
         },
         "required": [
           "status"
+        ]
+      },
+      "OrganizationEnrollment": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "organizationId": {
+            "$ref": "#/components/schemas/OrganizationID"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "memberId": {
+            "$ref": "#/components/schemas/MemberID"
+          },
+          "bindingId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Canonicalized to lowercase before idempotency comparison."
+          },
+          "authenticationFactorId": {
+            "$ref": "#/components/schemas/FactorID"
+          }
+        },
+        "required": [
+          "organizationId",
+          "name",
+          "memberId",
+          "bindingId",
+          "authenticationFactorId"
+        ]
+      },
+      "EnrollmentReceipt": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "organizationId": {
+            "$ref": "#/components/schemas/OrganizationID"
+          },
+          "memberId": {
+            "$ref": "#/components/schemas/MemberID"
+          },
+          "bindingId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Canonicalized to lowercase before idempotency comparison."
+          },
+          "authenticationFactorId": {
+            "$ref": "#/components/schemas/FactorID"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "organizationId",
+          "memberId",
+          "bindingId",
+          "authenticationFactorId",
+          "createdAt"
         ]
       }
     }
