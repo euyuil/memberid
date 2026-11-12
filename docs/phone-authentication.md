@@ -27,8 +27,8 @@ Successful verification returns a typed server-local authentication result with 
 
 ## Current availability and validation
 
-The adapter and persisted verification service are implemented and tested. The public HTTP listener still serves process health; login UI and OIDC endpoints are not available in this increment. Production builds contain no synthetic sender or code-return mode.
+The adapter and persisted verification service are implemented and tested. The configured [OIDC provider](oidc.md) exposes the phone login UI; health-only mode leaves authentication disabled. Production builds contain no synthetic sender or code-return mode.
 
 Tests inject a synthetic sender and use uniquely named databases in a disposable PostgreSQL server. They cover concurrent sends, concurrent verification, cross-transaction rejection, replay, persisted attempt limits, replacement, expiry, failed delivery, and absence of inferred membership. HTTP transport tests cover request encoding, an independently calculated signature vector, provider denials, redirect refusal, redacted errors, and no retries. These checks do not establish real SMS delivery.
 
-The initial database schema is now version 2. Normal startup checks its version and never upgrades or resets an existing database. This early development increment supports fresh installation; preserve existing databases and use an explicitly selected new database when testing the new schema.
+The initial database schema is now version 3. Normal startup checks its version and never upgrades or resets an existing database. This early development increment supports fresh installation; preserve existing databases and use an explicitly selected new database when testing the new schema.
