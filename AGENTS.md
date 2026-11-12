@@ -6,26 +6,26 @@ The repository is being bootstrapped. These guidelines define intended implement
 
 ## Product and Identity Boundaries
 
-- Keep MemberID independently buildable, deployable, and manageable. A clean checkout must not require a sibling repository, a private platform checkout, or an existing platform Console.
-- Provide one MemberID implementation and release artifact for standalone deployments and platform integrations. Consumers integrate through documented interfaces; do not maintain a platform-specific fork or duplicate the identity implementation.
+- Keep MemberID independently buildable, deployable, and manageable. A clean checkout must build and run using only its declared public dependencies and documented configuration.
+- Provide one MemberID implementation and release artifact for all supported deployments. Applications integrate through documented interfaces; keep application-specific adapters in their owning projects.
 - An organization's Member is an independent identity. The same natural person may have separate Members in different organizations. Do not introduce a mandatory global User account or automatically merge Members across organizations.
 - Keep Member identities separate from authentication factors and external provider bindings. Matching phone numbers, email addresses, or display names alone must not link accounts or transfer access.
 - Identify OIDC accounts by the standard `(iss, sub)` pair. Subjects must remain stable across profile or credential changes, must not be reassigned, and must distinguish different Members within an issuer.
-- MemberID owns organization and Member identity, authentication, provider bindings, and its own management access. Consuming applications own their business roles, resource permissions, and authorization decisions. Do not import platform-specific Owner roles or resource grants into identity claims.
+- MemberID owns organization and Member identity, authentication, provider bindings, and its own management access. Consuming applications own their business roles, resource permissions, and authorization decisions. Do not import application-specific administrative roles or resource grants into identity claims.
 - Keep management interfaces separate from OIDC protocol interfaces. Document management authentication and authorization explicitly; being an authenticated Member must not imply administrative access.
 - Keep external authentication providers optional and isolated behind their integration boundaries. Do not make a particular SMS vendor, enterprise platform, or downstream application a prerequisite for operating MemberID.
 
 ## OpenID Connect and Token Lifecycle
 
-- Implement standard OIDC and OAuth behavior using suitable maintained protocol libraries. Do not replace MemberID with another identity product, and do not invent cryptographic primitives or private alternatives to standard protocol flows.
+- Implement standard OIDC and OAuth behavior using suitable maintained protocol libraries. Keep protocol and cryptographic behavior grounded in maintained implementations and published standards.
 - Use Authorization Code flow with PKCE using `S256` for interactive clients. Document supported discovery metadata, endpoints, client authentication methods, scopes, claims, and logout behavior. Advertise only capabilities actually implemented.
 - Use the standard token endpoint and Refresh Token grant for renewal. Do not introduce a private renewal endpoint, a proprietary intermediate authentication proof, or a mandatory iframe flow.
-- Server-side state for authorization transactions, sessions, grants, and Refresh Token rotation is allowed. Do not preserve an old stateless-login constraint at the expense of protocol correctness, replay detection, revocation, or logout behavior.
+- Server-side state for authorization transactions, sessions, grants, and Refresh Token rotation is allowed. Choose state and transaction boundaries that support protocol correctness, replay detection, revocation, and documented logout behavior.
 - Keep ID Tokens, access tokens, and Refresh Tokens distinct in purpose and validation. ID Tokens authenticate a user to their intended client; they are not API bearer credentials. APIs must validate access tokens for the intended issuer, recipient, lifetime, and permissions.
 - Validate redirect URIs, client identity, PKCE, issuer, audience, signatures, expiry, and applicable nonce and state bindings at the correct protocol boundaries. Authorization codes must be single-use and bound to the original client and authorization request.
 - Protect Refresh Tokens and client credentials at rest and in logs. Make token rotation and replay handling atomic. Keep original authentication time, session limits, and grant expiry explicit; renewal must not silently turn an expiring login into an unlimited one.
 - Clients may refresh automatically during foreground use through standard OAuth requests, without a separate confirmation click or navigation when the existing grant remains valid. Fresh authentication, consent, or interaction may still be required when the protocol or configured policy requires it.
-- Do not require a shared browser origin or private Console behavior for protocol interoperability. Browser and backend clients must follow their documented security model, including appropriate credential storage, cookie protection, and CSRF defenses.
+- Do not require a shared browser origin or application-specific behavior for protocol interoperability. Browser and backend clients must follow their documented security model, including appropriate credential storage, cookie protection, and CSRF defenses.
 - Treat compatibility with an unmodified GitLab OIDC client as an acceptance target. Do not claim OIDC certification or complete conformance from a successful integration alone.
 
 ## Project Structure, Build, and Run
@@ -35,7 +35,7 @@ The repository is being bootstrapped. These guidelines define intended implement
 - Once tooling is introduced, use the runtime versions, package manager, lockfiles, and commands declared by this repository. Record reproducible installation, build, test, run, and deployment commands in `CONTRIBUTING.md` and `docs/`.
 - Run commands from the repository root unless documented otherwise. Verify the target shell, tool versions, executable permissions, and line endings when crossing host or container boundaries. POSIX scripts and hooks must use LF line endings.
 - Reuse existing persistent toolchain installations. Do not install ad hoc Go distributions in temporary directories; follow the repository's documented toolchain management.
-- Keep standalone build and deployment validation independent of local workspace overrides and consumer repositories. Consumer-specific deployment and authorization configuration belongs in the consumer.
+- Keep standalone build and deployment validation independent of local workspace overrides and consumer repositories. Application-specific deployment and authorization configuration belongs in the consuming application.
 - Keep generated output, caches, runtime data, database files, and raw logs out of version control. Add appropriate ignore rules when introducing them.
 
 ## Coding Style and Documentation
@@ -59,7 +59,7 @@ The repository is being bootstrapped. These guidelines define intended implement
 - Verify that separate Members remain distinct even when they share contact attributes. Test account binding and management authorization boundaries explicitly.
 - Verify discovery, authorization, token exchange, UserInfo, key rotation, and supported logout behavior through real HTTP interfaces. Include negative cases for invalid clients, redirect URIs, audiences, expired credentials, and replayed credentials.
 - Validate GitLab compatibility with an unmodified GitLab deployment and its standard OIDC integration. Document the exact versions, configuration, and observed outcomes. A simulated client or HTTP-only test is not proof of real GitLab login.
-- Keep generic interoperability checks here and platform-specific integration checks in the consuming platform repository. Both must consume the same MemberID release implementation.
+- Keep generic interoperability checks here and application-specific integration checks in each consuming application. Both must consume the same MemberID release implementation.
 - Run checks appropriate to the change and report their results. Distinguish static checks, unit tests, database integration tests, browser verification, real provider verification, and deployed acceptance. Mark checks not performed or blocked explicitly.
 - Do not invent existing CI jobs, scripts, coverage thresholds, or successful checks. Follow the tooling actually present in the repository.
 
@@ -83,7 +83,7 @@ The repository is being bootstrapped. These guidelines define intended implement
 ## Secrets, Dependencies, and Licensing
 
 - Treat all repository content as public. Never commit secrets, real identity data, private business information, personal machine configuration, machine-specific absolute paths, or unreviewed logs and screenshots.
-- Use placeholders and synthetic examples. Review files extracted from other repositories for credentials, private infrastructure details, unwanted coupling, and third-party material before adding them here.
+- Use placeholders and synthetic examples. Review proposed files and Git metadata for credentials, private infrastructure details, internal identifiers, unrelated personal information, and third-party material before publication.
 - Review the actual versions and license files of direct and transitive dependencies, copied code, assets, generators, and bundled material before adoption or updates. Include browser-delivered, build, development, test, and distributed binary or image contents in the review.
 - Prefer the latest suitable upstream-supported LTS release, or the latest stable release when no LTS exists. Verify support status and compatibility, and document any constraint requiring an older supported version.
 - Record dependency versions, licenses, attribution requirements, and distribution constraints in `docs/third-party-components.md` when introducing third-party components. Preserve required notices and keep the resolved inventory current.
