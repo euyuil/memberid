@@ -19,13 +19,14 @@ import (
 )
 
 type testDingTalk struct {
-	calls  atomic.Int64
-	before func()
-	fail   bool
+	calls              atomic.Int64
+	before             func()
+	fail               bool
+	authorizationError error
 }
 
 func (provider *testDingTalk) CheckAuthorization(context.Context, string, string, string) error {
-	return nil
+	return provider.authorizationError
 }
 func (provider *testDingTalk) Login(_ context.Context, corp, client, secret, code string) (dingtalk.Member, error) {
 	provider.calls.Add(1)
@@ -250,7 +251,7 @@ func TestConcurrentDingTalkCallbackConsumesStateOnce(t *testing.T) {
 }
 
 func TestDingTalkCallbackRejectsInvalidationDuringProviderIO(t *testing.T) {
-	for _, kind := range []string{"cancel", "rotate", "disable"} {
+	for _, kind := range []string{"cancel", "rotate", "disable", "reenable", "authorization"} {
 		t.Run(kind, func(t *testing.T) {
 			f := newFixture(t)
 			provider, apps := enableDingTalk(t, f, true)
@@ -269,10 +270,20 @@ func TestDingTalkCallbackRejectsInvalidationDuringProviderIO(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-			case "disable":
+			case "authorization":
+				if _, err := apps.SynchronizeAuthorization(t.Context(), f.member.OrganizationID); err != nil {
+					t.Fatal(err)
+				}
+			case "disable", "reenable":
 				status := "disabled"
 				if _, err := f.store.UpdateOrganization(t.Context(), f.member.OrganizationID, identity.OrganizationChange{Status: &status}); err != nil {
 					t.Fatal(err)
+				}
+				if kind == "reenable" {
+					status = "enabled"
+					if _, err := f.store.UpdateOrganization(t.Context(), f.member.OrganizationID, identity.OrganizationChange{Status: &status}); err != nil {
+						t.Fatal(err)
+					}
 				}
 			}
 			close(release)
@@ -289,4 +300,38 @@ func TestDingTalkCallbackRejectsInvalidationDuringProviderIO(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestDingTalkAuthorizationAppliesToPhoneOIDCGrants(t *testing.T) {
+	f := newConfiguredFixture(t, true)
+	provider, apps := enableDingTalk(t, f, true)
+	tokens := f.refreshTokens()
+	provider.authorizationError = dingtalk.ErrUnavailable
+	if _, err := apps.SynchronizeAuthorization(t.Context(), f.member.OrganizationID); !errors.Is(err, identity.ErrProviderUnavailable) {
+		t.Fatal(err)
+	}
+	refreshed := f.refresh("example-web", tokens["refresh_token"].(string), "")
+	f.status(refreshed, 200)
+	tokens = jsonObject(t, refreshed)
+	provider.authorizationError = dingtalk.ErrAuthorizationDenied
+	if _, err := apps.SynchronizeAuthorization(t.Context(), f.member.OrganizationID); err != nil {
+		t.Fatal(err)
+	}
+	f.status(f.userinfo(tokens["access_token"].(string)), 401)
+	f.invalidRefresh("example-web", tokens["refresh_token"].(string))
+	page, _ := f.loginPage("example-web", "openid")
+	if !strings.Contains(page.body, "No eligible Member identity") {
+		t.Fatal("SSO bypassed revoked authorization")
+	}
+	// Independently configured organizations and factor-only registration remain available.
+	page, verifier := f.loginPage("registration", "openid registration_identity")
+	code := f.complete(page, "")
+	f.status(f.exchange("registration", code, verifier), 200)
+	provider.authorizationError = nil
+	if _, err := apps.SynchronizeAuthorization(t.Context(), f.member.OrganizationID); err != nil {
+		t.Fatal(err)
+	}
+	page, verifier = f.loginPage("example-web", "openid")
+	code = f.complete(page, f.member.ID)
+	f.status(f.exchange("example-web", code, verifier), 200)
 }

@@ -51,6 +51,7 @@ func TestDingTalkOperatorCommands(t *testing.T) {
 	prior := http.DefaultTransport
 	t.Cleanup(func() { http.DefaultTransport = prior })
 	calls := 0
+	denied := false
 	http.DefaultTransport = applicationTransport(func(r *http.Request) (*http.Response, error) {
 		calls++
 		if r.URL.String() != "https://api.dingtalk.com/v1.0/oauth2/example-corp/token" {
@@ -59,6 +60,9 @@ func TestDingTalkOperatorCommands(t *testing.T) {
 		var request map[string]string
 		if json.NewDecoder(r.Body).Decode(&request) != nil || request["client_secret"] != secret {
 			t.Fatal("CLI did not read the protected secret file")
+		}
+		if denied {
+			return &http.Response{StatusCode: 400, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(`{"code":"unauthorized.client"}`))}, nil
 		}
 		return &http.Response{StatusCode: 200, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(`{"access_token":"synthetic-token","expires_in":7200}`))}, nil
 	})
@@ -86,5 +90,18 @@ func TestDingTalkOperatorCommands(t *testing.T) {
 		if err := run(t.Context(), args, &output, &diagnostic); err == nil {
 			t.Fatal("invalid operator command accepted")
 		}
+	}
+	for _, status := range []string{"revoked", "active"} {
+		denied = status == "revoked"
+		output.Reset()
+		if err := run(t.Context(), []string{"dingtalk", "sync", "--directory", directory, "--organization", organization.ID}, &output, &diagnostic); err != nil {
+			t.Fatal(err)
+		}
+		if json.Unmarshal(output.Bytes(), &info) != nil || info.AuthorizationStatus != status || info.Revision != 1 || strings.Contains(output.String()+diagnostic.String(), secret) {
+			t.Fatal("invalid or secret-bearing synchronization result")
+		}
+	}
+	if calls != 3 {
+		t.Fatal("synchronization did not make fresh authorization checks")
 	}
 }

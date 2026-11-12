@@ -14,6 +14,18 @@ type DingTalkLoginProvider interface {
 	Login(context.Context, string, string, string, string) (dingtalk.Member, error)
 }
 
+// DingTalkLoginContext binds an attempt to current policy revisions; it is not authentication evidence.
+type DingTalkLoginContext struct {
+	OrganizationID        string `json:"organizationId"`
+	ApplicationRevision   int64  `json:"applicationRevision"`
+	AuthorizationRevision int64  `json:"authorizationRevision"`
+	OrganizationRevision  int64  `json:"organizationRevision"`
+}
+
+func (app DingTalkApplication) LoginContext() DingTalkLoginContext {
+	return DingTalkLoginContext{app.OrganizationID, app.Revision, app.AuthorizationRevision, app.organizationRevision}
+}
+
 type DingTalkVerifier struct {
 	applications *DingTalkApplications
 	provider     DingTalkLoginProvider
@@ -44,30 +56,45 @@ func (verifier *DingTalkVerifier) Application(ctx context.Context, organizationI
 	if organization.Status != "enabled" {
 		return DingTalkApplication{}, ErrIneligible
 	}
-	return verifier.applications.Inspect(ctx, organizationID)
+	app, err := verifier.applications.Inspect(ctx, organizationID)
+	if err != nil {
+		return DingTalkApplication{}, err
+	}
+	if app.AuthorizationStatus != "active" {
+		return DingTalkApplication{}, ErrIneligible
+	}
+	app.organizationRevision = organization.lifecycleRevision
+	return app, nil
 }
 
-func (verifier *DingTalkVerifier) Verify(ctx context.Context, organizationID string, revision int64, code string) (DingTalkLoginProof, error) {
-	app, err := verifier.applications.Load(ctx, organizationID)
+func (verifier *DingTalkVerifier) Verify(ctx context.Context, login DingTalkLoginContext, code string) (DingTalkLoginProof, error) {
+	app, err := verifier.applications.Load(ctx, login.OrganizationID)
 	if err != nil {
 		return DingTalkLoginProof{}, err
 	}
-	if app.Revision != revision {
+	if app.Revision != login.ApplicationRevision || app.AuthorizationRevision != login.AuthorizationRevision {
 		return DingTalkLoginProof{}, ErrConflict
 	}
-	organization, err := verifier.applications.store.Organization(ctx, organizationID)
+	organization, err := verifier.applications.store.Organization(ctx, login.OrganizationID)
 	if err != nil {
 		return DingTalkLoginProof{}, err
 	}
-	if organization.Status != "enabled" {
+	if organization.Status != "enabled" || organization.lifecycleRevision != login.OrganizationRevision || app.AuthorizationStatus != "active" {
 		return DingTalkLoginProof{}, ErrIneligible
 	}
 	timeout, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 	member, err := verifier.provider.Login(timeout, app.CorpID, app.ClientID, app.Secret, code)
+	if errors.Is(err, dingtalk.ErrAuthorizationDenied) {
+		if _, recordErr := verifier.applications.recordAuthorization(ctx, app.DingTalkApplication, organization.lifecycleRevision, "revoked"); recordErr != nil {
+			return DingTalkLoginProof{}, recordErr
+		}
+		return DingTalkLoginProof{}, ErrIneligible
+	}
 	if err != nil || !validText(member.UnionID, 512) || !validText(member.UserID, 512) {
 		return DingTalkLoginProof{}, ErrProviderUnavailable
 	}
+	app.organizationRevision = organization.lifecycleRevision
 	return DingTalkLoginProof{verifier, app.DingTalkApplication, member, verifier.now().UTC().Truncate(time.Second)}, nil
 }
 
@@ -82,14 +109,14 @@ func (verifier *DingTalkVerifier) Admit(ctx context.Context, tx pgx.Tx, proof Di
 	if err != nil {
 		return Verification{}, err
 	}
-	if organization.Status != "enabled" {
+	if organization.Status != "enabled" || organization.lifecycleRevision != app.organizationRevision {
 		return Verification{}, ErrIneligible
 	}
 	current, _, err := readApplication(tx.QueryRow(ctx, "SELECT "+applicationColumns+" FROM dingtalk_applications WHERE organization_id=$1 FOR UPDATE", app.OrganizationID))
 	if err != nil {
 		return Verification{}, err
 	}
-	if current.Revision != app.Revision || current.Namespace != app.Namespace || current.CorpID != app.CorpID || current.ClientID != app.ClientID {
+	if current.Revision != app.Revision || current.AuthorizationRevision != app.AuthorizationRevision || current.AuthorizationStatus != "active" || current.Namespace != app.Namespace || current.CorpID != app.CorpID || current.ClientID != app.ClientID {
 		return Verification{}, ErrConflict
 	}
 	rows, err := tx.Query(ctx, "SELECT member_id,union_id FROM dingtalk_identities WHERE organization_id=$1 AND (union_id=$2 OR external_member_id=$3) FOR UPDATE", app.OrganizationID, proof.member.UnionID, proof.member.UserID)

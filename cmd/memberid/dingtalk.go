@@ -16,8 +16,8 @@ import (
 )
 
 func manageDingTalk(ctx context.Context, args []string, stdout, stderr io.Writer) error {
-	if len(args) == 0 || args[0] != "inspect" && args[0] != "configure" {
-		return errors.New("usage: memberid dingtalk <inspect|configure>")
+	if len(args) == 0 || args[0] != "inspect" && args[0] != "configure" && args[0] != "sync" {
+		return errors.New("usage: memberid dingtalk <inspect|configure|sync>")
 	}
 	flags := flag.NewFlagSet("dingtalk "+args[0], flag.ContinueOnError)
 	flags.SetOutput(stderr)
@@ -78,6 +78,8 @@ func manageDingTalk(ctx context.Context, args []string, stdout, stderr io.Writer
 	var result identity.DingTalkApplication
 	if args[0] == "inspect" {
 		result, err = applications.Inspect(ctx, *organizationID)
+	} else if args[0] == "sync" {
+		result, err = applications.SynchronizeAuthorization(ctx, *organizationID)
 	} else {
 		result, err = applications.Configure(ctx, *organizationID, input)
 	}

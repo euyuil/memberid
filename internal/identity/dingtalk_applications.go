@@ -20,13 +20,17 @@ var ErrProviderUnavailable = errors.New("provider verification unavailable")
 var ErrProviderConfiguration = errors.New("provider credentials could not be opened")
 
 type DingTalkApplication struct {
-	OrganizationID string    `json:"organizationId"`
-	Namespace      string    `json:"namespace"`
-	CorpID         string    `json:"corpId"`
-	ClientID       string    `json:"clientId"`
-	Revision       int64     `json:"revision"`
-	CreatedAt      time.Time `json:"createdAt"`
-	UpdatedAt      time.Time `json:"updatedAt"`
+	AuthorizationStatus     string    `json:"authorizationStatus"`
+	AuthorizationRevision   int64     `json:"authorizationRevision"`
+	AuthorizationVerifiedAt time.Time `json:"authorizationVerifiedAt"`
+	organizationRevision    int64
+	OrganizationID          string    `json:"organizationId"`
+	Namespace               string    `json:"namespace"`
+	CorpID                  string    `json:"corpId"`
+	ClientID                string    `json:"clientId"`
+	Revision                int64     `json:"revision"`
+	CreatedAt               time.Time `json:"createdAt"`
+	UpdatedAt               time.Time `json:"updatedAt"`
 }
 
 type DingTalkApplicationInput struct {
@@ -66,13 +70,14 @@ func NewDingTalkApplications(store *Store, key []byte, checker DingTalkAuthoriza
 	return &DingTalkApplications{store, encrypted, checker}, nil
 }
 
-const applicationColumns = "organization_id,namespace,corp_id,client_id,revision,created_at,updated_at,secret_ciphertext"
+const applicationColumns = "organization_id,namespace,corp_id,client_id,revision,created_at,updated_at,secret_ciphertext,authorization_status,authorization_revision,authorization_verified_at"
 
 func readApplication(row pgx.Row) (DingTalkApplication, []byte, error) {
 	var app DingTalkApplication
 	var encrypted []byte
-	err := row.Scan(&app.OrganizationID, &app.Namespace, &app.CorpID, &app.ClientID, &app.Revision, &app.CreatedAt, &app.UpdatedAt, &encrypted)
+	err := row.Scan(&app.OrganizationID, &app.Namespace, &app.CorpID, &app.ClientID, &app.Revision, &app.CreatedAt, &app.UpdatedAt, &encrypted, &app.AuthorizationStatus, &app.AuthorizationRevision, &app.AuthorizationVerifiedAt)
 	app.CreatedAt, app.UpdatedAt = app.CreatedAt.UTC(), app.UpdatedAt.UTC()
+	app.AuthorizationVerifiedAt = app.AuthorizationVerifiedAt.UTC()
 	return app, encrypted, storageError(err)
 }
 
@@ -136,12 +141,13 @@ func (applications *DingTalkApplications) Configure(ctx context.Context, organiz
 	candidate.Revision++
 	encrypted := applications.cipher.Seal(nil, nil, []byte(input.ClientSecret), applicationAAD(candidate))
 	var result DingTalkApplication
+	lifecycle := organization.lifecycleRevision
 	err = pgx.BeginFunc(ctx, applications.store.pool, func(tx pgx.Tx) error {
 		organization, err := readOrganization(tx.QueryRow(ctx, "SELECT "+organizationColumns+" FROM organizations WHERE id=$1 FOR UPDATE", organizationID))
 		if err != nil {
 			return err
 		}
-		if organization.Status != "enabled" {
+		if organization.Status != "enabled" || organization.lifecycleRevision != lifecycle {
 			return ErrIneligible
 		}
 		locked, _, err := readApplication(tx.QueryRow(ctx, "SELECT "+applicationColumns+" FROM dingtalk_applications WHERE organization_id=$1 FOR UPDATE", organizationID))
@@ -149,14 +155,18 @@ func (applications *DingTalkApplications) Configure(ctx context.Context, organiz
 			if err != nil {
 				return err
 			}
-			if locked.Revision != current.Revision || locked.Namespace != current.Namespace {
+			if locked.Revision != current.Revision || locked.Namespace != current.Namespace || locked.AuthorizationRevision != current.AuthorizationRevision {
 				return ErrConflict
 			}
 			if subtle.ConstantTimeCompare([]byte(current.Secret), []byte(input.ClientSecret)) == 1 {
-				result = locked
-				return nil
+				if locked.AuthorizationStatus == "active" {
+					result = locked
+					return nil
+				}
+				result, _, err = readApplication(tx.QueryRow(ctx, "UPDATE dingtalk_applications SET authorization_status='active',authorization_revision=authorization_revision+1,authorization_verified_at=clock_timestamp(),updated_at=clock_timestamp() WHERE organization_id=$1 RETURNING "+applicationColumns, organizationID))
+				return err
 			}
-			result, _, err = readApplication(tx.QueryRow(ctx, "UPDATE dingtalk_applications SET secret_ciphertext=$2,revision=$3,updated_at=clock_timestamp() WHERE organization_id=$1 RETURNING "+applicationColumns, organizationID, encrypted, candidate.Revision))
+			result, _, err = readApplication(tx.QueryRow(ctx, "UPDATE dingtalk_applications SET secret_ciphertext=$2,revision=$3,authorization_status='active',authorization_revision=authorization_revision+1,authorization_verified_at=clock_timestamp(),updated_at=clock_timestamp() WHERE organization_id=$1 RETURNING "+applicationColumns, organizationID, encrypted, candidate.Revision))
 			return err
 		}
 		if err == nil {

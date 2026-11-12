@@ -7,16 +7,16 @@ import (
 	"time"
 
 	"github.com/euyuil/memberid/internal/config"
+	"github.com/euyuil/memberid/internal/identity"
 	"github.com/jackc/pgx/v5"
 	"github.com/zitadel/oidc/v3/pkg/oidc"
 )
 
 type dingTalkAttempt struct {
-	StateHash           string    `json:"stateHash"`
-	OrganizationID      string    `json:"organizationId"`
-	ApplicationRevision int64     `json:"applicationRevision"`
-	ExpiresAt           time.Time `json:"expiresAt"`
-	Consumed            bool      `json:"consumed"`
+	StateHash string `json:"stateHash"`
+	identity.DingTalkLoginContext
+	ExpiresAt time.Time `json:"expiresAt"`
+	Consumed  bool      `json:"consumed"`
 }
 
 func (service *Service) startDingTalk(w http.ResponseWriter, r *http.Request, request *authorizationRequest, registered client) {
@@ -35,7 +35,7 @@ func (service *Service) startDingTalk(w http.ResponseWriter, r *http.Request, re
 		return
 	}
 	state := config.RandomSecret()
-	request.DingTalk = &dingTalkAttempt{StateHash: config.SecretHash(state), OrganizationID: app.OrganizationID, ApplicationRevision: app.Revision, ExpiresAt: service.now().Add(5 * time.Minute)}
+	request.DingTalk = &dingTalkAttempt{StateHash: config.SecretHash(state), DingTalkLoginContext: app.LoginContext(), ExpiresAt: service.now().Add(5 * time.Minute)}
 	request.Fresh = true
 	if err := service.storage.saveRequest(r.Context(), request); err != nil {
 		http.Error(w, "Login transaction expired", http.StatusBadRequest)
@@ -93,7 +93,7 @@ func (service *Service) dingTalkCallback(w http.ResponseWriter, r *http.Request)
 		service.renderLogin(w, r, request, registered, "DingTalk login did not complete. Cancel verification to try again.")
 		return
 	}
-	proof, err := service.dingtalk.Verify(r.Context(), attempt.OrganizationID, attempt.ApplicationRevision, r.Form.Get("authCode"))
+	proof, err := service.dingtalk.Verify(r.Context(), attempt.DingTalkLoginContext, r.Form.Get("authCode"))
 	if err != nil {
 		service.renderLogin(w, r, request, registered, "Unable to verify DingTalk membership. Cancel verification to try again.")
 		return
