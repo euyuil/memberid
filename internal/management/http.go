@@ -36,6 +36,11 @@ func New(store *identity.Store, secretSHA256 string) (*Handler, error) {
 		respond(w, http.StatusOK, map[string]string{"status": "ok"}, nil)
 	})
 	h.routes.HandleFunc("POST /v1/organizations", h.createOrganization)
+	h.routes.HandleFunc("POST /v1/organization-enrollments", h.enrollOrganization)
+	h.routes.HandleFunc("GET /v1/organizations/{organizationId}/enrollment", func(w http.ResponseWriter, r *http.Request) {
+		value, err := h.store.Enrollment(r.Context(), r.PathValue("organizationId"))
+		respond(w, http.StatusOK, value, err)
+	})
 	h.routes.HandleFunc("GET /v1/organizations", h.organizations)
 	h.routes.HandleFunc("GET /v1/organizations/{organizationId}", func(w http.ResponseWriter, r *http.Request) {
 		value, err := h.store.Organization(r.Context(), r.PathValue("organizationId"))
@@ -114,6 +119,8 @@ func respond(w http.ResponseWriter, status int, value any, err error) {
 			problem(w, http.StatusBadRequest, "invalid_request")
 		case errors.Is(err, identity.ErrNotFound):
 			problem(w, http.StatusNotFound, "not_found")
+		case errors.Is(err, identity.ErrMemberIDConflict):
+			problem(w, http.StatusUnprocessableEntity, "member_id_conflict")
 		case errors.Is(err, identity.ErrConflict):
 			problem(w, http.StatusConflict, "conflict")
 		case errors.Is(err, identity.ErrIneligible):
@@ -285,4 +292,13 @@ type statusWriter struct {
 func (w *statusWriter) WriteHeader(status int) {
 	w.status = status
 	w.ResponseWriter.WriteHeader(status)
+}
+
+func (h *Handler) enrollOrganization(w http.ResponseWriter, r *http.Request) {
+	var input identity.OrganizationEnrollment
+	if !decode(w, r, &input) {
+		return
+	}
+	value, err := h.store.EnrollOrganization(r.Context(), input)
+	respond(w, http.StatusOK, value, err)
 }

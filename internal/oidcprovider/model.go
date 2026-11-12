@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"net/url"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/euyuil/memberid/internal/config"
@@ -213,10 +212,4 @@ func (s *storage) ValidateJWTProfileScopes(context.Context, string, []string) ([
 	return nil, oidc.ErrUnsupportedGrantType()
 }
 
-func validTokenID(value string) bool {
-	if len(value) != 36 || value[8] != '-' || value[13] != '-' || value[18] != '-' || value[23] != '-' {
-		return false
-	}
-	decoded, err := hex.DecodeString(strings.ReplaceAll(value, "-", ""))
-	return err == nil && len(decoded) == 16
-}
+func validTokenID(value string) bool { return identity.ValidUUID(value) }

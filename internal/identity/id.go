@@ -2,6 +2,7 @@ package identity
 
 import (
 	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"math/big"
 	"strings"
@@ -67,4 +68,13 @@ func ValidID(id string, kind Kind) bool {
 
 func knownKind(kind Kind) bool {
 	return kind == OrganizationKind || kind == MemberKind || kind == FactorKind
+}
+
+// ValidUUID validates the canonical textual shape used by opaque binding and protocol identifiers.
+func ValidUUID(value string) bool {
+	if len(value) != 36 || value[8] != '-' || value[13] != '-' || value[18] != '-' || value[23] != '-' {
+		return false
+	}
+	decoded, err := hex.DecodeString(strings.ReplaceAll(value, "-", ""))
+	return err == nil && len(decoded) == 16
 }

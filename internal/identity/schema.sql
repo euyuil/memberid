@@ -1,7 +1,7 @@
 CREATE TABLE memberid_schema (
-    version integer PRIMARY KEY CHECK (version = 4)
+    version integer PRIMARY KEY CHECK (version = 5)
 );
-INSERT INTO memberid_schema(version) VALUES (4);
+INSERT INTO memberid_schema(version) VALUES (5);
 
 CREATE TABLE organizations (
     id text COLLATE "C" PRIMARY KEY CHECK (id ~ '^org_[0-9bcdfghjkmnpqrstvwxz]{27}$'),
@@ -110,3 +110,13 @@ CREATE TABLE oidc_refresh_tokens (
     consumed_at timestamptz
 );
 CREATE INDEX oidc_refresh_family ON oidc_refresh_tokens(grant_id);
+
+CREATE TABLE organization_enrollments (
+    organization_id text COLLATE "C" PRIMARY KEY REFERENCES organizations(id),
+    member_id text COLLATE "C" NOT NULL,
+    binding_id uuid NOT NULL UNIQUE REFERENCES member_auth_factor_bindings(id),
+    authentication_factor_id text COLLATE "C" NOT NULL REFERENCES authentication_factors(id),
+    request_hash bytea NOT NULL CHECK (octet_length(request_hash) = 32),
+    created_at timestamptz NOT NULL,
+    FOREIGN KEY (member_id, organization_id) REFERENCES members(id, organization_id)
+);
