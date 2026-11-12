@@ -66,7 +66,8 @@ func browserClient() *http.Client {
 	jar, _ := cookiejar.New(nil)
 	return &http.Client{Jar: jar, Timeout: 10 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 }
-func newFixture(t *testing.T) *fixture {
+func newFixture(t *testing.T) *fixture { t.Helper(); return newConfiguredFixture(t, false) }
+func newConfiguredFixture(t *testing.T, refreshEnabled bool) *fixture {
 	t.Helper()
 	database := testdb.Create(t)
 	if err := identity.Initialize(t.Context(), database); err != nil {
@@ -118,6 +119,8 @@ func newFixture(t *testing.T) *fixture {
 		{ID: "second-web", SecretSHA256: config.SecretHash(secret), RedirectURIs: []string{callback}, SubjectKind: "member", OrganizationID: other.ID, Preauthorized: true},
 		{ID: "registration", SecretSHA256: config.SecretHash(secret), RedirectURIs: []string{callback}, SubjectKind: "factor", EvidenceScope: "registration_identity", EvidenceAudience: "https://registration.example.test", Preauthorized: true},
 	}
+	configuration.Clients[0].Refresh = refreshEnabled
+	configuration.Clients[1].Refresh = refreshEnabled
 	key, _ := base64.StdEncoding.DecodeString(configuration.Secrets.PhoneCodeKey)
 	sender := new(testSender)
 	phone, err := identity.NewPhoneVerifier(store, key, sender)
