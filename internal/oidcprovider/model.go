@@ -103,6 +103,7 @@ type authorizationRequest struct {
 	PhoneNumber  string                 `json:"phoneNumber,omitempty"`
 	ChallengeID  string                 `json:"challengeId,omitempty"`
 	Verification *identity.Verification `json:"verification,omitempty"`
+	DingTalk     *dingTalkAttempt       `json:"dingtalk,omitempty"`
 	Fresh        bool                   `json:"fresh"`
 	Complete     bool                   `json:"complete"`
 }

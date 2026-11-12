@@ -1,0 +1,183 @@
+package identity
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"time"
+
+	"github.com/euyuil/memberid/internal/dingtalk"
+	"github.com/jackc/pgx/v5"
+)
+
+type DingTalkLoginProvider interface {
+	Login(context.Context, string, string, string, string) (dingtalk.Member, error)
+}
+
+type DingTalkVerifier struct {
+	applications *DingTalkApplications
+	provider     DingTalkLoginProvider
+	now          func() time.Time
+}
+
+// DingTalkLoginProof can only be produced after a successful provider exchange.
+// It is local evidence, cannot be serialized into a login credential, and expires after five minutes.
+type DingTalkLoginProof struct {
+	verifier        *DingTalkVerifier
+	application     DingTalkApplication
+	member          dingtalk.Member
+	authenticatedAt time.Time
+}
+
+func NewDingTalkVerifier(applications *DingTalkApplications, provider DingTalkLoginProvider) (*DingTalkVerifier, error) {
+	if applications == nil || provider == nil {
+		return nil, ErrInvalid
+	}
+	return &DingTalkVerifier{applications, provider, time.Now}, nil
+}
+
+func (verifier *DingTalkVerifier) Application(ctx context.Context, organizationID string) (DingTalkApplication, error) {
+	organization, err := verifier.applications.store.Organization(ctx, organizationID)
+	if err != nil {
+		return DingTalkApplication{}, err
+	}
+	if organization.Status != "enabled" {
+		return DingTalkApplication{}, ErrIneligible
+	}
+	return verifier.applications.Inspect(ctx, organizationID)
+}
+
+func (verifier *DingTalkVerifier) Verify(ctx context.Context, organizationID string, revision int64, code string) (DingTalkLoginProof, error) {
+	app, err := verifier.applications.Load(ctx, organizationID)
+	if err != nil {
+		return DingTalkLoginProof{}, err
+	}
+	if app.Revision != revision {
+		return DingTalkLoginProof{}, ErrConflict
+	}
+	organization, err := verifier.applications.store.Organization(ctx, organizationID)
+	if err != nil {
+		return DingTalkLoginProof{}, err
+	}
+	if organization.Status != "enabled" {
+		return DingTalkLoginProof{}, ErrIneligible
+	}
+	timeout, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	member, err := verifier.provider.Login(timeout, app.CorpID, app.ClientID, app.Secret, code)
+	if err != nil || !validText(member.UnionID, 512) || !validText(member.UserID, 512) {
+		return DingTalkLoginProof{}, ErrProviderUnavailable
+	}
+	return DingTalkLoginProof{verifier, app.DingTalkApplication, member, verifier.now().UTC().Truncate(time.Second)}, nil
+}
+
+// Admit participates in the caller's authentication transaction, so Member admission and session creation commit together.
+// Caller cancellation or a superseded authorization request must roll this transaction back.
+func (verifier *DingTalkVerifier) Admit(ctx context.Context, tx pgx.Tx, proof DingTalkLoginProof) (Verification, error) {
+	if proof.verifier != verifier || proof.authenticatedAt.IsZero() || proof.authenticatedAt.After(verifier.now()) || !proof.authenticatedAt.Add(5*time.Minute).After(verifier.now()) {
+		return Verification{}, ErrIneligible
+	}
+	app := proof.application
+	organization, err := readOrganization(tx.QueryRow(ctx, "SELECT "+organizationColumns+" FROM organizations WHERE id=$1 FOR UPDATE", app.OrganizationID))
+	if err != nil {
+		return Verification{}, err
+	}
+	if organization.Status != "enabled" {
+		return Verification{}, ErrIneligible
+	}
+	current, _, err := readApplication(tx.QueryRow(ctx, "SELECT "+applicationColumns+" FROM dingtalk_applications WHERE organization_id=$1 FOR UPDATE", app.OrganizationID))
+	if err != nil {
+		return Verification{}, err
+	}
+	if current.Revision != app.Revision || current.Namespace != app.Namespace || current.CorpID != app.CorpID || current.ClientID != app.ClientID {
+		return Verification{}, ErrConflict
+	}
+	rows, err := tx.Query(ctx, "SELECT member_id,union_id FROM dingtalk_identities WHERE organization_id=$1 AND (union_id=$2 OR external_member_id=$3) FOR UPDATE", app.OrganizationID, proof.member.UnionID, proof.member.UserID)
+	if err != nil {
+		return Verification{}, err
+	}
+	var memberID, unionID string
+	count := 0
+	for rows.Next() {
+		count++
+		if err = rows.Scan(&memberID, &unionID); err != nil {
+			break
+		}
+	}
+	rows.Close()
+	if err != nil {
+		return Verification{}, err
+	}
+	if rows.Err() != nil {
+		return Verification{}, rows.Err()
+	}
+	if count > 1 || count == 1 && unionID != proof.member.UnionID {
+		return Verification{}, ErrConflict
+	}
+	factor, err := ensureFactor(ctx, tx, "dingtalk", app.Namespace, proof.member.UnionID)
+	if err != nil {
+		return Verification{}, err
+	}
+	bound, err := readBinding(tx.QueryRow(ctx, "SELECT "+bindingColumns+" FROM member_auth_factor_bindings WHERE organization_id=$1 AND authentication_factor_id=$2 FOR UPDATE", app.OrganizationID, factor.ID))
+	if err != nil && !errors.Is(err, ErrNotFound) {
+		return Verification{}, err
+	}
+	if err == nil {
+		if bound.Status != "active" || memberID != "" && memberID != bound.MemberID {
+			return Verification{}, ErrConflict
+		}
+		memberID = bound.MemberID
+	}
+	if memberID == "" {
+		memberID, err = NewID(MemberKind)
+		if err != nil {
+			return Verification{}, err
+		}
+		name := proof.member.DisplayName
+		if !validText(name, 128) {
+			name = "Member"
+		}
+		if _, err := tx.Exec(ctx, "INSERT INTO members(id,organization_id,display_name) VALUES($1,$2,$3)", memberID, app.OrganizationID, name); err != nil {
+			return Verification{}, storageError(err)
+		}
+	} else {
+		member, err := readMember(tx.QueryRow(ctx, "SELECT "+memberColumns+" FROM members WHERE id=$1 AND organization_id=$2 FOR UPDATE", memberID, app.OrganizationID))
+		if err != nil {
+			return Verification{}, err
+		}
+		for _, source := range member.BlockSources {
+			if source == "manual" {
+				return Verification{}, ErrIneligible
+			}
+		}
+		if _, err := tx.Exec(ctx, "UPDATE members SET external_departure=false,updated_at=CASE WHEN external_departure THEN clock_timestamp() ELSE updated_at END WHERE id=$1", memberID); err != nil {
+			return Verification{}, err
+		}
+	}
+	if _, err := tx.Exec(ctx, "INSERT INTO member_auth_factor_bindings(member_id,organization_id,authentication_factor_id,factor_type) VALUES($1,$2,$3,'dingtalk') ON CONFLICT DO NOTHING", memberID, app.OrganizationID, factor.ID); err != nil {
+		return Verification{}, storageError(err)
+	}
+	bound, err = readBinding(tx.QueryRow(ctx, "SELECT "+bindingColumns+" FROM member_auth_factor_bindings WHERE member_id=$1 AND factor_type='dingtalk'", memberID))
+	if err != nil {
+		return Verification{}, err
+	}
+	if bound.OrganizationID != app.OrganizationID || bound.FactorID != factor.ID || bound.Status != "active" {
+		return Verification{}, ErrConflict
+	}
+	var departments []byte
+	if proof.member.DepartmentIDs != nil {
+		departments, err = json.Marshal(proof.member.DepartmentIDs)
+		if err != nil {
+			return Verification{}, err
+		}
+	}
+	if count == 0 {
+		_, err = tx.Exec(ctx, "INSERT INTO dingtalk_identities(member_id,organization_id,union_id,external_member_id,department_ids,verified_at) VALUES($1,$2,$3,$4,$5,$6)", memberID, app.OrganizationID, proof.member.UnionID, proof.member.UserID, departments, proof.authenticatedAt)
+	} else {
+		_, err = tx.Exec(ctx, "UPDATE dingtalk_identities SET external_member_id=$2,department_ids=COALESCE($3::jsonb,department_ids),verified_at=$4 WHERE member_id=$1", memberID, proof.member.UserID, departments, proof.authenticatedAt)
+	}
+	if err != nil {
+		return Verification{}, storageError(err)
+	}
+	return Verification{Factor: factor, AuthenticatedAt: proof.authenticatedAt, Method: "dingtalk"}, nil
+}

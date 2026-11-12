@@ -39,6 +39,21 @@ func (service *Service) loadSession(r *http.Request, request *authorizationReque
 	if err != nil || factor.Status != "active" {
 		return false
 	}
+	registered, err := service.storage.client(request.ClientID)
+	if err != nil || registered.registration.SubjectKind == "factor" && factor.Type != "phone" {
+		return false
+	}
+	if factor.Type == "dingtalk" {
+		if service.dingtalk == nil {
+			return false
+		}
+		if registered.registration.OrganizationID != "" {
+			app, err := service.dingtalk.Application(r.Context(), registered.registration.OrganizationID)
+			if err != nil || app.Namespace != factor.Namespace {
+				return false
+			}
+		}
+	}
 	verified.Factor = factor
 	request.SessionID = id
 	setVerification(request, verified)
@@ -141,7 +156,14 @@ func (service *Service) login(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		switch r.PostForm.Get("action") {
+		case "dingtalk":
+			service.startDingTalk(w, r, request, registered)
+			return
 		case "send":
+			if service.phone == nil || request.DingTalk != nil {
+				http.Error(w, "Phone verification unavailable", http.StatusBadRequest)
+				return
+			}
 			if request.ChallengeID != "" || request.Verification != nil {
 				message = "Cancel the current verification before requesting another code."
 				break
@@ -159,6 +181,10 @@ func (service *Service) login(w http.ResponseWriter, r *http.Request) {
 			request.Fresh = true
 			message = "Verification code requested. Enter the code within five minutes."
 		case "verify":
+			if service.phone == nil || request.DingTalk != nil {
+				http.Error(w, "Phone verification unavailable", http.StatusBadRequest)
+				return
+			}
 			if request.ChallengeID == "" || request.Verification != nil {
 				message = "Request a verification code first."
 				break
@@ -174,6 +200,7 @@ func (service *Service) login(w http.ResponseWriter, r *http.Request) {
 			}
 			message = "Phone verified. Select your identity and continue."
 		case "cancel":
+			request.DingTalk = nil
 			request.Verification = nil
 			request.ChallengeID = ""
 			request.PhoneNumber = ""
@@ -182,7 +209,7 @@ func (service *Service) login(w http.ResponseWriter, r *http.Request) {
 			request.FactorID, request.MemberID, request.OrganizationID, request.BindingID = "", "", "", ""
 		case "continue":
 			if request.Verification == nil {
-				message = "Verify your phone before continuing."
+				message = "Verify your identity before continuing."
 				break
 			}
 			if (!registered.registration.Preauthorized || slices.Contains(request.Input.Prompt, "consent")) && r.PostForm.Get("consent") != "yes" {

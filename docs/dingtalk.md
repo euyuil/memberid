@@ -1,6 +1,6 @@
-# DingTalk application configuration
+# DingTalk authentication
 
-An installation may configure a DingTalk application for an existing enabled MemberID organization without SMS, Members, or OIDC clients. Application configuration is implemented through the operator CLI and the separate management API. Interactive DingTalk login, Member admission, and provider event processing are subsequent increments; configuring an application alone does not make DingTalk login available in this version.
+An installation may configure a DingTalk application for an existing enabled MemberID organization without SMS, Members, or OIDC clients. Application configuration is implemented through the operator CLI and the separate management API. Interactive DingTalk login and verified Member admission are implemented. Provider event processing remains a subsequent increment.
 
 ## Configure and inspect
 
@@ -32,7 +32,7 @@ Initial configuration requires `expectedRevision: 0`; its accepted revision is 1
 
 The corporation and client identifiers cannot be replaced in place. Changing either returns 409 and does not reassign existing identity evidence. This version provides no deletion or reassignment operation.
 
-To rotate a secret, inspect the current revision, submit the same corporation and client IDs with the new secret, and set `expectedRevision` to that revision. A successful change advances the revision. An unchanged secret is verified again but leaves its revision and timestamps unchanged. Old revisions return 409. After an uncertain response, inspect current metadata before retrying; do not blindly overwrite a newer revision. Configuration revisions are intended to bind subsequent provider operations to the configuration they used.
+To rotate a secret, inspect the current revision, submit the same corporation and client IDs with the new secret, and set `expectedRevision` to that revision. A successful change advances the revision. An unchanged secret is verified again but leaves its revision and timestamps unchanged. Old revisions return 409. After an uncertain response, inspect current metadata before retrying; do not blindly overwrite a newer revision. Pending login attempts bind to the configuration revision they used. Rotating the secret invalidates those attempts; it does not change Member identifiers or reset existing grant authentication times.
 
 Provider validation occurs before the write transaction. MemberID rechecks the organization status and expected revision while holding the organization row lock. Disabling an organization or accepting a competing update during external I/O prevents the stale operation from applying. Invalid credentials, denied authorization, timeouts, and unknown provider failures return 503 `provider_unavailable` without changing an existing configuration or Member eligibility. This configuration operation does not infer departure or revoke existing identities from a failed candidate credential.
 
@@ -46,6 +46,28 @@ Management request logs record only the installation principal, method, route te
 
 ## Validation
 
-Tests simulate DingTalk responses and use disposable PostgreSQL databases. They cover request encoding, error redaction, redirect rejection, response limits, encrypted storage and restart, wrong keys, ciphertext substitution, stable bindings, failed-candidate preservation, conflicting initial configuration and rotations, disabled organizations during provider I/O, and the CLI/HTTP contracts. These checks do not establish live DingTalk credentials, actual provider consent, or successful DingTalk login.
+Tests simulate DingTalk responses and use disposable PostgreSQL databases. They cover request encoding, error redaction, redirect rejection, response limits, encrypted storage and restart, wrong keys, ciphertext substitution, stable bindings, failed-candidate preservation, conflicting initial configuration and rotations, disabled organizations during provider I/O, and the CLI/HTTP contracts. HTTP and database tests also cover DingTalk-only OIDC login, distinct organization subjects, standard refresh, callback browser binding and replay, and cancellation or configuration changes during provider verification. These checks simulate the upstream provider; they do not establish live DingTalk credentials or actual provider consent.
 
-The fresh-install schema is version 6. Startup refuses older schemas without resetting or migrating their data.
+The fresh-install schema is version 7. Startup refuses older schemas without resetting or migrating their data.
+
+## Enable interactive login
+
+Set `MEMBERID_DINGTALK_ENABLED=true` for the public authentication process. `MEMBERID_PHONE_ENABLED` is independent; a DingTalk-only installation needs no SMS credentials. Register at least one confidential Member client and configure a usable organization application before sending users to login. Management may configure applications while the server is running. Provider enablement and file-backed OIDC client changes require a restart.
+
+Register `<issuer>/login/dingtalk/callback` as the exact upstream redirect URL in the DingTalk application's settings. The issuer is the same configured HTTPS origin used for OIDC. The explicit loopback development exception uses `http://127.0.0.1` and still needs a provider-accepted callback registration. MemberID requests `openid corpid` as described in DingTalk's [browser authorization flow](https://open-dingtalk.github.io/developerpedia/docs/develop/permission/token/browser/get_user_app_token_browser/). The application also needs the user-profile and employee-directory permissions used to resolve `unionId`, find the corresponding employee, and read that employee's details.
+
+An organization-restricted OIDC client supplies the MemberID organization context. An unrestricted client asks the user for that organization's MemberID identifier; this does not expose a public organization directory. The sign-in button navigates to the fixed DingTalk authorization origin. After successful verification, the user selects the independent Member and follows the same OIDC consent policy as phone login. The factor-only registration profile continues to require phone authentication and does not accept a DingTalk session.
+
+MemberID stores only a hash of the random upstream state, binds it to the browser and OIDC authorization request, and expires the attempt after five minutes. State is consumed before the code exchange. A replay, wrong browser, expired attempt, changed application revision, canceled request, disabled organization, blocked Member, or revoked binding cannot complete login. Lost or failed upstream responses require canceling that verification and starting a fresh authorization. No upstream access or refresh token is returned to the browser or relying party.
+
+## Member admission and identity evidence
+
+A successful code exchange must report the configured corporation. MemberID resolves the verified `unionId`, obtains a fresh application token for that corporation, requires an internal employee (`contact_type=0`), and verifies consistent `userid` and `unionid` in the employee detail response. Missing visibility, unknown contact types, provider errors, and conflicting identifiers fail closed; they do not prove departure. See the provider's [subject mapping](https://developer.alibaba.com/docs/api.htm?apiId=52234) and [employee detail](https://jaq-doc.alibaba.com/docs/api.htm?apiId=52243) contracts.
+
+The first verified admission creates a new independent Member and binding, unless an authorized operator already explicitly bound that factor to a Member in the same organization's provider namespace. Matching contacts, names, or identities in another organization never link Members. Repeated verification preserves the Member identifier. A verified change to an employee ID can retain the same `unionId` identity, but collisions with another identity are rejected. Provider profile updates do not overwrite an existing locally managed display name.
+
+Fresh verified membership may clear an external-departure block, but never a manual block or revoked binding. Member admission, local SSO session creation, and the OIDC login-request update commit in one transaction. An invalidated request leaves none of those partial results. Optional department evidence is retained in MemberID, with unavailable data distinguished from a verified empty list; it is not added to authentication tokens or converted into business permissions. Upstream contact fields are not treated as verified phone or email factors.
+
+The issued OIDC profile, token lifetimes, refresh rotation, and logout behavior are the same as for phone authentication. `amr` and authentication evidence use the provider method `dingtalk`. Refresh preserves the original authentication time; it does not exchange another DingTalk authorization code.
+
+Current eligibility checks use stored organization, Member, factor, binding, and provider-namespace facts. Automated directory events and continuous provider-authorization synchronization are not yet implemented. A later upstream departure is therefore not automatically reflected by this increment; operators must block the Member or revoke its binding/grants when access must end. Provider outages alone do not turn into departure evidence. Disabling the login adapter stops new DingTalk authentication and SSO reuse, but does not itself revoke existing client grants.

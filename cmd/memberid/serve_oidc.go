@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/euyuil/memberid/internal/config"
+	"github.com/euyuil/memberid/internal/dingtalk"
 	"github.com/euyuil/memberid/internal/identity"
 	"github.com/euyuil/memberid/internal/oidcprovider"
 	"github.com/euyuil/memberid/internal/sms"
@@ -27,20 +28,42 @@ func authenticationHandler(ctx context.Context, directory string) (http.Handler,
 	if err != nil {
 		return nil, nil, err
 	}
-	if sender == nil {
-		return nil, nil, errors.New("enable and configure phone authentication before starting the current OIDC provider")
+	dingTalkEnabled := os.Getenv("MEMBERID_DINGTALK_ENABLED")
+	if dingTalkEnabled != "" && dingTalkEnabled != "false" && dingTalkEnabled != "true" {
+		return nil, nil, errors.New("MEMBERID_DINGTALK_ENABLED must be true or false")
+	}
+	if sender == nil && dingTalkEnabled != "true" {
+		return nil, nil, errors.New("enable and configure at least one authentication provider before starting OIDC")
 	}
 	store, err := identity.Open(ctx, os.Getenv("MEMBERID_DATABASE_URL"))
 	if err != nil {
 		return nil, nil, err
 	}
-	key, _ := base64.StdEncoding.DecodeString(loaded.Secrets.PhoneCodeKey)
-	verifier, err := identity.NewPhoneVerifier(store, key, sender)
-	if err != nil {
-		store.Close()
-		return nil, nil, err
+	var phone *identity.PhoneVerifier
+	if sender != nil {
+		key, _ := base64.StdEncoding.DecodeString(loaded.Secrets.PhoneCodeKey)
+		phone, err = identity.NewPhoneVerifier(store, key, sender)
+		if err != nil {
+			store.Close()
+			return nil, nil, err
+		}
 	}
-	provider, err := oidcprovider.New(loaded, store, verifier)
+	var dingTalkVerifier *identity.DingTalkVerifier
+	if dingTalkEnabled == "true" {
+		key, _ := base64.StdEncoding.DecodeString(loaded.Secrets.ProviderKey)
+		client := dingtalk.New()
+		applications, err := identity.NewDingTalkApplications(store, key, client)
+		if err != nil {
+			store.Close()
+			return nil, nil, err
+		}
+		dingTalkVerifier, err = identity.NewDingTalkVerifier(applications, client)
+		if err != nil {
+			store.Close()
+			return nil, nil, err
+		}
+	}
+	provider, err := oidcprovider.New(loaded, store, phone, dingTalkVerifier)
 	if err != nil {
 		store.Close()
 		return nil, nil, err

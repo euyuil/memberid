@@ -10,11 +10,11 @@ Organization, Member, and authentication-factor identifiers use the `org_`, `mbr
 
 A factor is uniquely identified by its type, provider namespace, and provider subject. Recording verified factor evidence does not create a Member or a binding.
 
-A binding explicitly joins a factor to a Member in an organization. Database constraints enforce matching organization ownership and factor type. Each Member has at most one factor of a given type, and a factor can bind to at most one Member per organization. The same factor can explicitly bind to different Members in different organizations.
+A binding explicitly joins a factor to a Member in an organization. Database constraints enforce matching organization ownership and factor type. Each Member has at most one factor of a given type, and a factor can bind to at most one Member per organization. A phone factor can explicitly bind to different Members in different organizations. A DingTalk factor is restricted to the organization whose configured application owns its provider namespace.
 
 Revocation retains the relationship and its uniqueness constraints. Repeating an active binding is idempotent; a revoked slot cannot be silently replaced or reactivated. Factor management that changes these relationships requires a separately authorized operation and fresh verification when authentication is involved.
 
-Phone authentication is implemented; DingTalk remains pending. Provisioning a record or calling a storage operation is not a successful login.
+Phone authentication and [DingTalk authentication](dingtalk.md) are implemented. DingTalk admission requires current verified corporation membership and may create an independent Member without SMS. Provisioning a record or calling a storage operation is not a successful login.
 
 ## Eligibility evidence
 

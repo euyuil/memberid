@@ -1,7 +1,7 @@
 CREATE TABLE memberid_schema (
-    version integer PRIMARY KEY CHECK (version = 6)
+    version integer PRIMARY KEY CHECK (version = 7)
 );
-INSERT INTO memberid_schema(version) VALUES (6);
+INSERT INTO memberid_schema(version) VALUES (7);
 
 CREATE TABLE organizations (
     id text COLLATE "C" PRIMARY KEY CHECK (id ~ '^org_[0-9bcdfghjkmnpqrstvwxz]{27}$'),
@@ -131,3 +131,16 @@ CREATE TABLE dingtalk_applications (
     created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
     updated_at timestamptz NOT NULL DEFAULT clock_timestamp()
 );
+
+CREATE TABLE dingtalk_identities (
+    member_id text COLLATE "C" PRIMARY KEY,
+    organization_id text COLLATE "C" NOT NULL REFERENCES dingtalk_applications(organization_id),
+    union_id text COLLATE "C" NOT NULL,
+    external_member_id text COLLATE "C" NOT NULL,
+    department_ids jsonb CHECK (department_ids IS NULL OR jsonb_typeof(department_ids)='array'),
+    verified_at timestamptz NOT NULL,
+    FOREIGN KEY (member_id,organization_id) REFERENCES members(id,organization_id),
+    UNIQUE (organization_id,union_id),
+    UNIQUE (organization_id,external_member_id)
+);
+CREATE UNIQUE INDEX oidc_dingtalk_state ON oidc_authorization_requests ((data->'dingtalk'->>'stateHash')) WHERE data->'dingtalk' IS NOT NULL;
