@@ -653,6 +653,133 @@
           }
         }
       }
+    },
+    "/v1/organizations/{organizationId}/members/{memberId}/updates/{updateId}": {
+      "get": {
+        "operationId": "getMemberUpdateReceipt",
+        "parameters": [
+          {
+            "name": "organizationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/OrganizationID"
+            }
+          },
+          {
+            "name": "memberId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/MemberID"
+            }
+          },
+          {
+            "name": "updateId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Caller-generated immutable update identifier. UUID casing is normalized."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Historical accepted result, not current eligibility.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberUpdateReceipt"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "put": {
+        "operationId": "applyMemberUpdateOnce",
+        "description": "Create an immutable update using a caller-generated UUID. Exact retries return the original receipt without reapplying the change. Reusing an accepted UUID with another target or change returns 409.",
+        "parameters": [
+          {
+            "name": "organizationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/OrganizationID"
+            }
+          },
+          {
+            "name": "memberId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/MemberID"
+            }
+          },
+          {
+            "name": "updateId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Caller-generated immutable update identifier. UUID casing is normalized."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateMember"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Update and immutable receipt created atomically.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberUpdateReceipt"
+                }
+              }
+            },
+            "headers": {
+              "Location": {
+                "description": "Canonical relative URI of the immutable receipt.",
+                "schema": {
+                  "type": "string",
+                  "format": "uri-reference"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Exact retry of an already accepted update.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberUpdateReceipt"
+                }
+              }
+            }
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1235,6 +1362,36 @@
           "authorizationStatus",
           "authorizationRevision",
           "authorizationVerifiedAt"
+        ]
+      },
+      "MemberUpdateReceipt": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "organizationId": {
+            "$ref": "#/components/schemas/OrganizationID"
+          },
+          "memberId": {
+            "$ref": "#/components/schemas/MemberID"
+          },
+          "member": {
+            "$ref": "#/components/schemas/Member"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "organizationId",
+          "memberId",
+          "member",
+          "createdAt"
         ]
       }
     }

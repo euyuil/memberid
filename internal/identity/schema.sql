@@ -1,7 +1,7 @@
 CREATE TABLE memberid_schema (
-    version integer PRIMARY KEY CHECK (version = 11)
+    version integer PRIMARY KEY CHECK (version = 12)
 );
-INSERT INTO memberid_schema(version) VALUES (11);
+INSERT INTO memberid_schema(version) VALUES (12);
 
 CREATE TABLE organizations (
     id text COLLATE "C" PRIMARY KEY CHECK (id ~ '^org_[0-9bcdfghjkmnpqrstvwxz]{27}$'),
@@ -171,3 +171,13 @@ CREATE TABLE account_link_requests (
 );
 CREATE INDEX account_link_session ON account_link_requests(session_id,expires_at);
 CREATE INDEX account_link_expiry ON account_link_requests(expires_at);
+
+CREATE TABLE member_updates (
+    id uuid PRIMARY KEY,
+    organization_id text COLLATE "C" NOT NULL,
+    member_id text COLLATE "C" NOT NULL,
+    request_hash bytea NOT NULL CHECK (octet_length(request_hash) = 32),
+    response jsonb NOT NULL,
+    created_at timestamptz NOT NULL,
+    FOREIGN KEY (member_id, organization_id) REFERENCES members(id, organization_id)
+);
