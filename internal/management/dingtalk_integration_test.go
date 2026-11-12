@@ -48,7 +48,7 @@ func TestDingTalkApplicationManagement(t *testing.T) {
 	}
 	var result map[string]any
 	f.call(t, "PUT", path, string(body), 200, &result)
-	if result["revision"] != float64(1) || result["organizationId"] != organization.ID || result["clientSecret"] != nil || result["secretCiphertext"] != nil {
+	if result["authorizationStatus"] != "active" || result["authorizationRevision"] != float64(1) || result["authorizationVerifiedAt"] == nil || result["revision"] != float64(1) || result["organizationId"] != organization.ID || result["clientSecret"] != nil || result["secretCiphertext"] != nil {
 		t.Fatal("invalid metadata or secret exposure")
 	}
 	f.call(t, "GET", path, "", 200, &result)

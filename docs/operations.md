@@ -94,4 +94,4 @@ Missing grants fail explicitly. There is no bulk revoke, expiry-extension, resto
 
 ## Configure an optional DingTalk application
 
-Use `memberid dingtalk configure` and `memberid dingtalk inspect` to manage an organization application with protected secret files and explicit configuration revisions. The same operation is available through the private management API. See [DingTalk application configuration](dingtalk.md) for authorization checks, encryption, rotation, and the current login limitations.
+Use `memberid dingtalk configure`, `memberid dingtalk inspect`, and `memberid dingtalk sync` to manage an organization application with protected secret files and explicit configuration revisions. Configuration and metadata inspection are also available through the separate management API; explicit authorization synchronization is an operator command. See [DingTalk authentication](dingtalk.md) for authorization checks, encryption, rotation, and the current login limitations.

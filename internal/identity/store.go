@@ -7,14 +7,14 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-const organizationColumns = "id,name,status,created_at,updated_at"
+const organizationColumns = "id,name,status,created_at,updated_at,lifecycle_revision"
 const memberColumns = "id,organization_id,display_name,manual_block,external_departure,created_at,updated_at"
 const factorColumns = "id,type,namespace,subject,status,created_at,updated_at"
 const bindingColumns = "id::text,member_id,organization_id,authentication_factor_id,factor_type,status,created_at,revoked_at"
 
 func readOrganization(row pgx.Row) (Organization, error) {
 	var organization Organization
-	err := row.Scan(&organization.ID, &organization.Name, &organization.Status, &organization.CreatedAt, &organization.UpdatedAt)
+	err := row.Scan(&organization.ID, &organization.Name, &organization.Status, &organization.CreatedAt, &organization.UpdatedAt, &organization.lifecycleRevision)
 	organization.CreatedAt = organization.CreatedAt.UTC()
 	organization.UpdatedAt = organization.UpdatedAt.UTC()
 	return organization, storageError(err)

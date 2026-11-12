@@ -1,12 +1,13 @@
 CREATE TABLE memberid_schema (
-    version integer PRIMARY KEY CHECK (version = 7)
+    version integer PRIMARY KEY CHECK (version = 8)
 );
-INSERT INTO memberid_schema(version) VALUES (7);
+INSERT INTO memberid_schema(version) VALUES (8);
 
 CREATE TABLE organizations (
     id text COLLATE "C" PRIMARY KEY CHECK (id ~ '^org_[0-9bcdfghjkmnpqrstvwxz]{27}$'),
     name text NOT NULL CHECK (char_length(name) BETWEEN 1 AND 128),
     status text NOT NULL DEFAULT 'enabled' CHECK (status IN ('enabled', 'disabled')),
+    lifecycle_revision bigint NOT NULL DEFAULT 0 CHECK (lifecycle_revision >= 0),
     created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
     updated_at timestamptz NOT NULL DEFAULT clock_timestamp()
 );
@@ -128,6 +129,9 @@ CREATE TABLE dingtalk_applications (
     client_id text NOT NULL UNIQUE,
     revision bigint NOT NULL CHECK (revision > 0),
     secret_ciphertext bytea NOT NULL,
+    authorization_status text NOT NULL DEFAULT 'active' CHECK (authorization_status IN ('active', 'revoked')),
+    authorization_revision bigint NOT NULL DEFAULT 1 CHECK (authorization_revision > 0),
+    authorization_verified_at timestamptz NOT NULL DEFAULT clock_timestamp(),
     created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
     updated_at timestamptz NOT NULL DEFAULT clock_timestamp()
 );

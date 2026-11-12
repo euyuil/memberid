@@ -17,11 +17,12 @@ var (
 )
 
 type Organization struct {
-	ID        string    `json:"id"`
-	Name      string    `json:"name"`
-	Status    string    `json:"status"`
-	CreatedAt time.Time `json:"createdAt"`
-	UpdatedAt time.Time `json:"updatedAt"`
+	lifecycleRevision int64
+	ID                string    `json:"id"`
+	Name              string    `json:"name"`
+	Status            string    `json:"status"`
+	CreatedAt         time.Time `json:"createdAt"`
+	UpdatedAt         time.Time `json:"updatedAt"`
 }
 
 type Member struct {

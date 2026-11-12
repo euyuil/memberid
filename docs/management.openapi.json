@@ -1206,6 +1206,22 @@
           "updatedAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "authorizationStatus": {
+            "type": "string",
+            "enum": [
+              "active",
+              "revoked"
+            ]
+          },
+          "authorizationRevision": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "authorizationVerifiedAt": {
+            "type": "string",
+            "format": "date-time"
           }
         },
         "required": [
@@ -1215,7 +1231,10 @@
           "clientId",
           "revision",
           "createdAt",
-          "updatedAt"
+          "updatedAt",
+          "authorizationStatus",
+          "authorizationRevision",
+          "authorizationVerifiedAt"
         ]
       }
     }

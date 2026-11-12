@@ -42,7 +42,7 @@ func verifierFixture(t *testing.T) (*Store, *DingTalkApplications, *DingTalkVeri
 
 func verifiedLogin(t *testing.T, verifier *DingTalkVerifier, app DingTalkApplication) DingTalkLoginProof {
 	t.Helper()
-	proof, err := verifier.Verify(t.Context(), app.OrganizationID, app.Revision, "synthetic-code")
+	proof, err := verifier.Verify(t.Context(), app.LoginContext(), "synthetic-code")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -221,7 +221,7 @@ func TestDingTalkAdmissionRejectsStaleConfigurationAndExpiredProof(t *testing.T)
 	if _, err := admitLogin(t.Context(), verifier, proof); !errors.Is(err, ErrConflict) {
 		t.Fatal("stale application proof accepted", err)
 	}
-	if _, err := verifier.Verify(t.Context(), app.OrganizationID, app.Revision, "synthetic-code"); !errors.Is(err, ErrConflict) {
+	if _, err := verifier.Verify(t.Context(), app.LoginContext(), "synthetic-code"); !errors.Is(err, ErrConflict) {
 		t.Fatal("stale callback exchanged code", err)
 	}
 	current, err := apps.Inspect(t.Context(), app.OrganizationID)

@@ -72,7 +72,7 @@ func (store *Store) UpdateOrganization(ctx context.Context, id string, change Or
 	if !ValidID(id, OrganizationKind) || change.Name == nil && change.Status == nil || change.Name != nil && !validText(*change.Name, 128) || change.Status != nil && *change.Status != "enabled" && *change.Status != "disabled" {
 		return Organization{}, ErrInvalid
 	}
-	return readOrganization(store.pool.QueryRow(ctx, "UPDATE organizations SET name=COALESCE($2,name),status=COALESCE($3,status),updated_at=clock_timestamp() WHERE id=$1 RETURNING "+organizationColumns, id, change.Name, change.Status))
+	return readOrganization(store.pool.QueryRow(ctx, "UPDATE organizations SET name=COALESCE($2,name),status=COALESCE($3,status),lifecycle_revision=lifecycle_revision+CASE WHEN $3 IS NOT NULL AND status<>$3 THEN 1 ELSE 0 END,updated_at=clock_timestamp() WHERE id=$1 RETURNING "+organizationColumns, id, change.Name, change.Status))
 }
 
 type MemberChange struct {
@@ -125,6 +125,7 @@ func (store *Store) Eligibility(ctx context.Context, organizationID, memberID, f
         WHERE b.organization_id=$1 AND b.member_id=$2 AND b.authentication_factor_id=$3 AND f.type=$4
         AND b.status='active' AND f.status='active' AND o.status='enabled'
         AND (f.type<>'dingtalk' OR EXISTS(SELECT 1 FROM dingtalk_applications da WHERE da.organization_id=o.id AND da.namespace=f.namespace))
+        AND NOT EXISTS(SELECT 1 FROM dingtalk_applications revoked WHERE revoked.organization_id=o.id AND revoked.authorization_status='revoked')
         AND NOT m.manual_block AND NOT m.external_departure`, organizationID, memberID, factorID, factorType).Scan(&result.BindingID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return result, nil

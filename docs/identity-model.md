@@ -20,6 +20,8 @@ Phone authentication and [DingTalk authentication](dingtalk.md) are implemented.
 
 Manual blocking and external departure are independent Member block sources. Clearing one does not clear the other. Organization and factor status remain separate from Member state. Protocol issuance evaluates the complete current eligibility context; a stored binding alone grants no login or application permission.
 
+A configured DingTalk application with confirmed revoked authorization makes its organization's Members ineligible, including those authenticating by phone. An unconfigured organization has no such provider requirement. Unknown provider failures preserve the last observation. Authorization recovery does not remove independent Member blocks or binding revocations. See [application authorization synchronization](dingtalk.md#synchronize-application-authorization).
+
 ## Persistence and initialization
 
 MemberID uses a dedicated PostgreSQL database. Schema initialization is an explicit transaction, serialized against concurrent initialization. It refuses a database containing existing user relations. Normal store startup checks the schema version and never applies DDL.
