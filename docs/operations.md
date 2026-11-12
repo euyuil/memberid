@@ -55,7 +55,7 @@ memberid client rotate-secret --directory .local/memberid --id example
 
 Each successful add or rotation writes the client identifier and newly generated secret to standard output once. Capture it directly into protected application configuration; do not publish it, retain it in ordinary logs, or commit it. The registry stores only a SHA-256 verifier of the random 256-bit secret. Duplicate registration refuses replacement. Rotation preserves client policy and replaces only the verifier.
 
-Callback, post-logout, and account-management return destinations are separately registered exact URLs; no wildcards, fragments, or URL user information are allowed. Repeat `--redirect`, `--post-logout-redirect`, or `--account-return` for additional destinations. A localhost alias or an arbitrary HTTP address does not qualify for the loopback exception.
+The [MemberID account linking page](account-linking.md) uses `--account-return` destinations independently of OIDC callbacks and logout. Callback, post-logout, and account-management return destinations are separately registered exact URLs; no wildcards, fragments, or URL user information are allowed. Repeat `--redirect`, `--post-logout-redirect`, or `--account-return` for additional destinations. A localhost alias or an arbitrary HTTP address does not qualify for the loopback exception.
 
 Clients default to independent Member subjects. Optional `--organization ORGANIZATION_ID` restricts the allowed organization. An explicit `--subject factor` policy represents a verified authentication factor without asserting organization membership; it requires both `--evidence-scope` and `--evidence-audience` and cannot select an organization. Ordinary Member clients cannot accidentally become factor clients.
 

@@ -48,7 +48,7 @@ Management request logs record only the installation principal, method, route te
 
 Tests simulate DingTalk responses and use disposable PostgreSQL databases. They cover request encoding, error redaction, redirect rejection, response limits, encrypted storage and restart, wrong keys, ciphertext substitution, stable bindings, failed-candidate preservation, conflicting initial configuration and rotations, disabled organizations during provider I/O, and the CLI/HTTP contracts. HTTP and database tests also cover DingTalk-only OIDC login, distinct organization subjects, standard refresh, callback browser binding and replay, and cancellation or configuration changes during provider verification. These checks simulate the upstream provider; they do not establish live DingTalk credentials or actual provider consent.
 
-The fresh-install schema is version 10. Startup refuses older schemas without resetting or migrating their data.
+The fresh-install schema is version 11. Startup refuses older schemas without resetting or migrating their data.
 
 ## Enable interactive login
 
@@ -59,6 +59,8 @@ Register `<issuer>/login/dingtalk/callback` as the exact upstream redirect URL i
 An organization-restricted OIDC client supplies the MemberID organization context. An unrestricted client asks the user for that organization's MemberID identifier; this does not expose a public organization directory. The sign-in button navigates to the fixed DingTalk authorization origin. After successful verification, the user selects the independent Member and follows the same OIDC consent policy as phone login. The factor-only registration profile continues to require phone authentication and does not accept a DingTalk session.
 
 MemberID stores only a hash of the random upstream state, binds it to the browser and OIDC authorization request, and expires the attempt after five minutes. State is consumed before the code exchange. A replay, wrong browser, expired attempt, changed application revision, canceled request, disabled organization, blocked Member, or revoked binding cannot complete login. Lost or failed upstream responses require canceling that verification and starting a fresh authorization. No upstream access or refresh token is returned to the browser or relying party.
+
+For self-service linking, also register `<issuer>/account/dingtalk/callback` as an exact upstream callback. The [account linking page](account-linking.md) verifies a new DingTalk identity for an existing eligible Member without provisioning another Member.
 
 ## Member admission and identity evidence
 

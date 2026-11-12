@@ -101,6 +101,22 @@ func (verifier *DingTalkVerifier) Verify(ctx context.Context, login DingTalkLogi
 // Admit participates in the caller's authentication transaction, so Member admission and session creation commit together.
 // Caller cancellation or a superseded authorization request must roll this transaction back.
 func (verifier *DingTalkVerifier) Admit(ctx context.Context, tx pgx.Tx, proof DingTalkLoginProof) (Verification, error) {
+	return verifier.admit(ctx, tx, proof, nil)
+}
+
+type dingTalkLinkTarget struct{ memberID, factorID, bindingID string }
+
+// Link attaches freshly verified DingTalk evidence to an existing eligible Member.
+// The caller must authenticate the source session and commit this operation with
+// its single-use account transaction. It never merges or replaces identities.
+func (verifier *DingTalkVerifier) Link(ctx context.Context, tx pgx.Tx, proof DingTalkLoginProof, memberID, sourceFactorID, sourceBindingID string) (Verification, error) {
+	if !ValidID(memberID, MemberKind) || !ValidID(sourceFactorID, FactorKind) || !ValidUUID(sourceBindingID) {
+		return Verification{}, ErrInvalid
+	}
+	return verifier.admit(ctx, tx, proof, &dingTalkLinkTarget{memberID, sourceFactorID, sourceBindingID})
+}
+
+func (verifier *DingTalkVerifier) admit(ctx context.Context, tx pgx.Tx, proof DingTalkLoginProof, target *dingTalkLinkTarget) (Verification, error) {
 	if proof.verifier != verifier || proof.authenticatedAt.IsZero() || proof.authenticatedAt.After(verifier.now()) || !proof.authenticatedAt.Add(5*time.Minute).After(verifier.now()) {
 		return Verification{}, ErrIneligible
 	}
@@ -141,6 +157,20 @@ func (verifier *DingTalkVerifier) Admit(ctx context.Context, tx pgx.Tx, proof Di
 	if count > 1 || count == 1 && unionID != proof.member.UnionID {
 		return Verification{}, ErrConflict
 	}
+	if target != nil {
+		if memberID != "" && memberID != target.memberID {
+			return Verification{}, ErrConflict
+		}
+		// Lock the source factor before target factor/binding/member locks. Operator
+		// factor updates and binding revocation cannot race a successful link.
+		var id string
+		if err := tx.QueryRow(ctx, "SELECT id FROM authentication_factors WHERE id=$1 AND status='active' FOR SHARE", target.factorID).Scan(&id); err != nil {
+			return Verification{}, ErrIneligible
+		}
+		if err := tx.QueryRow(ctx, "SELECT id::text FROM member_auth_factor_bindings WHERE id=$1 AND member_id=$2 AND organization_id=$3 AND authentication_factor_id=$4 AND status='active' FOR SHARE", target.bindingID, target.memberID, app.OrganizationID, target.factorID).Scan(&id); err != nil {
+			return Verification{}, ErrIneligible
+		}
+	}
 	factor, err := ensureFactor(ctx, tx, "dingtalk", app.Namespace, proof.member.UnionID)
 	if err != nil {
 		return Verification{}, err
@@ -154,6 +184,12 @@ func (verifier *DingTalkVerifier) Admit(ctx context.Context, tx pgx.Tx, proof Di
 			return Verification{}, ErrConflict
 		}
 		memberID = bound.MemberID
+	}
+	if target != nil {
+		if memberID != "" && memberID != target.memberID {
+			return Verification{}, ErrConflict
+		}
+		memberID = target.memberID
 	}
 	if memberID == "" {
 		memberID, err = NewID(MemberKind)
@@ -171,6 +207,12 @@ func (verifier *DingTalkVerifier) Admit(ctx context.Context, tx pgx.Tx, proof Di
 		member, err := readMember(tx.QueryRow(ctx, "SELECT "+memberColumns+" FROM members WHERE id=$1 AND organization_id=$2 FOR UPDATE", memberID, app.OrganizationID))
 		if err != nil {
 			return Verification{}, err
+		}
+		if target != nil {
+			bindingID, err := MemberEvidence(ctx, tx, target.factorID, memberID, app.OrganizationID)
+			if err != nil || bindingID != target.bindingID {
+				return Verification{}, ErrIneligible
+			}
 		}
 		for _, source := range member.BlockSources {
 			if source == "manual" {
