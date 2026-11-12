@@ -1,7 +1,7 @@
 CREATE TABLE memberid_schema (
-    version integer PRIMARY KEY CHECK (version = 1)
+    version integer PRIMARY KEY CHECK (version = 2)
 );
-INSERT INTO memberid_schema(version) VALUES (1);
+INSERT INTO memberid_schema(version) VALUES (2);
 
 CREATE TABLE organizations (
     id text COLLATE "C" PRIMARY KEY CHECK (id ~ '^org_[0-9bcdfghjkmnpqrstvwxz]{27}$'),
@@ -49,3 +49,16 @@ CREATE TABLE member_auth_factor_bindings (
     UNIQUE (organization_id, authentication_factor_id),
     CHECK ((status = 'active' AND revoked_at IS NULL) OR (status = 'revoked' AND revoked_at IS NOT NULL))
 );
+
+CREATE TABLE phone_challenges (
+    id text COLLATE "C" PRIMARY KEY,
+    phone_number text NOT NULL,
+    binding_hash bytea NOT NULL CHECK (octet_length(binding_hash) = 32),
+    code_mac bytea NOT NULL CHECK (octet_length(code_mac) = 32),
+    ready boolean NOT NULL DEFAULT false,
+    attempts smallint NOT NULL DEFAULT 0 CHECK (attempts BETWEEN 0 AND 5),
+    created_at timestamptz NOT NULL,
+    expires_at timestamptz NOT NULL,
+    consumed_at timestamptz
+);
+CREATE INDEX phone_challenge_rate_limit ON phone_challenges (phone_number, created_at);

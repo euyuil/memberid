@@ -23,7 +23,7 @@ Commands return JSON containing the affected identity. Use the identifiers retur
 
 These commands use the operator's explicit database access. They do not create an end-user password, bypass an authentication provider, or grant permissions in another application. Manual unblocking preserves any external-departure block.
 
-The executable's HTTP listener still exposes only process health. OIDC login, provider configuration, and the protected HTTP management interface remain separate implementation steps.
+The executable's HTTP listener still exposes only process health. OIDC login and the protected HTTP management interface remain separate implementation steps. Optional phone-provider configuration is documented in [phone authentication](phone-authentication.md).
 
 ## Create protected installation configuration
 
