@@ -43,6 +43,25 @@ For local development only, use `--issuer http://127.0.0.1:8080 --allow-loopback
 
 Pass `--directory` to `serve` to load this installation and enable OIDC. Omitting it retains health-only mode.
 
+## Rotate the management credential
+
+The installation manager has one credential, independent of OIDC clients, signing keys, and user sessions. Rotation requires coordinated management-process restarts; the running processes retain their loaded verifier and do not watch configuration files.
+
+1. Choose a maintenance window and pause management callers. Stop all management replicas so an old replica cannot keep accepting the previous credential during the change. The separate OIDC process can continue serving.
+2. In a protected directory, choose a new credential filename that does not already exist:
+
+   ```sh
+   memberid config rotate-management-secret --directory .local/memberid \
+     --output-file .local/memberid/management-secret-next
+   memberid config check --directory .local/memberid
+   ```
+
+3. Load that new file into the trusted callers' secret stores, then start every management replica with the updated installation configuration. Check authenticated `/healthz` using the new credential, and verify that the old credential receives 401. Resume callers only after all replicas have changed.
+
+The command generates a random 256-bit credential, saves and syncs it with mode `0600`, then replaces only `managementSecretSha256` in the configured secrets file. It prints only `rotated` and `restartRequired` booleans. Signing material, protocol/phone/provider keys, clients, identity records, and OIDC sessions/grants are unchanged. The old bootstrap `management-secret` file is preserved and is no longer the current credential after rotation; use the explicitly selected new file. Protect its parent directory and establish restrictive Windows ACLs before use, as with installation initialization.
+
+An exclusive `.management-secret.lock` serializes rotations. Existing output files and directories are refused, including on retry. A failed or interrupted command may leave a candidate credential file, temporary verifier file, or lock; the existence of a candidate is not proof that rotation succeeded. Inspect the protected configuration and candidate locally before restarting or retrying, and remove a stale lock only after confirming no rotation is running. The credential and verifier live in separate files, so this is not a multi-file crash transaction. Keep protected backups and coordinate any manual secrets edits through the same maintenance boundary. Never print credentials or their files into ordinary logs.
+
 ## Register confidential clients
 
 ```sh
