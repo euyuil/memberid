@@ -1,0 +1,14 @@
+#!/bin/sh
+set -eu
+while read -r local_ref local_sha remote_ref remote_sha; do
+  sh scripts/check-metadata.sh branch "$remote_ref"
+  case "$local_sha" in
+    0000000000000000000000000000000000000000) continue ;;
+  esac
+  case "$remote_sha" in
+    0000000000000000000000000000000000000000) range="$local_sha" ;;
+    *) range="$remote_sha..$local_sha" ;;
+  esac
+  sh scripts/check-metadata.sh history "$range"
+done
+gitleaks git --redact --no-banner --no-color
