@@ -70,6 +70,7 @@ func New(store *identity.Store, secretSHA256 string, applications *identity.Ding
 		respond(w, http.StatusOK, value, err)
 	})
 	h.routes.HandleFunc("POST /v1/eligibility", h.eligibility)
+	h.routes.HandleFunc("POST /v1/organizations/{organizationId}/member-eligibility", h.memberEligibility)
 	if applications != nil {
 		h.dingTalkRoutes(applications)
 	}
