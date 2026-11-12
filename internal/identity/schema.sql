@@ -1,7 +1,7 @@
 CREATE TABLE memberid_schema (
-    version integer PRIMARY KEY CHECK (version = 2)
+    version integer PRIMARY KEY CHECK (version = 3)
 );
-INSERT INTO memberid_schema(version) VALUES (2);
+INSERT INTO memberid_schema(version) VALUES (3);
 
 CREATE TABLE organizations (
     id text COLLATE "C" PRIMARY KEY CHECK (id ~ '^org_[0-9bcdfghjkmnpqrstvwxz]{27}$'),
@@ -36,6 +36,7 @@ CREATE TABLE authentication_factors (
 );
 
 CREATE TABLE member_auth_factor_bindings (
+    id uuid NOT NULL DEFAULT gen_random_uuid() UNIQUE,
     member_id text COLLATE "C" NOT NULL,
     organization_id text COLLATE "C" NOT NULL,
     authentication_factor_id text COLLATE "C" NOT NULL,
@@ -62,3 +63,40 @@ CREATE TABLE phone_challenges (
     consumed_at timestamptz
 );
 CREATE INDEX phone_challenge_rate_limit ON phone_challenges (phone_number, created_at);
+
+CREATE TABLE oidc_sessions (
+    id text COLLATE "C" PRIMARY KEY,
+    secret_hash text NOT NULL UNIQUE,
+    verification jsonb NOT NULL,
+    expires_at timestamptz NOT NULL,
+    absolute_expires_at timestamptz NOT NULL,
+    revoked_at timestamptz
+);
+CREATE TABLE oidc_authorization_requests (
+    id text COLLATE "C" PRIMARY KEY,
+    client_id text NOT NULL,
+    data jsonb NOT NULL,
+    code_hash text UNIQUE,
+    revision bigint NOT NULL DEFAULT 1,
+    expires_at timestamptz NOT NULL,
+    consumed_at timestamptz
+);
+CREATE TABLE oidc_grants (
+    id text COLLATE "C" PRIMARY KEY,
+    client_id text NOT NULL,
+    session_id text COLLATE "C" NOT NULL REFERENCES oidc_sessions(id) ON DELETE CASCADE,
+    data jsonb NOT NULL,
+    expires_at timestamptz NOT NULL,
+    absolute_expires_at timestamptz NOT NULL,
+    revoked_at timestamptz
+);
+CREATE TABLE oidc_access_tokens (
+    id text COLLATE "C" PRIMARY KEY,
+    grant_id text COLLATE "C" NOT NULL REFERENCES oidc_grants(id) ON DELETE CASCADE,
+    data jsonb NOT NULL,
+    expires_at timestamptz NOT NULL
+);
+CREATE INDEX oidc_requests_expiry ON oidc_authorization_requests(expires_at);
+CREATE INDEX oidc_sessions_expiry ON oidc_sessions(expires_at);
+CREATE INDEX oidc_grants_expiry ON oidc_grants(expires_at);
+CREATE INDEX oidc_access_expiry ON oidc_access_tokens(expires_at);

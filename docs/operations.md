@@ -23,7 +23,7 @@ Commands return JSON containing the affected identity. Use the identifiers retur
 
 These commands use the operator's explicit database access. They do not create an end-user password, bypass an authentication provider, or grant permissions in another application. Manual unblocking preserves any external-departure block.
 
-The executable's HTTP listener still exposes only process health. OIDC login and the protected HTTP management interface remain separate implementation steps. Optional phone-provider configuration is documented in [phone authentication](phone-authentication.md).
+The executable can run the [OIDC web-client profile](oidc.md) with `serve --directory`. The protected HTTP management interface remains pending. Optional phone-provider configuration is documented in [phone authentication](phone-authentication.md).
 
 ## Create protected installation configuration
 
@@ -41,7 +41,7 @@ On POSIX systems, the new directory uses mode `0700` and files use `0600`. On Wi
 
 For local development only, use `--issuer http://127.0.0.1:8080 --allow-loopback-http`. This exception permits HTTP only for the explicit loopback address. Production issuers must be exact HTTPS origins, without paths, query strings, fragments, or user information.
 
-The current commands create and validate installation material. The health-only HTTP process does not load it or expose OIDC endpoints yet.
+Pass `--directory` to `serve` to load this installation and enable OIDC. Omitting it retains health-only mode.
 
 ## Register confidential clients
 
@@ -61,7 +61,7 @@ Clients default to independent Member subjects. Optional `--organization ORGANIZ
 
 An evidence policy uses an operator-chosen custom scope and a fixed resource URL audience. Both must be configured together. Clients cannot set their own audience or claim policy through authorization-request parameters. Standard scopes cannot be repurposed as evidence scopes. Evidence contains identity facts, not application roles or resource permissions. `--preauthorized` records an operator's explicit consent decision for the registered scope policy; omit it when interactive consent is required.
 
-Client configuration is file-backed and requires an explicit server restart once the OIDC process is implemented. This is operator registration, not OAuth dynamic client registration. The intended protocol uses Authorization Code with PKCE S256 and `client_secret_basic`; these commands do not implement token issuance by themselves.
+Client configuration is file-backed and requires an explicit server restart. This is operator registration, not OAuth dynamic client registration. The implemented profile uses Authorization Code with PKCE S256 and `client_secret_basic`. The `--refresh` flag records future policy; refresh issuance is not enabled yet.
 
 Registry edits acquire an exclusive `.clients.lock`, validate the whole configuration, and replace the registry atomically. Concurrent edits fail without modifying the registry. A crashed operator can leave a lock: remove it only after confirming no registration command is running. Keep the installation directory writable only by trusted operators and coordinate hand-edited changes with the same maintenance boundary.
 
@@ -69,4 +69,4 @@ Registry edits acquire an exclusive `.clients.lock`, validate the whole configur
 
 Private keys may be PKCS#8 or PKCS#1 PEM, with RSA keys of at least 2048 bits. Newly generated keys use 3072 bits. The public bundle contains one or more PKIX `PUBLIC KEY` PEM blocks, including the active signing key. Key identifiers are derived from the public key, so changing a filename does not change its identity. Validation rejects missing, malformed, duplicate, or mismatched keys.
 
-Retain old public keys when preparing a rollover, and retain old private material only in protected backups if operationally required. Do not remove verification keys while issued tokens can still be accepted. HTTP JWKS publication and deployed rollover acceptance remain part of the OIDC implementation step.
+Retain old public keys when preparing a rollover, and retain old private material only in protected backups if operationally required. Do not remove verification keys while issued tokens can still be accepted. The configured public bundle is published through JWKS. Coordinate private-key replacement, retained public keys, and server restarts; deployed rollover acceptance remains pending.

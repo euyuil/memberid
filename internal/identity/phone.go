@@ -27,9 +27,9 @@ type SMSSender interface {
 
 // Verification is server-local evidence. It is neither a token nor Member authorization.
 type Verification struct {
-	Factor          Factor
-	AuthenticatedAt time.Time
-	Method          string
+	Factor          Factor    `json:"factor"`
+	AuthenticatedAt time.Time `json:"authenticatedAt"`
+	Method          string    `json:"method"`
 }
 
 type PhoneChallenge struct {

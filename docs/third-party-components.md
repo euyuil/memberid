@@ -34,3 +34,34 @@ The runtime uses pgx v5.11.0 (MIT), selected from its upstream stable release. I
 The module checksum file also records upstream dependency-test modules that are not linked into the executable. Checksum retention does not copy their source into MemberID. Reassess the inventory when adding dependencies or distributing additional tooling.
 
 PostgreSQL 18.6 is the current supported stable PostgreSQL line at this review, per [upstream's version table](https://www.postgresql.org/support/versioning/). Integration tests use the unmodified official image `postgres:18.6@sha256:bd5dfa494a5a259704365813dbfa5fa6b3e69be7348d43b547f540c730478583`. PostgreSQL runs as a separate process and is not linked into MemberID. Its PostgreSQL, Debian packaging, and installed system-component notices remain in the upstream image. The image is used only for disposable tests and is neither modified nor republished by this repository. PostgreSQL's own permissive license does not replace the separate BSD, MIT, Tcl, Artistic, GPL, LGPL, and other notices in its distribution. Redistributing a database or base image requires its own complete notice and source-offer review.
+
+## OIDC provider and cryptography
+
+The current protocol implementation uses upstream stable `github.com/zitadel/oidc/v3` v3.52.0 and `github.com/go-jose/go-jose/v4` v4.1.9. Both are Apache-2.0. The provider's `NOTICE` and go-jose's nested BSD-3-Clause `json/LICENSE` were inspected and retained with their root licenses. Dependency code is used unmodified; it is linked into the executable, not copied into application source.
+
+The following additional resolved runtime modules were reviewed from their exact downloaded module contents. Their license texts are retained under `third_party/modules/` and included by the build script.
+
+| Module | Version | License |
+| --- | --- | --- |
+| github.com/bmatcuk/doublestar/v4 | v4.10.4 | MIT |
+| github.com/cespare/xxhash/v2 | v2.3.0 | MIT |
+| github.com/go-chi/chi/v5 | v5.5.0 | MIT |
+| github.com/go-logr/logr | v1.4.4 | Apache-2.0 |
+| github.com/go-logr/stdr | v1.2.2 | Apache-2.0 |
+| github.com/gorilla/securecookie | v1.1.2 | BSD-3-Clause |
+| github.com/muhlemmer/gu | v0.3.1 | Unlicense |
+| github.com/muhlemmer/httpforwarded | v0.1.0 | BSD-3-Clause |
+| github.com/rs/cors | v1.11.1 | MIT |
+| github.com/zitadel/schema | v1.3.2 | BSD-3-Clause |
+| go.opentelemetry.io/auto/sdk | v1.2.1 | Apache-2.0 |
+| go.opentelemetry.io/otel | v1.47.0 | Apache-2.0 |
+| go.opentelemetry.io/otel/log | v1.47.0 | Apache-2.0 |
+| go.opentelemetry.io/otel/metric | v1.47.0 | Apache-2.0 |
+| go.opentelemetry.io/otel/trace | v1.47.0 | Apache-2.0 |
+| golang.org/x/oauth2 | v0.38.0 | BSD-3-Clause |
+
+The existing pgx, x/sync, and x/text versions above remain part of the executable. OpenTelemetry modules are kept on the current v1.47.0 stable line. No telemetry exporter or collector is configured by MemberID.
+
+Apache-2.0 preservation, notice, modification-marking, and patent conditions apply to distributed material. MIT and BSD notice/disclaimer conditions also apply. The exact `gu` Unlicense text grants unrestricted public-domain use with a warranty disclaimer; retain it as provenance. These reviewed components impose no application source-disclosure or commercial-use restriction. Their terms do not determine the project's own license.
+
+The resolved module graph also includes upstream test/tool-only modules: their actual license files, including nested material, were inspected. They use MIT, BSD, ISC, and Apache terms, remain unmodified in the module cache, and are not linked into the MemberID executable or shipped in a browser. A checksum entry is not a distribution of that module. Reassess this boundary if future tests import those modules directly or if additional tooling is packaged.

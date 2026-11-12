@@ -4,7 +4,7 @@ An organization owns its Members. Each Member has a stable identifier that is in
 
 ## Identifiers
 
-Organization, Member, and authentication-factor identifiers use the `org_`, `mbr_`, and `af_` prefixes followed by a fixed-width opaque encoding of a UUIDv7. Clients retain the complete identifier and do not derive identity from its timestamp, prefix, or contact data. OIDC subjects will identify Members within an issuer.
+Organization, Member, and authentication-factor identifiers use the `org_`, `mbr_`, and `af_` prefixes followed by a fixed-width opaque encoding of a UUIDv7. Clients retain the complete identifier and do not derive identity from its timestamp, prefix, or contact data. Ordinary OIDC subjects identify Members within an issuer.
 
 ## Factors and explicit relationships
 
@@ -14,11 +14,11 @@ A binding explicitly joins a factor to a Member in an organization. Database con
 
 Revocation retains the relationship and its uniqueness constraints. Repeating an active binding is idempotent; a revoked slot cannot be silently replaced or reactivated. Factor management that changes these relationships requires a separately authorized operation and fresh verification when authentication is involved.
 
-The store contains phone and DingTalk factor types, but this step does not implement either authentication provider. Provisioning a record or calling a storage operation is not a successful login.
+Phone authentication is implemented; DingTalk remains pending. Provisioning a record or calling a storage operation is not a successful login.
 
 ## Eligibility evidence
 
-Manual blocking and external departure are independent Member block sources. Clearing one does not clear the other. Organization and factor status remain separate from Member state. Protocol issuance must evaluate the complete current eligibility context when authentication is implemented; a stored binding alone grants no login or application permission.
+Manual blocking and external departure are independent Member block sources. Clearing one does not clear the other. Organization and factor status remain separate from Member state. Protocol issuance evaluates the complete current eligibility context; a stored binding alone grants no login or application permission.
 
 ## Persistence and initialization
 

@@ -29,12 +29,12 @@ func main() {
 
 func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	if len(args) == 0 {
-		return errors.New("usage: memberid <version|serve|config|client|database|organization|member>")
+		return errors.New("usage: memberid <version|serve|config|client|database|organization|member|factor>")
 	}
 	switch args[0] {
 	case "config", "client":
 		return configure(args, stdout, stderr)
-	case "database", "organization", "member":
+	case "database", "organization", "member", "factor":
 		return manage(ctx, args, stdout, stderr)
 	case "version":
 		if len(args) != 1 {
@@ -46,6 +46,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 		flags := flag.NewFlagSet("serve", flag.ContinueOnError)
 		flags.SetOutput(stderr)
 		address := flags.String("listen", "127.0.0.1:8080", "HTTP listen address")
+		directory := flags.String("directory", "", "protected installation directory for OIDC; omit for health-only mode")
 		if err := flags.Parse(args[1:]); err != nil {
 			if errors.Is(err, flag.ErrHelp) {
 				return nil
@@ -55,11 +56,19 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 		if flags.NArg() != 0 {
 			return errors.New("serve takes flags only")
 		}
+		httpServer := server.New()
+		if *directory != "" {
+			handler, closeStore, err := authenticationHandler(ctx, *directory)
+			if err != nil {
+				return err
+			}
+			defer closeStore()
+			httpServer.Handler = handler
+		}
 		listener, err := net.Listen("tcp", *address)
 		if err != nil {
 			return fmt.Errorf("listen: %w", err)
 		}
-		httpServer := server.New()
 		finished := make(chan error, 1)
 		go func() { finished <- httpServer.Serve(listener) }()
 		fmt.Fprintln(stdout, "MemberID listening on", listener.Addr())
