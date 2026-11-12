@@ -10,7 +10,7 @@ import (
 const organizationColumns = "id,name,status,created_at,updated_at"
 const memberColumns = "id,organization_id,display_name,manual_block,external_departure,created_at,updated_at"
 const factorColumns = "id,type,namespace,subject,status,created_at,updated_at"
-const bindingColumns = "member_id,organization_id,authentication_factor_id,factor_type,status,created_at,revoked_at"
+const bindingColumns = "id::text,member_id,organization_id,authentication_factor_id,factor_type,status,created_at,revoked_at"
 
 func readOrganization(row pgx.Row) (Organization, error) {
 	var organization Organization
@@ -47,7 +47,7 @@ func readFactor(row pgx.Row) (Factor, error) {
 
 func readBinding(row pgx.Row) (Binding, error) {
 	var binding Binding
-	err := row.Scan(&binding.MemberID, &binding.OrganizationID, &binding.FactorID, &binding.FactorType, &binding.Status, &binding.CreatedAt, &binding.RevokedAt)
+	err := row.Scan(&binding.ID, &binding.MemberID, &binding.OrganizationID, &binding.FactorID, &binding.FactorType, &binding.Status, &binding.CreatedAt, &binding.RevokedAt)
 	binding.CreatedAt = binding.CreatedAt.UTC()
 	if binding.RevokedAt != nil {
 		value := binding.RevokedAt.UTC()
