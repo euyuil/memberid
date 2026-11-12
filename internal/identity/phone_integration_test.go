@@ -10,6 +10,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/jackc/pgx/v5"
 )
 
 type recordingSender struct {
@@ -181,5 +183,42 @@ func TestFailedPhoneDeliveryCannotAuthenticate(t *testing.T) {
 	}
 	if _, err := verifier.Start(t.Context(), binding, "19900000001"); !errors.Is(err, ErrRateLimited) {
 		t.Fatal("delivery failure removed cooldown")
+	}
+}
+
+func TestPhoneVerificationOperationRollsBackAtomically(t *testing.T) {
+	verifier, sender, binding := phoneFixture(t)
+	challenge, err := verifier.Start(t.Context(), binding, "19900000003")
+	if err != nil {
+		t.Fatal(err)
+	}
+	code := sender.code("+8619900000003")
+	failure := errors.New("operation rejected")
+	calls := 0
+	apply := func(tx pgx.Tx, verified Verification) error {
+		calls++
+		var id string
+		if err := tx.QueryRow(t.Context(), "SELECT id FROM authentication_factors WHERE id=$1", verified.Factor.ID).Scan(&id); err != nil {
+			t.Fatal(err)
+		}
+		return failure
+	}
+	wrong := "000000"
+	if code == wrong {
+		wrong = "111111"
+	}
+	if _, err := verifier.VerifyAndApply(t.Context(), binding, challenge.ID, wrong, apply); !errors.Is(err, ErrPhoneChallenge) || calls != 0 {
+		t.Fatal("wrong code reached operation", err)
+	}
+	if _, err := verifier.VerifyAndApply(t.Context(), binding, challenge.ID, code, apply); !errors.Is(err, failure) || calls != 1 {
+		t.Fatal("operation failure lost", err)
+	}
+	var factors, attempts int
+	var consumed bool
+	if err := verifier.store.pool.QueryRow(t.Context(), "SELECT (SELECT count(*) FROM authentication_factors),attempts,consumed_at IS NOT NULL FROM phone_challenges WHERE id=$1", challenge.ID).Scan(&factors, &attempts, &consumed); err != nil || factors != 0 || attempts != 1 || consumed {
+		t.Fatal("failed operation left partial state", err)
+	}
+	if _, err := verifier.Verify(t.Context(), binding, challenge.ID, code); err != nil {
+		t.Fatal("rollback consumed challenge", err)
 	}
 }

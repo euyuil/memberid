@@ -124,6 +124,13 @@ func (verifier *PhoneVerifier) Start(ctx context.Context, binding, number string
 }
 
 func (verifier *PhoneVerifier) Verify(ctx context.Context, binding, id, code string) (Verification, error) {
+	return verifier.VerifyAndApply(ctx, binding, id, code, nil)
+}
+
+// VerifyAndApply consumes a correct challenge and applies its account operation
+// in one transaction. A failed operation creates no factor or binding. Incorrect
+// codes commit their attempt count without calling apply. The result stays internal.
+func (verifier *PhoneVerifier) VerifyAndApply(ctx context.Context, binding, id, code string, apply func(pgx.Tx, Verification) error) (Verification, error) {
 	if len(id) != 43 || len(code) != 6 || !validText(binding, 256) || len(binding) < 32 {
 		return Verification{}, ErrPhoneChallenge
 	}
@@ -159,6 +166,9 @@ func (verifier *PhoneVerifier) Verify(ctx context.Context, binding, id, code str
 			return err
 		}
 		verified = Verification{Factor: factor, AuthenticatedAt: now.Truncate(time.Second), Method: "sms"}
+		if apply != nil {
+			return apply(tx, verified)
+		}
 		return nil
 	})
 	if denied {

@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Link phone · MemberID</title>
+<style nonce="{{.Nonce}}">
+:root{font-family:system-ui,sans-serif;color:#172a34;background:#f3f6f7;color-scheme:light}
+*{box-sizing:border-box}body{margin:0;padding:2rem 1rem}main{max-width:30rem;margin:auto;background:white;border:1px solid #d8e2e6;border-radius:1rem;padding:1.5rem}h1{margin:0 0 .5rem;font-size:1.6rem}p{line-height:1.5}label{display:block;margin:.7rem 0 .3rem}input,button{font:inherit;min-height:2.75rem;border:1px solid #9aadb7;border-radius:.4rem;padding:.5rem .7rem;width:100%}input[readonly],input:disabled{background:#f1f4f5}button{background:#17566b;color:white;border-color:#17566b;cursor:pointer;margin:.6rem 0}button:disabled{background:#dce5e9;border-color:#dce5e9;color:#586b75;cursor:default}.secondary{background:white;color:#17566b}.feedback{min-height:10rem;overflow-wrap:anywhere;color:#304d5c;font-size:.95rem;margin:.6rem 0}small{display:block;color:#4c626d;overflow-wrap:anywhere;margin:.4rem 0}a{color:#17566b}.return{min-height:3rem;display:flex;align-items:center}
+</style>
+</head>
+<body><main>
+<h1>MemberID</h1><p>Link a phone number</p>
+<div class="feedback" role="status" aria-live="polite">{{.Message}}</div>
+<label for="organization">Organization</label><input id="organization" value="{{.Organization}}" readonly><small>{{.Request.OrganizationID}}</small>
+<label for="member">Member</label><input id="member" value="{{.Member}}" readonly><small>{{.Request.MemberID}}</small>
+<form method="post" action="/account/link/phone">
+<input type="hidden" name="request" value="{{.Request.ID}}"><input type="hidden" name="csrf" value="{{.Request.CSRF}}">
+<label for="phone">Phone number</label><input id="phone" name="phone" type="tel" inputmode="tel" autocomplete="tel" pattern="(?:\+86)?1[3-9][0-9]{9}" required value="{{.Request.PhoneNumber}}" {{if .NumberLocked}}readonly{{end}}>
+<small>Use an eleven-digit mainland China mobile number, optionally prefixed with +86.</small>
+<label for="code">Verification code</label><input id="code" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required {{if not .CanVerify}}disabled{{end}}>
+<button name="action" value="send" {{if not .CanSend}}disabled{{end}}>Send verification code</button>
+<button name="action" value="verify" {{if not .CanVerify}}disabled{{end}}>Verify and link phone</button>
+<button name="action" value="cancel" formnovalidate class="secondary" {{if not .CanCancel}}disabled{{end}}>Cancel verification</button>
+</form>
+<div class="return"><a href="{{.ReopenURI}}">Reopen account page</a></div>
+<div class="return">{{if .Request.ReturnURI}}<a href="{{.Request.ReturnURI}}">Return to {{.Request.ClientID}}</a>{{else}}<small>You can close this page when you are finished.</small>{{end}}</div>
+</main></body></html>

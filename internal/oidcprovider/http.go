@@ -191,6 +191,9 @@ func (service *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		metadata.DeviceAuthorizationEndpoint = ""
 		op.Discover(w, metadata)
 		return
+	case "/account/link/phone":
+		service.accountPhone(w, r)
+		return
 	case "/account/link/dingtalk":
 		service.accountDingTalk(w, r)
 		return

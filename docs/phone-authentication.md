@@ -19,11 +19,15 @@ The request uses the official HTTPS endpoint and [ACS3-HMAC-SHA256 signing](http
 
 ## Verification state
 
-MemberID generates the code using cryptographic randomness. PostgreSQL stores a keyed HMAC bound to the challenge, normalized phone number, and initiating login transaction. It never stores the raw code. A code cannot be used by a different transaction.
+MemberID generates the code using cryptographic randomness. PostgreSQL stores a keyed HMAC bound to the challenge, normalized phone number, and initiating login or account-linking transaction. It never stores the raw code. A code cannot be used by a different transaction.
 
 The current policy is a five-minute lifetime, at most five wrong attempts, a sixty-second resend cooldown, and at most six sends per phone number per hour. Failed deliveries retain their cooldown. Creating a replacement invalidates previous challenges for that number. Database locks serialize concurrent sends and code consumption; restarting a process does not reset those limits. Cleanup retains enough expired challenge history to preserve the hourly limit.
 
 Successful verification returns a typed server-local authentication result with the factor, authentication time, and `sms` authentication method. It does not issue a credential, create a Member, infer a binding, or grant application access. Standard OIDC issuance remains the protocol layer's responsibility.
+
+## Explicit account linking
+
+An already eligible Member can use the MemberID-hosted [phone linking page](account-linking.md) after fresh authentication through a registered application. Verification and the explicit binding commit together. This operation preserves the existing Member, session, and grants and cannot replace, transfer, or restore a binding. Normal phone login remains standard OIDC; linking introduces no private authentication proof or renewal endpoint.
 
 ## Current availability and validation
 
