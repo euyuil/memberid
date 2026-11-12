@@ -23,7 +23,7 @@ git diff --check
 
 The check script disables parent Go workspaces, checks formatting, runs vet and tests, and builds `dist/memberid` (`memberid.exe` on Windows). Builds use `-trimpath -buildvcs=false` to omit local paths and implicit VCS metadata. The race detector requires a supported C toolchain; CI runs it on Linux.
 
-The executable can serve process health alone or the configured [OIDC provider](docs/oidc.md); operator commands manage stored organizations, Members, and explicit factor bindings. See [the implementation plan](docs/implementation-plan.md) for the remaining identity and OIDC work.
+The executable can serve process health alone or the configured [OIDC provider](docs/oidc.md); operator commands and the separate [management process](docs/management-api.md) manage stored organizations, Members, and explicit factor bindings. See [the implementation plan](docs/implementation-plan.md) for the remaining identity and OIDC work.
 
 ## Pull requests
 

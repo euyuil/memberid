@@ -6,12 +6,9 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"net"
-	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/euyuil/memberid/internal/server"
 )
@@ -29,7 +26,7 @@ func main() {
 
 func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	if len(args) == 0 {
-		return errors.New("usage: memberid <version|serve|config|client|database|organization|member|factor>")
+		return errors.New("usage: memberid <version|serve|serve-management|config|client|database|organization|member|factor>")
 	}
 	switch args[0] {
 	case "config", "client":
@@ -42,6 +39,8 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 		}
 		fmt.Fprintln(stdout, "MemberID", version)
 		return nil
+	case "serve-management":
+		return serveManagement(ctx, args[1:], stdout, stderr)
 	case "serve":
 		flags := flag.NewFlagSet("serve", flag.ContinueOnError)
 		flags.SetOutput(stderr)
@@ -65,28 +64,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 			defer closeStore()
 			httpServer.Handler = handler
 		}
-		listener, err := net.Listen("tcp", *address)
-		if err != nil {
-			return fmt.Errorf("listen: %w", err)
-		}
-		finished := make(chan error, 1)
-		go func() { finished <- httpServer.Serve(listener) }()
-		fmt.Fprintln(stdout, "MemberID listening on", listener.Addr())
-		select {
-		case err := <-finished:
-			if errors.Is(err, http.ErrServerClosed) {
-				return nil
-			}
-			return err
-		case <-ctx.Done():
-			shutdown, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			defer cancel()
-			if err := httpServer.Shutdown(shutdown); err != nil {
-				_ = httpServer.Close()
-				return fmt.Errorf("shutdown: %w", err)
-			}
-			return nil
-		}
+		return serveHTTP(ctx, *address, httpServer, stdout)
 	default:
 		return fmt.Errorf("unknown command %q; use version or serve", args[0])
 	}

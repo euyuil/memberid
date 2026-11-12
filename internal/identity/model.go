@@ -45,6 +45,7 @@ type Factor struct {
 }
 
 type Binding struct {
+	ID             string     `json:"id"`
 	MemberID       string     `json:"memberId"`
 	OrganizationID string     `json:"organizationId"`
 	FactorID       string     `json:"authenticationFactorId"`
