@@ -23,6 +23,9 @@ type testDingTalk struct {
 	before             func()
 	fail               bool
 	authorizationError error
+	directoryError     error
+	directoryBefore    func()
+	directoryCalls     atomic.Int64
 }
 
 func (provider *testDingTalk) CheckAuthorization(context.Context, string, string, string) error {
@@ -37,6 +40,17 @@ func (provider *testDingTalk) Login(_ context.Context, corp, client, secret, cod
 		return dingtalk.Member{}, errors.New("private provider diagnostic")
 	}
 	return dingtalk.Member{UnionID: "example-union", UserID: "example-employee", DisplayName: "Example Member", DepartmentIDs: []string{"17"}}, nil
+}
+
+func (provider *testDingTalk) VerifyMember(context.Context, string, string, string, string) (dingtalk.Member, error) {
+	provider.directoryCalls.Add(1)
+	if provider.directoryBefore != nil {
+		provider.directoryBefore()
+	}
+	if provider.directoryError != nil {
+		return dingtalk.Member{}, provider.directoryError
+	}
+	return dingtalk.Member{UnionID: "example-union", UserID: "example-employee"}, provider.authorizationError
 }
 
 func enableDingTalk(t *testing.T, f *fixture, phone bool) (*testDingTalk, *identity.DingTalkApplications) {
@@ -60,6 +74,11 @@ func enableDingTalk(t *testing.T, f *fixture, phone bool) (*testDingTalk, *ident
 	if err != nil {
 		t.Fatal(err)
 	}
+	directory, err := identity.NewDingTalkDirectory(apps, provider)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.service.directory = directory
 	f.service.dingtalk = verifier
 	if !phone {
 		f.service.phone = nil

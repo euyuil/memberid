@@ -15,10 +15,15 @@ func loginResponses() []string {
 
 func loginTransport(t *testing.T, responses []string) (*Client, *int) {
 	t.Helper()
+	return memberTransport(t, responses, 0)
+}
+
+func memberTransport(t *testing.T, responses []string, start int) (*Client, *int) {
+	t.Helper()
 	client := New()
 	calls := new(int)
 	client.http.Transport = roundTripFunc(func(r *http.Request) (*http.Response, error) {
-		index := *calls
+		index := *calls + start
 		*calls++
 		if index >= len(responses) {
 			t.Fatal("unexpected additional provider call")
@@ -98,7 +103,14 @@ func TestLoginRejectsUncertainOrConflictingEvidence(t *testing.T) {
 			responses[test.step] = test.response
 			client, calls := loginTransport(t, responses)
 			member, err := client.Login(t.Context(), "example-corp", "example-client", "synthetic-secret", "synthetic-code")
-			if err != ErrUnavailable || member.UnionID != "" || *calls != test.step+1 {
+			want := ErrUnavailable
+			if test.name == "external contact" {
+				want = ErrNotMember
+			}
+			if test.name == "wrong union" || test.name == "wrong employee" {
+				want = ErrIdentityConflict
+			}
+			if err != want || member.UnionID != "" || *calls != test.step+1 {
 				t.Fatal("uncertain evidence admitted or retried", err)
 			}
 		})
@@ -120,5 +132,13 @@ func TestOptionalDepartmentEvidencePreservesUnknownAndEmpty(t *testing.T) {
 	member, err := client.Login(t.Context(), "example-corp", "example-client", "synthetic-secret", "synthetic-code")
 	if err != nil || member.DepartmentIDs != nil {
 		t.Fatal("optional evidence invalidated membership", err)
+	}
+}
+
+func TestDirectoryVerificationNeedsOnlyApplicationCredentials(t *testing.T) {
+	client, calls := memberTransport(t, loginResponses(), 2)
+	member, err := client.VerifyMember(t.Context(), "example-corp", "example-client", "synthetic-secret", "example-union")
+	if err != nil || *calls != 3 || member.UnionID != "example-union" || member.UserID != "example-employee" {
+		t.Fatal("directory verification required fresh user authorization", err)
 	}
 }

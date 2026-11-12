@@ -17,6 +17,8 @@ import (
 
 var ErrUnavailable = errors.New("DingTalk provider unavailable")
 var ErrAuthorizationDenied = errors.New("DingTalk application authorization denied")
+var ErrNotMember = errors.New("DingTalk subject is not an internal employee")
+var ErrIdentityConflict = errors.New("DingTalk identity evidence conflicts")
 
 var identifier = regexp.MustCompile(`^[A-Za-z0-9_-]{1,256}$`)
 

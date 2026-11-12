@@ -177,7 +177,7 @@ func (verifier *DingTalkVerifier) Admit(ctx context.Context, tx pgx.Tx, proof Di
 				return Verification{}, ErrIneligible
 			}
 		}
-		if _, err := tx.Exec(ctx, "UPDATE members SET external_departure=false,updated_at=CASE WHEN external_departure THEN clock_timestamp() ELSE updated_at END WHERE id=$1", memberID); err != nil {
+		if _, err := tx.Exec(ctx, "UPDATE members SET external_departure=false,eligibility_revision=eligibility_revision+1,updated_at=CASE WHEN external_departure THEN clock_timestamp() ELSE updated_at END WHERE id=$1", memberID); err != nil {
 			return Verification{}, err
 		}
 	}

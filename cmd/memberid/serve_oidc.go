@@ -48,22 +48,27 @@ func authenticationHandler(ctx context.Context, directory string) (http.Handler,
 			return nil, nil, err
 		}
 	}
+	key, _ := base64.StdEncoding.DecodeString(loaded.Secrets.ProviderKey)
+	client := dingtalk.New()
+	applications, err := identity.NewDingTalkApplications(store, key, client)
+	if err != nil {
+		store.Close()
+		return nil, nil, err
+	}
+	directoryVerifier, err := identity.NewDingTalkDirectory(applications, client)
+	if err != nil {
+		store.Close()
+		return nil, nil, err
+	}
 	var dingTalkVerifier *identity.DingTalkVerifier
 	if dingTalkEnabled == "true" {
-		key, _ := base64.StdEncoding.DecodeString(loaded.Secrets.ProviderKey)
-		client := dingtalk.New()
-		applications, err := identity.NewDingTalkApplications(store, key, client)
-		if err != nil {
-			store.Close()
-			return nil, nil, err
-		}
 		dingTalkVerifier, err = identity.NewDingTalkVerifier(applications, client)
 		if err != nil {
 			store.Close()
 			return nil, nil, err
 		}
 	}
-	provider, err := oidcprovider.New(loaded, store, phone, dingTalkVerifier)
+	provider, err := oidcprovider.New(loaded, store, phone, dingTalkVerifier, directoryVerifier)
 	if err != nil {
 		store.Close()
 		return nil, nil, err

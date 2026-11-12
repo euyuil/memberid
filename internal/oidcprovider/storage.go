@@ -185,6 +185,7 @@ func (s *storage) createCodeTokens(ctx context.Context, request *authorizationRe
 		refreshSecret = config.RandomSecret()
 	}
 	replayed := false
+	observation, observationErr := s.observeDirectory(ctx, &request.grant)
 	err := pgx.BeginFunc(ctx, s.service.store.Database(), func(tx pgx.Tx) error {
 		var sessionID string
 		var sessionExpiry time.Time
@@ -192,9 +193,6 @@ func (s *storage) createCodeTokens(ctx context.Context, request *authorizationRe
 			return oidc.ErrInvalidGrant()
 		}
 		expiry = minimum(expiry, sessionExpiry)
-		if err := s.eligible(ctx, tx, &request.grant); err != nil {
-			return err
-		}
 		consumed, err := tx.Exec(ctx, "UPDATE oidc_authorization_requests SET consumed_at=$2 WHERE id=$1 AND consumed_at IS NULL AND code_hash IS NOT NULL AND expires_at>$2", request.ID, now)
 		if err != nil {
 			return err
@@ -202,6 +200,12 @@ func (s *storage) createCodeTokens(ctx context.Context, request *authorizationRe
 		if consumed.RowsAffected() != 1 {
 			replayed = true
 			_, err := tx.Exec(ctx, "UPDATE oidc_grants SET revoked_at=$2 WHERE id=$1", request.ID, now)
+			return err
+		}
+		if err := s.validateDirectory(ctx, tx, observation, observationErr); err != nil {
+			return err
+		}
+		if err := s.eligible(ctx, tx, &request.grant); err != nil {
 			return err
 		}
 		data, err := json.Marshal(&request.grant)

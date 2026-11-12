@@ -127,7 +127,7 @@ func newConfiguredFixture(t *testing.T, refreshEnabled bool) *fixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	service, err := New(configuration, store, phone, nil)
+	service, err := New(configuration, store, phone, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -499,7 +499,7 @@ func TestRestartWithSigningKeyRollover(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	replacement, err := New(&configuration, f.store, f.service.phone, nil)
+	replacement, err := New(&configuration, f.store, f.service.phone, nil, nil)
 	if err != nil {
 		listener.Close()
 		t.Fatal(err)

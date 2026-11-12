@@ -71,7 +71,7 @@ func Open(ctx context.Context, databaseURL string) (*Store, error) {
 		return nil, err
 	}
 	var version int
-	if err = pool.QueryRow(ctx, "SELECT version FROM memberid_schema").Scan(&version); err != nil || version != 8 {
+	if err = pool.QueryRow(ctx, "SELECT version FROM memberid_schema").Scan(&version); err != nil || version != 9 {
 		pool.Close()
 		var postgresError *pgconn.PgError
 		if err == nil || errors.Is(err, pgx.ErrNoRows) || errors.As(err, &postgresError) && postgresError.Code == "42P01" {
