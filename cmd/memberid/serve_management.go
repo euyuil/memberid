@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"flag"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/euyuil/memberid/internal/config"
+	"github.com/euyuil/memberid/internal/dingtalk"
 	"github.com/euyuil/memberid/internal/identity"
 	"github.com/euyuil/memberid/internal/management"
 	"github.com/euyuil/memberid/internal/server"
@@ -44,7 +46,15 @@ func serveManagement(ctx context.Context, args []string, stdout, stderr io.Write
 		return err
 	}
 	defer store.Close()
-	handler, err := management.New(store, loaded.Secrets.ManagementSecretSHA256)
+	key, err := base64.StdEncoding.DecodeString(loaded.Secrets.ProviderKey)
+	if err != nil {
+		return err
+	}
+	applications, err := identity.NewDingTalkApplications(store, key, dingtalk.New())
+	if err != nil {
+		return err
+	}
+	handler, err := management.New(store, loaded.Secrets.ManagementSecretSHA256, applications)
 	if err != nil {
 		return err
 	}

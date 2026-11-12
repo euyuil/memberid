@@ -69,13 +69,13 @@ Replace identifier placeholders with actual returned IDs. `authenticationFactorT
 
 Eligibility is not proof of a new authentication event and grants no business permissions. A resource server must separately validate the OIDC access token's signature, issuer, audience, lifetime, and claims, then apply its own authorization policy. The query supplies current identity facts; it cannot retract already issued JWTs from offline verifiers before their short expiry.
 
-Domain failures return a JSON `error` code with 400 (`invalid_request`), 401 (`unauthorized`), 403 (`ineligible` or `browser_access_denied`), 404 (`not_found`), 409 (`conflict`), 415 (`json_required`), 422 (`member_id_conflict`), or 500 (`internal_error`). Internal database details are not returned. Unknown routes and unsupported methods may use ordinary HTTP errors. Do not retry non-idempotent creation blindly after an uncertain network outcome: use an explicit identifier and inspect its existing record before deciding whether to retry.
+Domain failures return a JSON `error` code with 400 (`invalid_request`), 401 (`unauthorized`), 403 (`ineligible` or `browser_access_denied`), 404 (`not_found`), 409 (`conflict`), 415 (`json_required`), 422 (`member_id_conflict`), 500 (`internal_error`), or 503 (`provider_unavailable`). Internal database details are not returned. Unknown routes and unsupported methods may use ordinary HTTP errors. Do not retry non-idempotent creation blindly after an uncertain network outcome: use an explicit identifier and inspect its existing record before deciding whether to retry.
 
 ## Validation and current limits
 
 Integration tests exercise a real HTTP server and disposable PostgreSQL: credential separation from actual issued OIDC tokens, unauthorized mutations, organization isolation, pagination, binding conflicts and revocation, independent block sources, eligibility, and independent process startup without login providers or clients. Unit tests cover strict JSON and the listen-address boundary. These tests do not establish deployed network isolation.
 
-Grant inspection and revocation are available through the [operator CLI](operations.md#inspect-and-revoke-oidc-grants). Provider configuration, account self-service, HTTP grant administration, and automated management credential rotation are separate increments. Atomic organization enrollment is described below. This interface does not initialize or migrate a database, and introduces no deletion of organizations or Members.
+Grant inspection and revocation are available through the [operator CLI](operations.md#inspect-and-revoke-oidc-grants). [DingTalk application configuration](dingtalk.md) is also available. Account self-service, HTTP grant administration, and automated management credential rotation are separate increments. Atomic organization enrollment is described below. This interface does not initialize or migrate a database, and introduces no deletion of organizations or Members.
 
 ## Atomic organization enrollment
 

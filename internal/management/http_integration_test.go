@@ -33,7 +33,7 @@ func newFixture(t *testing.T) *fixture {
 	}
 	t.Cleanup(store.Close)
 	secret := config.RandomSecret()
-	handler, err := New(store, config.SecretHash(secret))
+	handler, err := New(store, config.SecretHash(secret), nil)
 	if err != nil {
 		t.Fatal(err)
 	}

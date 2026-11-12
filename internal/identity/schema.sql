@@ -1,7 +1,7 @@
 CREATE TABLE memberid_schema (
-    version integer PRIMARY KEY CHECK (version = 5)
+    version integer PRIMARY KEY CHECK (version = 6)
 );
-INSERT INTO memberid_schema(version) VALUES (5);
+INSERT INTO memberid_schema(version) VALUES (6);
 
 CREATE TABLE organizations (
     id text COLLATE "C" PRIMARY KEY CHECK (id ~ '^org_[0-9bcdfghjkmnpqrstvwxz]{27}$'),
@@ -119,4 +119,15 @@ CREATE TABLE organization_enrollments (
     request_hash bytea NOT NULL CHECK (octet_length(request_hash) = 32),
     created_at timestamptz NOT NULL,
     FOREIGN KEY (member_id, organization_id) REFERENCES members(id, organization_id)
+);
+
+CREATE TABLE dingtalk_applications (
+    organization_id text COLLATE "C" PRIMARY KEY REFERENCES organizations(id),
+    namespace text COLLATE "C" NOT NULL UNIQUE,
+    corp_id text NOT NULL,
+    client_id text NOT NULL UNIQUE,
+    revision bigint NOT NULL CHECK (revision > 0),
+    secret_ciphertext bytea NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+    updated_at timestamptz NOT NULL DEFAULT clock_timestamp()
 );
