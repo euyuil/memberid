@@ -124,6 +124,7 @@ func (store *Store) Eligibility(ctx context.Context, organizationID, memberID, f
         JOIN authentication_factors f ON f.id=b.authentication_factor_id
         WHERE b.organization_id=$1 AND b.member_id=$2 AND b.authentication_factor_id=$3 AND f.type=$4
         AND b.status='active' AND f.status='active' AND o.status='enabled'
+        AND (f.type<>'dingtalk' OR EXISTS(SELECT 1 FROM dingtalk_applications da WHERE da.organization_id=o.id AND da.namespace=f.namespace))
         AND NOT m.manual_block AND NOT m.external_departure`, organizationID, memberID, factorID, factorType).Scan(&result.BindingID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return result, nil

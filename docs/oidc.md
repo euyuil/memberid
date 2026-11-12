@@ -22,11 +22,11 @@ Clients explicitly registered with `refresh=true` can request `offline_access` a
 
 ## Login and independent subjects
 
-The browser follows the application's authorization redirect to MemberID. MemberID binds the login transaction to an HttpOnly browser cookie and verifies login form submissions with an exact Origin and transaction-specific CSRF value. Phone verification then establishes a server-side SSO session. The user selects an explicitly bound, currently eligible Member in the organization's context. A client may be restricted to one organization.
+The browser follows the application's authorization redirect to MemberID. MemberID binds the login transaction to an HttpOnly browser cookie and verifies login form submissions with an exact Origin and transaction-specific CSRF value. Phone verification or an enabled DingTalk login then establishes a server-side SSO session. The user selects an explicitly bound, currently eligible Member in the organization's context. A client may be restricted to one organization.
 
 The stable account key is `(iss, sub)`, where ordinary clients receive the independent Member identifier as `sub`. Two Members using the same verified phone remain two subjects. Display names and contact attributes must not be used for account matching. Missing verified email is omitted, not manufactured from a phone number or Member identifier.
 
-Clients receive only requested supported identity information. `profile` supplies the Member display name and a stable Member-based `preferred_username` through UserInfo; `phone` supplies the verified phone number and verification flag. The `email` scope is accepted for standard client compatibility, but no email claims are issued until a verified email source exists. Applications that require email-based provisioning must use an explicit account-linking or provisioning process.
+Clients receive only requested supported identity information. `profile` supplies the Member display name and a stable Member-based `preferred_username` through UserInfo; `phone` supplies the verified phone number and verification flag for phone authentication; DingTalk login does not manufacture phone claims. The `email` scope is accepted for standard client compatibility, but no email claims are issued until a verified email source exists. Applications that require email-based provisioning must use an explicit account-linking or provisioning process.
 
 Interactive consent is required unless the operator explicitly marks the registered policy `preauthorized`. `prompt=consent` still requires confirmation. `prompt=login` and `max_age` require appropriate fresh authentication. `prompt=none` returns a standard interaction error when authentication, consent, or an unambiguous eligible Member is unavailable. An existing session does not silently select one of several organization identities.
 
@@ -75,13 +75,13 @@ An application can refresh automatically when foreground activity needs an almos
 
 ## Running the provider
 
-Follow [operator setup](operations.md) to initialize a new dedicated database and installation directory, register a client, and configure the optional [phone adapter](phone-authentication.md). Then run:
+Follow [operator setup](operations.md) to initialize a new dedicated database and installation directory, register a client, and configure at least one optional [phone](phone-authentication.md) or [DingTalk](dingtalk.md) adapter. Then run:
 
 ```sh
 memberid serve --directory .local/memberid --listen 127.0.0.1:8080
 ```
 
-The current interactive implementation requires the phone adapter; another independent authentication adapter is still being implemented. Omitting `--directory` starts health-only mode. Configuration and client-policy changes take effect after a restart. This initial schema is version 6; startup refuses older schemas, and no existing database is reset or migrated automatically.
+Phone and DingTalk can be enabled independently. DingTalk-only login requires no SMS credentials. Omitting `--directory` starts health-only mode. File configuration and client-policy changes take effect after a restart; organization DingTalk credentials are loaded with explicit revision checks. This initial schema is version 7; startup refuses older schemas, and no existing database is reset or migrated automatically.
 
 For the first Member, create its organization and Member through the operator CLI, then let the person verify their phone in an application login. Verification creates only the factor. An authorized operator can inspect that existing factor and explicitly bind it:
 
@@ -94,4 +94,6 @@ Confirm the intended organization and person through the administrator's enrollm
 
 ## Validation status
 
-Automated HTTP tests use the actual provider, RSA tokens, browser cookie jars, and disposable PostgreSQL databases. They exercise login, discovery, client/PKCE/redirect checks, CSRF and browser binding, consent, distinct organization subjects, factor-only subjects, concurrent code replay, current eligibility, introspection, revocation, logout, authentication age, persisted SSO/JWKS behavior across a signing-key rollover restart, refresh rotation and scope narrowing, concurrent family replay, independent provider instances, and transactional rollback on issuance failure. SMS delivery is simulated in these tests. Real GitLab interoperability and deployed provider acceptance remain separate pending checks; this is not a claim of OpenID certification.
+Automated HTTP tests use the actual provider, RSA tokens, browser cookie jars, and disposable PostgreSQL databases. They exercise login, discovery, client/PKCE/redirect checks, CSRF and browser binding, consent, distinct organization subjects, factor-only subjects, concurrent code replay, current eligibility, introspection, revocation, logout, authentication age, persisted SSO/JWKS behavior across a signing-key rollover restart, refresh rotation and scope narrowing, concurrent family replay, independent provider instances, and transactional rollback on issuance failure. SMS delivery and upstream DingTalk responses are simulated in these tests. A browser rendering check of the actual login template at 320-pixel width confirmed stable control positions across initial, pending, verified, and failed states, with no horizontal overflow; this is synthetic UI validation, not live provider acceptance. Real GitLab interoperability and deployed provider acceptance remain separate pending checks; this is not a claim of OpenID certification.
+
+The login page permits form navigation to its own origin, the current registered OIDC callback origin, and the fixed DingTalk login origin when that method is enabled. Redirect-URI validation remains exact at protocol boundaries. Script execution and framing remain disabled.

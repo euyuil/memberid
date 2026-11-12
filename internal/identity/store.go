@@ -166,6 +166,15 @@ func (store *Store) BindFactor(ctx context.Context, organizationID, memberID, fa
 		if factor.Status != "active" {
 			return ErrIneligible
 		}
+		if factor.Type == "dingtalk" {
+			var configured bool
+			if err := transaction.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM dingtalk_applications WHERE organization_id=$1 AND namespace=$2)", organizationID, factor.Namespace).Scan(&configured); err != nil {
+				return err
+			}
+			if !configured {
+				return ErrIneligible
+			}
+		}
 		var existingMember string
 		if err := transaction.QueryRow(ctx, "SELECT id FROM members WHERE id=$1 AND organization_id=$2", memberID, organizationID).Scan(&existingMember); err != nil {
 			return storageError(err)

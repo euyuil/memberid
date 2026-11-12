@@ -20,6 +20,7 @@ type Service struct {
 	configuration *config.Loaded
 	store         *identity.Store
 	phone         *identity.PhoneVerifier
+	dingtalk      *identity.DingTalkVerifier
 	protocol      *op.Provider
 	storage       *storage
 	now           func() time.Time
@@ -32,8 +33,8 @@ type logoutContext struct {
 	clear  func()
 }
 
-func New(configuration *config.Loaded, store *identity.Store, phone *identity.PhoneVerifier) (*Service, error) {
-	if configuration == nil || store == nil || phone == nil || configuration.SigningKey == nil || len(configuration.PublicKeys) == 0 {
+func New(configuration *config.Loaded, store *identity.Store, phone *identity.PhoneVerifier, dingtalk *identity.DingTalkVerifier) (*Service, error) {
+	if configuration == nil || store == nil || phone == nil && dingtalk == nil || configuration.SigningKey == nil || len(configuration.PublicKeys) == 0 {
 		return nil, errors.New("OIDC requires a configured store, signing key, and enabled authentication provider")
 	}
 	if err := configuration.Installation.Validate(); err != nil {
@@ -45,7 +46,7 @@ func New(configuration *config.Loaded, store *identity.Store, phone *identity.Ph
 	if err := config.ValidateClients(configuration.Clients, configuration.AllowLoopbackHTTP); err != nil {
 		return nil, err
 	}
-	service := &Service{configuration: configuration, store: store, phone: phone, now: time.Now}
+	service := &Service{configuration: configuration, store: store, phone: phone, dingtalk: dingtalk, now: time.Now}
 	service.storage = &storage{service: service}
 	var key [32]byte
 	decoded, _ := base64.StdEncoding.DecodeString(configuration.Secrets.ProtocolKey)
@@ -188,6 +189,9 @@ func (service *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		metadata.RevocationEndpointAuthMethodsSupported = []oidc.AuthMethod{oidc.AuthMethodBasic}
 		metadata.DeviceAuthorizationEndpoint = ""
 		op.Discover(w, metadata)
+		return
+	case "/login/dingtalk/callback":
+		service.dingTalkCallback(w, r)
 		return
 	case "/login":
 		service.login(w, r)
