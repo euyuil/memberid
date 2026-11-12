@@ -70,3 +70,24 @@ Registry edits acquire an exclusive `.clients.lock`, validate the whole configur
 Private keys may be PKCS#8 or PKCS#1 PEM, with RSA keys of at least 2048 bits. Newly generated keys use 3072 bits. The public bundle contains one or more PKIX `PUBLIC KEY` PEM blocks, including the active signing key. Key identifiers are derived from the public key, so changing a filename does not change its identity. Validation rejects missing, malformed, duplicate, or mismatched keys.
 
 Retain old public keys when preparing a rollover, and retain old private material only in protected backups if operationally required. Do not remove verification keys while issued tokens can still be accepted. The configured public bundle is published through JWKS. Coordinate private-key replacement, retained public keys, and server restarts; deployed rollover acceptance remains pending.
+
+## Inspect and revoke OIDC grants
+
+These commands use the operator's direct `MEMBERID_DATABASE_URL` access. They do not need an OIDC login or provider configuration:
+
+```sh
+memberid grant list --client example --limit 50
+memberid grant list --subject MEMBER_ID --after GRANT_ID --limit 50
+memberid grant inspect --id GRANT_ID
+memberid grant revoke --id GRANT_ID
+```
+
+Listing returns `items` and an optional `nextAfter` cursor. Filters are exact client and Member/factor subject identifiers; omitting a filter includes all matching records. Page sizes range from 1 through 100. Use `nextAfter` as `--after` for the next page. Pages are ordered by the opaque grant identifier and reflect current stored records, not a snapshot. Periodic cleanup removes expired records; these commands are not a historical audit archive.
+
+Grant metadata includes the client, subject, organization when applicable, factor, session identifier, original authentication time, original scopes, audience, current inactivity deadline (`expiresAt`), absolute deadline, and grant/session revocation timestamps. It contains no access tokens, Refresh Tokens, browser credentials, or credential verifiers. Treat the identity metadata as private operator data. `originalScopes` describes the initial grant: an individual refresh chain may have narrowed its scopes afterward and cannot regain removed scopes by using this metadata.
+
+`state` is `active`, `expired`, or `revoked`. It describes the persisted grant/session lifecycle only. An active record is not a guarantee that its client is still registered or that its Member, organization, factor, and binding remain eligible; actual token use rechecks those policies. Expiry of the separate browser SSO cookie does not by itself expire a still-active refresh grant.
+
+Revocation targets exactly one grant and serializes with refresh rotation on that grant's database row. It invalidates the grant's Refresh Token family and its access tokens at online verifiers. Repeating the command preserves the first revocation timestamp. It does not revoke another grant, end the parent browser SSO session, remove an application's local session, or erase identity records. A new authorization flow may create a new grant if login and consent policy permit it. Already issued JWTs remain usable at offline verifiers until their short expiry. Use standard RP-initiated logout when the intended operation is to end the associated MemberID SSO session and its grants.
+
+Missing grants fail explicitly. There is no bulk revoke, expiry-extension, restore, or credential-export command. Keep database access limited to trusted operators; knowing a grant identifier is not authorization to administer it.
