@@ -81,7 +81,7 @@ Follow [operator setup](operations.md) to initialize a new dedicated database an
 memberid serve --directory .local/memberid --listen 127.0.0.1:8080
 ```
 
-Phone and DingTalk can be enabled independently. DingTalk-only login requires no SMS credentials. Omitting `--directory` starts health-only mode. File configuration and client-policy changes take effect after a restart; organization DingTalk credentials are loaded with explicit revision checks. This initial schema is version 9; startup refuses older schemas, and no existing database is reset or migrated automatically.
+Phone and DingTalk can be enabled independently. DingTalk-only login requires no SMS credentials. Omitting `--directory` starts health-only mode. File configuration and client-policy changes take effect after a restart; organization DingTalk credentials are loaded with explicit revision checks. This initial schema is version 10; startup refuses older schemas, and no existing database is reset or migrated automatically.
 
 For the first Member, create its organization and Member through the operator CLI, then let the person verify their phone in an application login. Verification creates only the factor. An authorized operator can inspect that existing factor and explicitly bind it:
 
