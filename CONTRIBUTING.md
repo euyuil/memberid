@@ -23,7 +23,7 @@ git diff --check
 
 The check script disables parent Go workspaces, checks formatting, runs vet and tests, and builds `dist/memberid` (`memberid.exe` on Windows). Builds use `-trimpath -buildvcs=false` to omit local paths and implicit VCS metadata. The race detector requires a supported C toolchain; CI runs it on Linux.
 
-The first executable only serves process health. See [the implementation plan](docs/implementation-plan.md) for the remaining identity and OIDC work.
+The HTTP listener currently serves process health; operator commands manage stored organizations and Members. See [the implementation plan](docs/implementation-plan.md) for the remaining identity and OIDC work.
 
 ## Pull requests
 
@@ -36,3 +36,9 @@ Before committing, inspect the full staged diff and verify the configured human 
 ## Licensing
 
 The project license remains undecided. Review exact dependency and bundled-material licenses before adoption, record the outcome in [the component inventory](docs/third-party-components.md), and retain required notices.
+
+## PostgreSQL integration tests
+
+Run `sh scripts/test-integration.sh` with Docker and the pinned Go toolchain available. The runner starts a labelled, disposable PostgreSQL 18.6 container, binds it only to loopback, runs integration tests with the race detector, and removes only its owned container. Local trust authentication is confined to that temporary test server; it is not a deployment configuration.
+
+To use an already disposable test server, set `MEMBERID_TEST_DATABASE_URL` and run `go test -race -tags=integration -timeout=5m ./...`. The configured database role must be able to create and drop test databases. Each test creates a unique database and removes only that database. Do not use a production or personal working server.

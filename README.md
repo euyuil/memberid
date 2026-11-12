@@ -2,7 +2,7 @@
 
 A self-hosted OpenID Connect provider with independent member identities for each organization.
 
-MemberID is under development. The current executable provides a process health endpoint and a version command. Authentication, persistence, and OIDC endpoints are not available yet; this is not a production identity provider.
+MemberID is under development. The current executable provides PostgreSQL identity storage, operator commands, process health, and version information. Authentication and OIDC endpoints are not available yet; this is not a production identity provider.
 
 ## Development
 
@@ -15,4 +15,4 @@ go run ./cmd/memberid serve --listen 127.0.0.1:8080
 
 `GET http://127.0.0.1:8080/healthz` reports process availability only.
 
-See the [implementation plan](docs/implementation-plan.md) and [third-party component review](docs/third-party-components.md). The project's license has not been selected.
+See [operator setup](docs/operations.md), the [identity model](docs/identity-model.md), the [implementation plan](docs/implementation-plan.md) and [third-party component review](docs/third-party-components.md). The project's license has not been selected.
