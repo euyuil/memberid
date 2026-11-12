@@ -48,3 +48,7 @@ The project license remains undecided. Review exact dependency and bundled-mater
 Run `sh scripts/test-integration.sh` with Docker and the pinned Go toolchain available. The runner starts a labelled, disposable PostgreSQL 18.6 container, binds it only to loopback, runs integration tests with the race detector, and removes only its owned container. Local trust authentication is confined to that temporary test server; it is not a deployment configuration.
 
 To use an already disposable test server, set `MEMBERID_TEST_DATABASE_URL` and run `go test -race -tags=integration -timeout=5m ./...`. The configured database role must be able to create and drop test databases. Each test creates a unique database and removes only that database. Do not use a production or personal working server.
+
+## GitLab interoperability
+
+See [the GitLab guide](docs/gitlab.md) for the pinned unmodified client, packaged-provider fixture, local prerequisites, synthetic SMS boundary, and separate browser inspection. CI compiles `go test -tags=interop ./internal/interop`; an actual GitLab deployment requires the explicit package environment variable and is not part of that compile check.
