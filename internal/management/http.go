@@ -133,6 +133,10 @@ func respond(w http.ResponseWriter, status int, value any, err error) {
 			problem(w, http.StatusServiceUnavailable, "provider_unavailable")
 		case errors.Is(err, identity.ErrIneligible):
 			problem(w, http.StatusForbidden, "ineligible")
+		case errors.Is(err, identity.ErrForbidden):
+			problem(w, http.StatusForbidden, "forbidden")
+		case errors.Is(err, identity.ErrLastAdministrator):
+			problem(w, http.StatusConflict, "last_administrator")
 		default:
 			problem(w, http.StatusInternalServerError, "internal_error")
 		}

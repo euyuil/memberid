@@ -76,6 +76,9 @@ func (store *Store) UpdateMemberOnce(ctx context.Context, organizationID, member
 			return err
 		}
 		receipt = MemberUpdateReceipt{ID: updateID, OrganizationID: organizationID, MemberID: memberID, Member: member, CreatedAt: member.UpdatedAt}
+		if err := managementEvent(ctx, tx, ManagementActor{}, organizationID, memberID, "member.update", change); err != nil {
+			return err
+		}
 		response, err = json.Marshal(receipt)
 		if err != nil {
 			return err
