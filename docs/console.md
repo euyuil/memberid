@@ -68,6 +68,8 @@ Console sessions expire after 30 minutes of inactivity or eight hours after orig
 
 The browser uses `/api/session`, `/api/organizations`, `/api/organizations/{organizationId}/members`, the Member `administrator` subresource, `/api/events`, and `/api/logout`. This same-origin UI API is distinct from the documented private `/v1` integration API; it does not accept management bearer credentials or actor impersonation fields. Direct foreign-organization requests are rejected regardless of visible navigation. Directory pages contain at most 50 records, ordered by opaque ID; event pages use descending numeric IDs. An interrupted create request is not automatically retried: refresh the directory before creating another record.
 
+From a Member detail page, open the operation history filtered to that Member. The history shows the selected Member and lets administrators return to the detail page or view the full organization history.
+
 Successful console changes and administrator CLI operations write atomic events containing the actor Member ID, target IDs, action, changed fields, and timestamp. Selected operator update/revocation operations use `installation-operator`. These are management change records, not a complete authentication/security log; failed attempts, provider reconciliation, and historical operations are not reconstructed. No tokens, codes, provider secrets, or admission union IDs are included. Configure database access, backups, and retention for private identity data; automatic event retention is not implemented.
 
 ## Validation

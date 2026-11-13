@@ -81,6 +81,7 @@ type Data = {
   members?: Page<Member> & { administratorIds: string[] }
   detail?: Detail
   events?: Event[]
+  historyMember?: Member
 }
 type Action = {
   title: string
@@ -144,6 +145,7 @@ export default function App() {
   const org = params.get("org") ?? ""
   const member = params.get("member") ?? ""
   const events = params.get("view") === "events"
+  const historyTarget = params.get("target") ?? ""
   const after = params.get("after") ?? ""
 
   useEffect(() => {
@@ -186,9 +188,9 @@ export default function App() {
           const query = new URLSearchParams({
             organizationId: org,
             before: params.get("before") ?? "",
-            memberId: params.get("target") ?? "",
+            memberId: historyTarget,
           })
-          const [history, organization] = await Promise.all([
+          const [history, organization, memberDetail] = await Promise.all([
             request<{ items: Event[] }>(`/api/events?${query}`, options),
             org
               ? request<Organization>(
@@ -196,8 +198,18 @@ export default function App() {
                   options
                 )
               : undefined,
+            org && historyTarget
+              ? request<Detail>(
+                  `/api/organizations/${encodeURIComponent(org)}/members/${encodeURIComponent(historyTarget)}`,
+                  options
+                ).catch(() => undefined)
+              : undefined,
           ])
-          result = { events: history.items, organization }
+          result = {
+            events: history.items,
+            organization,
+            historyMember: memberDetail?.member,
+          }
         } else if (org) {
           const organization = await request<Organization>(
             `/api/organizations/${encodeURIComponent(org)}`,
@@ -411,7 +423,9 @@ export default function App() {
               </h1>
               <p className="muted">
                 {events
-                  ? "查看管理变更的操作者、对象和结果。"
+                  ? historyTarget
+                    ? `仅查看成员 ${data.historyMember?.displayName ?? historyTarget} 的操作记录。`
+                    : "查看管理变更的操作者、对象和结果。"
                   : member
                     ? "资料、登录方式与管理权限分别维护。"
                     : org
@@ -420,6 +434,24 @@ export default function App() {
               </p>
             </div>
             <div className="actions">
+              {events && org && historyTarget && (
+                <>
+                  {data.historyMember && (
+                    <Button
+                      variant="outline"
+                      onClick={() => navigate({ org, member: historyTarget })}
+                    >
+                      返回成员详情
+                    </Button>
+                  )}
+                  <Button
+                    variant="outline"
+                    onClick={() => navigate({ view: "events", org })}
+                  >
+                    查看本组织记录
+                  </Button>
+                </>
+              )}
               {actor.platform && !events && !org && (
                 <Button onClick={() => create(true)}>
                   <Plus data-icon="inline-start" />
@@ -792,6 +824,9 @@ export default function App() {
                             }[e.action] ?? e.action}
                           </TableCell>
                           <TableCell>
+                            {e.memberId && e.memberId === data.historyMember?.id && (
+                              <div>{data.historyMember.displayName}</div>
+                            )}
                             <code>{e.memberId || e.organizationId}</code>
                             <details>
                               <summary>查看变更</summary>
@@ -816,7 +851,7 @@ export default function App() {
                         navigate({
                           view: "events",
                           org,
-                          target: params.get("target") ?? "",
+                          target: historyTarget,
                         })
                       }
                     >
@@ -829,7 +864,7 @@ export default function App() {
                         navigate({
                           view: "events",
                           org,
-                          target: params.get("target") ?? "",
+                          target: historyTarget,
                           before: String(data.events!.at(-1)!.id),
                         })
                       }
