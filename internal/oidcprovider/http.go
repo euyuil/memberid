@@ -216,10 +216,31 @@ func (service *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Resource selection is not supported", http.StatusBadRequest)
 		return
 	}
+	if r.URL.Path == "/oauth/authorize" && r.Form.Get("request_uri") != "" {
+		service.rejectAuthorization(w, r, &oidc.Error{ErrorType: "request_uri_not_supported"})
+		return
+	}
 	if r.URL.Path == "/oauth/userinfo" {
 		w = userinfoWriter{w}
 	}
 	service.protocol.ServeHTTP(w, r)
+}
+
+func (service *Service) rejectAuthorization(w http.ResponseWriter, r *http.Request, protocolError error) {
+	request, err := op.ParseAuthorizeRequest(r, service.protocol.Decoder())
+	if err != nil {
+		op.AuthRequestError(w, r, nil, err, service.protocol)
+		return
+	}
+	registered, err := service.storage.client(request.ClientID)
+	if err != nil {
+		op.AuthRequestError(w, r, nil, oidc.ErrInvalidRequest(), service.protocol)
+		return
+	}
+	if err := op.ValidateAuthReqRedirectURI(registered, request.RedirectURI, request.ResponseType); err != nil {
+		protocolError = err
+	}
+	op.AuthRequestError(w, r, request, protocolError, service.protocol)
 }
 
 func (service *Service) Cleanup(ctx context.Context) error {
