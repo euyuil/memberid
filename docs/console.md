@@ -72,7 +72,7 @@ The Member detail separates identity status from sign-in blockers. It shows disa
 
 From a Member detail page, open the operation history filtered to that Member. The history shows the selected Member and lets administrators return to the detail page or view the full organization history.
 
-Successful console changes and administrator CLI operations write atomic events containing the actor Member ID, target IDs, action, changed fields, and timestamp. Selected operator update/revocation operations use `installation-operator`. These are management change records, not a complete authentication/security log; failed attempts, provider reconciliation, and historical operations are not reconstructed. No tokens, codes, provider secrets, or admission union IDs are included. Configure database access, backups, and retention for private identity data; automatic event retention is not implemented.
+Successful console changes and administrator CLI operations write atomic events containing the actor Member ID, target IDs, action, changed fields, and timestamp. Selected operator update/revocation operations use `installation-operator`. The console summarizes known changes and retains the raw payload for each record. These are management change records, not a complete authentication/security log; failed attempts, provider reconciliation, and historical operations are not reconstructed. No tokens, codes, provider secrets, or admission union IDs are included. Configure database access, backups, and retention for private identity data; automatic event retention is not implemented.
 
 ## Validation
 
