@@ -28,11 +28,6 @@ type Service struct {
 }
 
 type browserKey struct{}
-type logoutKey struct{}
-type logoutContext struct {
-	secret string
-	clear  func()
-}
 
 func New(configuration *config.Loaded, store *identity.Store, phone *identity.PhoneVerifier, dingtalk *identity.DingTalkVerifier, directory *identity.DingTalkDirectory) (*Service, error) {
 	if configuration == nil || store == nil || dingtalk != nil && directory == nil || phone == nil && dingtalk == nil || configuration.SigningKey == nil || len(configuration.PublicKeys) == 0 {
@@ -113,6 +108,15 @@ func (w userinfoWriter) WriteHeader(status int) {
 	w.ResponseWriter.WriteHeader(status)
 }
 
+type clientAuthWriter struct{ http.ResponseWriter }
+
+func (w clientAuthWriter) WriteHeader(status int) {
+	if status == http.StatusUnauthorized {
+		w.Header().Set("WWW-Authenticate", `Basic realm="MemberID"`)
+	}
+	w.ResponseWriter.WriteHeader(status)
+}
+
 func (service *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	// Preserve Origin on same-origin form POSTs without sending cross-origin referrers.
@@ -143,6 +147,7 @@ func (service *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if clientEndpoint {
+		w = clientAuthWriter{w}
 		if r.Method != http.MethodPost {
 			w.Header().Set("Allow", "POST")
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -154,7 +159,6 @@ func (service *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if _, _, ok := r.BasicAuth(); !ok {
-			w.Header().Set("WWW-Authenticate", `Basic realm="MemberID"`)
 			op.RequestError(w, r, oidc.ErrInvalidClient().WithDescription("client_secret_basic is required"), nil)
 			return
 		}
@@ -173,13 +177,12 @@ func (service *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		r.PostForm.Del("token_type_hint")
 	}
 	browser := service.cookieValue(r, "browser")
-	interactive := r.URL.Path == "/account/link/dingtalk" || r.URL.Path == "/login" || strings.HasPrefix(r.URL.Path, "/oauth/authorize")
+	interactive := r.URL.Path == "/account/link/dingtalk" || r.URL.Path == "/login" || r.URL.Path == "/oauth/logout" || strings.HasPrefix(r.URL.Path, "/oauth/authorize")
 	if interactive && len(browser) != 43 {
 		browser = config.RandomSecret()
 		service.cookie(w, "browser", browser, sessionIdleLifetime)
 	}
 	ctx := context.WithValue(r.Context(), browserKey{}, browser)
-	ctx = context.WithValue(ctx, logoutKey{}, logoutContext{secret: service.cookieValue(r, "session"), clear: func() { service.cookie(w, "session", "", -time.Second) }})
 	r = r.WithContext(ctx)
 	switch r.URL.Path {
 	case "/.well-known/openid-configuration":
@@ -191,6 +194,7 @@ func (service *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		metadata := op.CreateDiscoveryConfig(op.ContextWithIssuer(r.Context(), service.configuration.Issuer), service.protocol, service.storage)
 		// The library defaults include flows that this deployment profile does not enable.
 		metadata.ResponseTypesSupported = []string{"code"}
+		metadata.ResponseModesSupported = []string{"query", "fragment"}
 		metadata.GrantTypesSupported = []oidc.GrantType{oidc.GrantTypeCode}
 		if service.protocol.GrantTypeRefreshTokenSupported() {
 			metadata.GrantTypesSupported = append(metadata.GrantTypesSupported, oidc.GrantTypeRefreshToken)
@@ -215,6 +219,12 @@ func (service *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "/login":
 		service.login(w, r)
 		return
+	case "/oauth/logout":
+		service.logout(w, r)
+		return
+	case "/logout/confirm":
+		service.confirmLogout(w, r)
+		return
 	case "/signed-out":
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		_, _ = w.Write([]byte("Signed out of MemberID. You may close this page.\n"))
@@ -224,10 +234,31 @@ func (service *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Resource selection is not supported", http.StatusBadRequest)
 		return
 	}
+	if r.URL.Path == "/oauth/authorize" && r.Form.Get("request_uri") != "" {
+		service.rejectAuthorization(w, r, &oidc.Error{ErrorType: "request_uri_not_supported"})
+		return
+	}
 	if r.URL.Path == "/oauth/userinfo" {
 		w = userinfoWriter{w}
 	}
 	service.protocol.ServeHTTP(w, r)
+}
+
+func (service *Service) rejectAuthorization(w http.ResponseWriter, r *http.Request, protocolError error) {
+	request, err := op.ParseAuthorizeRequest(r, service.protocol.Decoder())
+	if err != nil {
+		op.AuthRequestError(w, r, nil, err, service.protocol)
+		return
+	}
+	registered, err := service.storage.client(request.ClientID)
+	if err != nil {
+		op.AuthRequestError(w, r, nil, oidc.ErrInvalidRequest(), service.protocol)
+		return
+	}
+	if err := op.ValidateAuthReqRedirectURI(registered, request.RedirectURI, request.ResponseType); err != nil {
+		protocolError = err
+	}
+	op.AuthRequestError(w, r, request, protocolError, service.protocol)
 }
 
 func (service *Service) Cleanup(ctx context.Context) error {

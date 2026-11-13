@@ -191,7 +191,20 @@ func (verifier *DingTalkVerifier) admit(ctx context.Context, tx pgx.Tx, proof Di
 		}
 		memberID = target.memberID
 	}
+	if memberID == "" && app.OrganizationID == SystemOrganizationID {
+		// Only an operator-selected existing Member can enter the system organization.
+		// Consume approval atomically with verified binding and session creation.
+		if err := tx.QueryRow(ctx, "DELETE FROM system_dingtalk_admissions WHERE namespace=$1 AND union_id=$2 AND expires_at>clock_timestamp() RETURNING member_id", app.Namespace, proof.member.UnionID).Scan(&memberID); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return Verification{}, ErrIneligible
+			}
+			return Verification{}, err
+		}
+	}
 	if memberID == "" {
+		if app.OrganizationID == SystemOrganizationID {
+			return Verification{}, ErrIneligible
+		}
 		memberID, err = NewID(MemberKind)
 		if err != nil {
 			return Verification{}, err

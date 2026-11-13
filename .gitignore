@@ -1,5 +1,7 @@
 /dist/
 /.local/
+/internal/console/static/*
+!/internal/console/static/.gitkeep
 /coverage.out
 *.test
 .env

@@ -2,7 +2,7 @@
 
 ## Setup
 
-Use Git, Go 1.27.4, a POSIX shell, and Gitleaks 8.30.1. On Windows, Git Bash provides the shell. Reuse a persistent Go installation or the official Go toolchain mechanism; do not install toolchains in temporary directories.
+Use Git, Go 1.27.4, Node.js 26.13.1 LTS with npm 11.20.0, a POSIX shell, and Gitleaks 8.30.1. On Windows, Git Bash provides the shell. Reuse persistent toolchain installations; do not install local toolchains in temporary directories. The frontend lockfile is `web/package-lock.json`.
 
 From the repository root, enable the versioned hooks:
 
@@ -21,7 +21,9 @@ gitleaks git --redact --no-banner --no-color
 git diff --check
 ```
 
-The check script disables parent Go workspaces, checks formatting, runs vet and tests, and builds `dist/memberid` (`memberid.exe` on Windows). Builds use `-trimpath -buildvcs=false` to omit local paths and implicit VCS metadata. The race detector requires a supported C toolchain; CI runs it on Linux.
+The check script installs the locked frontend dependencies, lints and builds the console, disables parent Go workspaces, checks Go formatting, runs vet and tests, and builds `dist/memberid` (`memberid.exe` on Windows). The generated console assets are embedded into that same executable. Builds use `-trimpath -buildvcs=false` to omit local paths and implicit VCS metadata. The race detector requires a supported C toolchain; CI runs it on Linux.
+
+For a focused frontend change, run `npm --prefix web ci`, `npm --prefix web run lint`, and `npm --prefix web run build` before rebuilding or running Go. Generated assets under `internal/console/static/` are ignored. A Go-only build without those assets can run protocol and operator functions, but `serve-console` requires a frontend build. See [console setup](docs/console.md) and the opt-in browser fixture there.
 
 The executable can serve process health alone or the configured [OIDC provider](docs/oidc.md); operator commands and the separate [management process](docs/management-api.md) manage stored organizations, Members, and explicit factor bindings. See [the implementation plan](docs/implementation-plan.md) for the remaining identity and OIDC work.
 
@@ -35,7 +37,13 @@ CI builds each native package, verifies its checksums and version, and checks th
 
 ## Pull requests
 
-Create a focused purpose-named branch from current `main`. Submit one independently reviewable outcome with its tests and documentation. Wait for CI and resolve blocking review findings before squash merging. Start dependent work from the updated `main`; do not accumulate completed PRs.
+Create a focused purpose-named branch from current `main`. For each independent issue, implement and validate the fix, submit one PR, wait for required checks, resolve blocking findings, and squash-merge it. Verify the merge, then start the next issue from the updated `main`. Do not accumulate completed, unmerged PRs unless the owner explicitly requests that workflow.
+
+Merge pull requests using squash merge. The PR merge operation must not create a merge commit; merge commits already present in the source branch are allowed.
+
+Direct pushes and force pushes to `main` are prohibited. Other branches may be merged, rebased, or force-pushed when needed. Update an existing PR by merging `main` into its branch or rebasing that branch. Push normally after a merge; after a rebase, use `git push --force-with-lease origin BRANCH` with the actual non-`main` branch name. A rejected lease means the remote branch changed; inspect and preserve that work before retrying.
+
+GitHub must retain the four required checks: `Build and test (ubuntu-24.04)`, `Build and test (windows-2025)`, `Repository security`, and `PostgreSQL integration`. Keep "Require branches to be up to date before merging" disabled and the PR branch-update option enabled. A newer `main` commit alone does not require updating or replacing the PR. Resolve merge conflicts or incompatible changes in the existing PR, and wait for required checks on its latest revision before squash merging.
 
 CI runs the build and tests on Linux and Windows, Linux race tests, and full-history secret scanning. The security job checks the pinned Gitleaks archive checksum before execution. Workflow dependencies are pinned to reviewed revisions.
 

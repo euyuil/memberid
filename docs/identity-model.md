@@ -6,6 +6,8 @@ An organization owns its Members. Each Member has a stable identifier that is in
 
 Organization, Member, and authentication-factor identifiers use the `org_`, `mbr_`, and `af_` prefixes followed by a fixed-width opaque encoding of a UUIDv7. Clients retain the complete identifier and do not derive identity from its timestamp, prefix, or contact data. Ordinary OIDC subjects identify Members within an issuer.
 
+The sole reserved exception is `org_system`, created by database initialization for platform administrator identities. It has no `kind` field, cannot be disabled, and is never a default destination for customers or unaffiliated people. Every Member still belongs to one organization. A Member must have an explicit administrator assignment and current eligibility to manage MemberID; belonging to `org_system` alone grants no privileges. See [administration access and bootstrap](console.md).
+
 ## Factors and explicit relationships
 
 A factor is uniquely identified by its type, provider namespace, and provider subject. Recording verified factor evidence does not create a Member or a binding.
@@ -14,7 +16,7 @@ A binding explicitly joins a factor to a Member in an organization. Database con
 
 Revocation retains the relationship and its uniqueness constraints. Repeating an active binding is idempotent; a revoked slot cannot be silently replaced or reactivated. Factor management that changes these relationships requires a separately authorized operation and fresh verification when authentication is involved.
 
-Phone authentication and [DingTalk authentication](dingtalk.md) are implemented. DingTalk admission requires current verified corporation membership and may create an independent Member without SMS. Provisioning a record or calling a storage operation is not a successful login.
+Phone authentication and [DingTalk authentication](dingtalk.md) are implemented. DingTalk admission requires current verified corporation membership and may create an independent Member without SMS in ordinary organizations. In `org_system`, admission additionally requires an existing explicit binding or the operator's one-use approval for an existing Member. Provisioning a record or calling a storage operation is not a successful login.
 
 ## Eligibility evidence
 

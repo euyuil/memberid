@@ -133,6 +133,10 @@ func respond(w http.ResponseWriter, status int, value any, err error) {
 			problem(w, http.StatusServiceUnavailable, "provider_unavailable")
 		case errors.Is(err, identity.ErrIneligible):
 			problem(w, http.StatusForbidden, "ineligible")
+		case errors.Is(err, identity.ErrForbidden):
+			problem(w, http.StatusForbidden, "forbidden")
+		case errors.Is(err, identity.ErrLastAdministrator):
+			problem(w, http.StatusConflict, "last_administrator")
 		default:
 			problem(w, http.StatusInternalServerError, "internal_error")
 		}
@@ -150,6 +154,11 @@ func problem(w http.ResponseWriter, status int, code string) {
 }
 
 // Management requests are flat JSON objects with exact, unique field names.
+// DecodeRequest shares the strict management JSON boundary with the console.
+func DecodeRequest(w http.ResponseWriter, r *http.Request, target any) bool {
+	return decode(w, r, target)
+}
+
 func decode(w http.ResponseWriter, r *http.Request, target any) bool {
 	contentType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
 	if err != nil || contentType != "application/json" {

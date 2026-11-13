@@ -16,10 +16,13 @@ import (
 	"github.com/zitadel/oidc/v3/pkg/op"
 )
 
-func (s *storage) CreateAuthRequest(ctx context.Context, input *oidc.AuthRequest, _ string) (op.AuthRequest, error) {
+func (s *storage) CreateAuthRequest(ctx context.Context, input *oidc.AuthRequest, hintSubject string) (op.AuthRequest, error) {
 	registered, err := s.client(input.ClientID)
 	if err != nil {
 		return nil, err
+	}
+	if input.ResponseMode != "" && input.ResponseMode != oidc.ResponseModeQuery && input.ResponseMode != oidc.ResponseModeFragment {
+		return nil, oidc.ErrInvalidRequest().WithDescription("Supported response modes are query and fragment")
 	}
 	challenge, err := base64.RawURLEncoding.DecodeString(input.CodeChallenge)
 	if err != nil || len(challenge) != 32 || input.CodeChallengeMethod != oidc.CodeChallengeMethodS256 {
@@ -52,7 +55,7 @@ func (s *storage) CreateAuthRequest(ctx context.Context, input *oidc.AuthRequest
 	if registered.registration.EvidenceScope != "" && slices.Contains(input.Scopes, registered.registration.EvidenceScope) {
 		audience = registered.registration.EvidenceAudience
 	}
-	request := &authorizationRequest{grant: grant{ID: newID(), ClientID: input.ClientID, Scopes: input.Scopes, Audience: []string{audience}}, Input: *input, BrowserHash: config.SecretHash(browser), CSRF: config.RandomSecret()}
+	request := &authorizationRequest{grant: grant{ID: newID(), ClientID: input.ClientID, Scopes: input.Scopes, Audience: []string{audience}}, Input: *input, HintSubject: hintSubject, BrowserHash: config.SecretHash(browser), CSRF: config.RandomSecret()}
 	data, err := json.Marshal(request)
 	if err != nil {
 		return nil, err
@@ -332,18 +335,10 @@ func (s *storage) RevokeToken(ctx context.Context, id, subject, clientID string)
 	return nil
 }
 func (s *storage) TerminateSession(context.Context, string, string) error {
-	return oidc.ErrInvalidRequest().WithDescription("id_token_hint is required")
+	return oidc.ErrInvalidRequest().WithDescription("Use the browser logout endpoint")
 }
-func (s *storage) TerminateSessionFromRequest(ctx context.Context, input *op.EndSessionRequest) (string, error) {
-	if input.IDTokenHintClaims == nil || input.IDTokenHintClaims.SessionID == "" {
-		return "", oidc.ErrInvalidRequest()
-	}
-	sessionID := input.IDTokenHintClaims.SessionID
-	logout, ok := ctx.Value(logoutKey{}).(logoutContext)
-	if !ok {
-		return "", oidc.ErrInvalidRequest()
-	}
-	err := pgx.BeginFunc(ctx, s.service.store.Database(), func(tx pgx.Tx) error {
+func (s *storage) endSession(ctx context.Context, sessionID, secret string) error {
+	return pgx.BeginFunc(ctx, s.service.store.Database(), func(tx pgx.Tx) error {
 		var expected string
 		err := tx.QueryRow(ctx, "SELECT secret_hash FROM oidc_sessions WHERE id=$1 FOR UPDATE", sessionID).Scan(&expected)
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -352,14 +347,7 @@ func (s *storage) TerminateSessionFromRequest(ctx context.Context, input *op.End
 		if err != nil {
 			return err
 		}
-		if logout.secret != "" && !sameSecret(expected, config.SecretHash(logout.secret)) {
-			return oidc.ErrInvalidRequest()
-		}
-		var issued bool
-		if err := tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM oidc_grants WHERE session_id=$1 AND client_id=$2 AND COALESCE(NULLIF(data->>'memberId',''),data->>'factorId')=$3)", sessionID, input.ClientID, input.UserID).Scan(&issued); err != nil {
-			return err
-		}
-		if !issued {
+		if !sameSecret(expected, config.SecretHash(secret)) {
 			return oidc.ErrInvalidRequest()
 		}
 		if _, err := tx.Exec(ctx, "UPDATE oidc_sessions SET revoked_at=$2 WHERE id=$1", sessionID, s.service.now()); err != nil {
@@ -368,8 +356,4 @@ func (s *storage) TerminateSessionFromRequest(ctx context.Context, input *op.End
 		_, err = tx.Exec(ctx, "UPDATE oidc_grants SET revoked_at=$2 WHERE session_id=$1", sessionID, s.service.now())
 		return err
 	})
-	if err == nil {
-		logout.clear()
-	}
-	return input.RedirectURI, err
 }
