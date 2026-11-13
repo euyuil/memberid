@@ -115,7 +115,8 @@ func (w userinfoWriter) WriteHeader(status int) {
 
 func (service *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
-	w.Header().Set("Referrer-Policy", "no-referrer")
+	// Preserve Origin on same-origin form POSTs without sending cross-origin referrers.
+	w.Header().Set("Referrer-Policy", "same-origin")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("X-Frame-Options", "DENY")
 	if len(r.URL.RawQuery) > 32<<10 {
