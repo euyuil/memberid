@@ -53,12 +53,14 @@ The repository is being bootstrapped. These guidelines define intended implement
 
 ## Testing and Acceptance
 
+- During the demo stage, allow breaking changes and qualify fresh installations and current behavior without upgrade rehearsals, historical-data migrations, or speculative compatibility layers. This does not authorize deleting existing data.
+- Prioritize implemented business behavior and focused automated checks. Use actual-browser inspection for a concrete UI or browser-specific uncertainty, not as a mandatory gate for every change. Do not repeat passed acceptance without a relevant change, failed assertion, or unresolved gap.
 - Test meaningful behavior and security regressions, not implementation details or coverage counts. Reuse existing helpers before adding new test infrastructure.
 - Use synthetic identities, credentials, organizations, and fixtures. Isolate test databases and state, clean up owned test resources, and never run destructive tests against a user's working database.
 - Stub external providers in unit tests. Use targeted integration tests for actual database transactions, token issuance and validation, session expiry, concurrent code redemption, Refresh Token rotation and replay, revocation, and organization isolation.
 - Verify that separate Members remain distinct even when they share contact attributes. Test account binding and management authorization boundaries explicitly.
 - Verify discovery, authorization, token exchange, UserInfo, key rotation, and supported logout behavior through real HTTP interfaces. Include negative cases for invalid clients, redirect URIs, audiences, expired credentials, and replayed credentials.
-- Validate GitLab compatibility with an unmodified GitLab deployment and its standard OIDC integration. Document the exact versions, configuration, and observed outcomes. A simulated client or HTTP-only test is not proof of real GitLab login.
+- Validate GitLab compatibility with an unmodified GitLab deployment and its standard OIDC integration. Document the exact versions, configuration, and observed outcomes. A simulated client is insufficient. Automated checks against an actual GitLab deployment must complete its OIDC callback and confirm its authenticated application session; distinguish this from actual-browser inspection.
 - Keep generic interoperability checks here and application-specific integration checks in each consuming application. Both must consume the same MemberID release implementation.
 - Run checks appropriate to the change and report their results. Distinguish static checks, unit tests, database integration tests, browser verification, real provider verification, and deployed acceptance. Mark checks not performed or blocked explicitly.
 - Do not invent existing CI jobs, scripts, coverage thresholds, or successful checks. Follow the tooling actually present in the repository.
