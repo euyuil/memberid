@@ -10,6 +10,26 @@ memberid database init
 
 This is an explicit installation operation. It refuses existing user relations and never resets, replaces, or migrates an existing database. Normal startup does not initialize schema.
 
+## Check an existing database
+
+```sh
+memberid database check
+```
+
+The command uses `MEMBERID_DATABASE_URL` to connect and check the schema-version
+marker through the same path as normal startup. Success returns
+`{"compatible":true}`. Missing or incompatible schema, connection failures and
+insufficient read permissions return a nonzero exit status. The command never
+initializes, migrates or writes to the database; it also works with read-only
+transactions. No installation directory, signing key, authentication-provider
+configuration or provider network request is needed.
+
+Use this check before deploying an executable against an existing database.
+It checks connectivity and the declared schema version, not every table,
+application write permission, provider readiness or a completed login. Preserve
+an incompatible database and choose a separately prepared installation; retrying
+`database init` is not a repair or upgrade operation.
+
 ## Provision identities
 
 ```sh

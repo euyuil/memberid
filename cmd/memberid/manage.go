@@ -13,7 +13,7 @@ import (
 
 func manage(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	if len(args) < 2 {
-		return errors.New("usage: memberid database init | organization create | member <create|block|unblock>")
+		return errors.New("usage: memberid database <init|check> | organization create | member <create|block|unblock>")
 	}
 	if args[0] == "factor" || args[0] == "member" && args[1] == "bind-factor" {
 		return manageBinding(ctx, args, stdout, stderr)
@@ -23,8 +23,16 @@ func manage(ctx context.Context, args []string, stdout, stderr io.Writer) error 
 		return errors.New("MEMBERID_DATABASE_URL is required")
 	}
 	if args[0] == "database" {
-		if args[1] != "init" || len(args) != 2 {
-			return errors.New("usage: memberid database init")
+		if (args[1] != "init" && args[1] != "check") || len(args) != 2 {
+			return errors.New("usage: memberid database <init|check>")
+		}
+		if args[1] == "check" {
+			store, err := identity.Open(ctx, databaseURL)
+			if err != nil {
+				return err
+			}
+			defer store.Close()
+			return json.NewEncoder(stdout).Encode(map[string]bool{"compatible": true})
 		}
 		if err := identity.Initialize(ctx, databaseURL); err != nil {
 			return err
