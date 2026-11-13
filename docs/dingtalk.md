@@ -48,7 +48,7 @@ Management request logs record only the installation principal, method, route te
 
 Tests simulate DingTalk responses and use disposable PostgreSQL databases. They cover request encoding, error redaction, redirect rejection, response limits, encrypted storage and restart, wrong keys, ciphertext substitution, stable bindings, failed-candidate preservation, conflicting initial configuration and rotations, disabled organizations during provider I/O, and the CLI/HTTP contracts. HTTP and database tests also cover DingTalk-only OIDC login, distinct organization subjects, standard refresh, callback browser binding and replay, and cancellation or configuration changes during provider verification. These checks simulate the upstream provider; they do not establish live DingTalk credentials or actual provider consent.
 
-The fresh-install schema is version 13. Startup refuses older schemas without resetting or migrating their data.
+The fresh-install schema is version 14. Startup refuses older schemas without resetting or migrating their data.
 
 The reserved `org_system` organization accepts only explicitly provisioned Members. Unlike ordinary organizations, it does not automatically admit every verified employee. Use the [system Member bootstrap](administration.md#bootstrap-and-recovery) operator approval before the intended person's fresh DingTalk login; administrator assignment remains a separate step.
 

@@ -28,6 +28,9 @@ jobs:
         with:
           go-version-file: go.mod
           cache: false
+      - name: Install reviewed Node LTS
+        shell: bash
+        run: sh scripts/ci-node.sh
       - name: Check and build
         shell: bash
         run: sh scripts/check.sh

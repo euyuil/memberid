@@ -90,7 +90,7 @@ func TestDatabaseCheckUsesReadOnlyStartupValidation(t *testing.T) {
 		t.Fatal("incompatible schema check did not fail without success output", err)
 	}
 	var version int
-	if err := connection.QueryRow(t.Context(), "SELECT version FROM memberid_schema").Scan(&version); err != nil || version != 12 {
+	if err := connection.QueryRow(t.Context(), "SELECT version FROM memberid_schema").Scan(&version); err != nil || version != 13 {
 		t.Fatal("incompatible schema was changed", err)
 	}
 }

@@ -2,7 +2,7 @@
 
 ## Setup
 
-Use Git, Go 1.27.4, a POSIX shell, and Gitleaks 8.30.1. On Windows, Git Bash provides the shell. Reuse a persistent Go installation or the official Go toolchain mechanism; do not install toolchains in temporary directories.
+Use Git, Go 1.27.4, Node.js 26.13.1 LTS with npm 11.20.0, a POSIX shell, and Gitleaks 8.30.1. On Windows, Git Bash provides the shell. Reuse persistent toolchain installations; do not install local toolchains in temporary directories. The frontend lockfile is `web/package-lock.json`.
 
 From the repository root, enable the versioned hooks:
 
@@ -21,7 +21,9 @@ gitleaks git --redact --no-banner --no-color
 git diff --check
 ```
 
-The check script disables parent Go workspaces, checks formatting, runs vet and tests, and builds `dist/memberid` (`memberid.exe` on Windows). Builds use `-trimpath -buildvcs=false` to omit local paths and implicit VCS metadata. The race detector requires a supported C toolchain; CI runs it on Linux.
+The check script installs the locked frontend dependencies, lints and builds the console, disables parent Go workspaces, checks Go formatting, runs vet and tests, and builds `dist/memberid` (`memberid.exe` on Windows). The generated console assets are embedded into that same executable. Builds use `-trimpath -buildvcs=false` to omit local paths and implicit VCS metadata. The race detector requires a supported C toolchain; CI runs it on Linux.
+
+For a focused frontend change, run `npm --prefix web ci`, `npm --prefix web run lint`, and `npm --prefix web run build` before rebuilding or running Go. Generated assets under `internal/console/static/` are ignored. A Go-only build without those assets can run protocol and operator functions, but `serve-console` requires a frontend build. See [console setup](docs/console.md) and the opt-in browser fixture there.
 
 The executable can serve process health alone or the configured [OIDC provider](docs/oidc.md); operator commands and the separate [management process](docs/management-api.md) manage stored organizations, Members, and explicit factor bindings. See [the implementation plan](docs/implementation-plan.md) for the remaining identity and OIDC work.
 
