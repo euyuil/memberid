@@ -17,7 +17,7 @@ A stored administrator assignment plus a currently eligible Member is required f
 | Grant/revoke administrator assignment | Any organization | Own organization |
 | Read bindings and management events | Any organization | Own organization |
 
-Platform administrators can select another organization to manage while retaining their original operator identity. These permissions belong exclusively to MemberID management and are not added to business application identity claims. There are no custom roles, invitations, deletion, bulk operations, credential resets, provider configuration pages, or client-registration pages in this version. Provider configuration, explicit factor binding, and first-administrator recovery remain operator tasks.
+Platform administrators can switch organizations from the management scope in the header while retaining their original operator identity. The selection applies to the organization workspace and operation history. Organization administrators see their own organization in the header. These permissions belong exclusively to MemberID management and are not added to business application identity claims. There are no custom roles, invitations, deletion, bulk operations, credential resets, provider configuration pages, or client-registration pages in this version. Provider configuration, explicit factor binding, and first-administrator recovery remain operator tasks.
 
 ## Build and register the console
 
