@@ -18,6 +18,8 @@ Discover configuration at `ISSUER/.well-known/openid-configuration`.
 
 Authorization uses `response_type=code`, mandatory PKCE `S256`, and the `openid` scope. Token exchange, introspection, and revocation require a form-encoded POST body and `client_secret_basic`. Query-string credentials, body client secrets, and combined client-authentication methods are rejected. ID Tokens and JWT access tokens use RS256 and a public-key-derived `kid`. Discovery advertises only the enabled profile, including the registered custom evidence scopes.
 
+Authorization responses support `query` (the default) and `fragment`, as advertised in Discovery. `form_post` and other response modes are not enabled and receive `invalid_request` before login. Clients must select one of the advertised modes; successful responses and interaction errors use that selected mode.
+
 Clients explicitly registered with `refresh=true` can request `offline_access` and use rotating Refresh Tokens at the standard token endpoint. Other clients cannot obtain or use refresh grants. Discovery advertises refresh only when at least one registered client enables it. There is no private renewal endpoint. Implicit flow, password grants, client credentials, token exchange, dynamic registration, request objects, device flow, and iframe session checks are not enabled.
 
 ## Login and independent subjects

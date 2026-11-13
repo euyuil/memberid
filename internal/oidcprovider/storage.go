@@ -21,6 +21,9 @@ func (s *storage) CreateAuthRequest(ctx context.Context, input *oidc.AuthRequest
 	if err != nil {
 		return nil, err
 	}
+	if input.ResponseMode != "" && input.ResponseMode != oidc.ResponseModeQuery && input.ResponseMode != oidc.ResponseModeFragment {
+		return nil, oidc.ErrInvalidRequest().WithDescription("Supported response modes are query and fragment")
+	}
 	challenge, err := base64.RawURLEncoding.DecodeString(input.CodeChallenge)
 	if err != nil || len(challenge) != 32 || input.CodeChallengeMethod != oidc.CodeChallengeMethodS256 {
 		return nil, oidc.ErrInvalidRequest().WithDescription("PKCE S256 is required")

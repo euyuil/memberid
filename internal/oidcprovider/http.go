@@ -183,6 +183,7 @@ func (service *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		metadata := op.CreateDiscoveryConfig(op.ContextWithIssuer(r.Context(), service.configuration.Issuer), service.protocol, service.storage)
 		// The library defaults include flows that this deployment profile does not enable.
 		metadata.ResponseTypesSupported = []string{"code"}
+		metadata.ResponseModesSupported = []string{"query", "fragment"}
 		metadata.GrantTypesSupported = []oidc.GrantType{oidc.GrantTypeCode}
 		if service.protocol.GrantTypeRefreshTokenSupported() {
 			metadata.GrantTypesSupported = append(metadata.GrantTypesSupported, oidc.GrantTypeRefreshToken)
