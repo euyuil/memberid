@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react"
 import {
   Building2,
+  Check,
+  ChevronDown,
   ChevronRight,
   Fingerprint,
   History,
@@ -38,6 +40,7 @@ import {
   DialogTitle,
   DialogDescription,
   DialogFooter,
+  DialogTrigger,
 } from "@/components/ui/dialog"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Separator } from "@/components/ui/separator"
@@ -144,7 +147,12 @@ export default function App() {
   const after = params.get("after") ?? ""
 
   useEffect(() => {
-    const change = () => setLocation(window.location.hash)
+    const change = () => {
+      setData({})
+      setLoading(true)
+      setError("")
+      setLocation(window.location.hash)
+    }
     const expired = () => setSession(null)
     window.addEventListener("memberid-sign-in-required", expired)
     window.addEventListener("hashchange", change)
@@ -180,11 +188,16 @@ export default function App() {
             before: params.get("before") ?? "",
             memberId: params.get("target") ?? "",
           })
-          result = {
-            events: (
-              await request<{ items: Event[] }>(`/api/events?${query}`, options)
-            ).items,
-          }
+          const [history, organization] = await Promise.all([
+            request<{ items: Event[] }>(`/api/events?${query}`, options),
+            org
+              ? request<Organization>(
+                  `/api/organizations/${encodeURIComponent(org)}`,
+                  options
+                )
+              : undefined,
+          ])
+          result = { events: history.items, organization }
         } else if (org) {
           const organization = await request<Organization>(
             `/api/organizations/${encodeURIComponent(org)}`,
@@ -270,6 +283,7 @@ export default function App() {
 
   const actor = session.actor
   const base = `/api/organizations/${encodeURIComponent(org)}`
+  const scopeName = org ? (data.organization?.name ?? org) : "所有组织"
   const selected = data.detail?.member
   const administrator =
     !!selected && !!data.detail?.administratorIds.includes(selected.id)
@@ -357,10 +371,20 @@ export default function App() {
       <main className="workspace">
         <header className="scope-bar">
           <span>管理范围</span>
-          <strong>
-            {data.organization?.name ??
-              (org || (actor.platform ? "所有组织" : "本组织"))}
-          </strong>
+          {actor.platform ? (
+            <OrganizationSwitcher
+              organizationId={org}
+              name={scopeName}
+              onSelect={(id) =>
+                navigate({
+                  ...(events ? { view: "events" } : {}),
+                  ...(id ? { org: id } : {}),
+                })
+              }
+            />
+          ) : (
+            <strong>{data.organization?.name ?? (org || "本组织")}</strong>
+          )}
           {org === "org_system" && <Badge variant="outline">系统组织</Badge>}
           <span className="scope-note">
             {actor.platform ? "切换组织不会改变操作者身份" : "仅限本组织"}
@@ -479,7 +503,7 @@ export default function App() {
                   />
                 </section>
               )}
-              {data.organization && !member && (
+              {data.organization && !events && !member && (
                 <>
                   <section className="organization-summary">
                     <div>
@@ -837,6 +861,148 @@ export default function App() {
           }}
         />
       )}
+    </div>
+  )
+}
+
+function OrganizationSwitcher({
+  organizationId,
+  name,
+  onSelect,
+}: {
+  organizationId: string
+  name: string
+  onSelect: (id: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger
+        render={<Button variant="outline" className="max-w-full min-w-0" />}
+        aria-label={`切换组织，当前为${name}`}
+      >
+        <span className="truncate">{name}</span>
+        <ChevronDown data-icon="inline-end" />
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>切换管理组织</DialogTitle>
+        </DialogHeader>
+        {open && (
+          <OrganizationChoices
+            organizationId={organizationId}
+            onSelect={(id) => {
+              setOpen(false)
+              if (id !== organizationId) onSelect(id)
+            }}
+          />
+        )}
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function OrganizationChoices({
+  organizationId,
+  onSelect,
+}: {
+  organizationId: string
+  onSelect: (id: string) => void
+}) {
+  const [after, setAfter] = useState("")
+  const [page, setPage] = useState<Page<Organization>>()
+  const [error, setError] = useState("")
+  const [retry, setRetry] = useState(0)
+
+  useEffect(() => {
+    const abort = new AbortController()
+    request<Page<Organization>>(
+      `/api/organizations?after=${encodeURIComponent(after)}`,
+      { signal: abort.signal }
+    )
+      .then((result) => {
+        if (!abort.signal.aborted) setPage(result)
+      })
+      .catch((err: Error) => {
+        if (!abort.signal.aborted) setError(err.message)
+      })
+    return () => abort.abort()
+  }, [after, retry])
+
+  const nextAfter = page?.nextAfter
+  const goToPage = (cursor: string) => {
+    setPage(undefined)
+    setAfter(cursor)
+  }
+
+  return (
+    <div className="grid min-w-0 gap-2">
+      <Button
+        variant="ghost"
+        className="w-full justify-between"
+        aria-current={!organizationId ? "true" : undefined}
+        onClick={() => onSelect("")}
+      >
+        所有组织
+        {!organizationId && <Check aria-hidden="true" />}
+      </Button>
+      <div className="grid min-h-20 max-h-[45dvh] content-start gap-1 overflow-y-auto border-y py-2">
+        {page ? (
+          page.items.map((organization) => (
+            <Button
+              key={organization.id}
+              variant="ghost"
+              className="h-auto min-w-0 justify-between gap-3 py-2 text-left"
+              aria-current={
+                organizationId === organization.id ? "true" : undefined
+              }
+              onClick={() => onSelect(organization.id)}
+            >
+              <span className="grid min-w-0 gap-1">
+                <span className="whitespace-normal wrap-anywhere">
+                  {organization.name}
+                  {organization.status !== "enabled" && "（已停用）"}
+                </span>
+                <code>{organization.id}</code>
+              </span>
+              {organizationId === organization.id && <Check aria-hidden="true" />}
+            </Button>
+          ))
+        ) : error ? (
+          <div className="grid justify-items-start gap-2 p-2">
+            <p role="status">{error}</p>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setError("")
+                setRetry((attempt) => attempt + 1)
+              }}
+            >
+              重试
+            </Button>
+          </div>
+        ) : (
+          <p className="muted p-2" role="status">
+            正在加载组织…
+          </p>
+        )}
+      </div>
+      <div className="flex justify-end gap-2">
+        <Button
+          variant="outline"
+          disabled={!page || !after}
+          onClick={() => goToPage("")}
+        >
+          第一页
+        </Button>
+        <Button
+          variant="outline"
+          disabled={!nextAfter}
+          onClick={() => nextAfter && goToPage(nextAfter)}
+        >
+          下一页
+        </Button>
+      </div>
     </div>
   )
 }
