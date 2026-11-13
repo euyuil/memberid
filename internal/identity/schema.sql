@@ -1,7 +1,7 @@
 CREATE TABLE memberid_schema (
-    version integer PRIMARY KEY CHECK (version = 13)
+    version integer PRIMARY KEY CHECK (version = 14)
 );
-INSERT INTO memberid_schema(version) VALUES (13);
+INSERT INTO memberid_schema(version) VALUES (14);
 
 CREATE TABLE organizations (
     id text COLLATE "C" PRIMARY KEY CHECK (id = 'org_system' OR id ~ '^org_[0-9bcdfghjkmnpqrstvwxz]{27}$'),
@@ -211,3 +211,19 @@ CREATE TABLE management_events (
     created_at timestamptz NOT NULL DEFAULT clock_timestamp()
 );
 CREATE INDEX management_event_directory ON management_events(organization_id,id);
+
+CREATE TABLE console_logins (
+    state_hash text PRIMARY KEY,
+    browser_hash text NOT NULL,
+    verifier text NOT NULL,
+    nonce text NOT NULL,
+    expires_at timestamptz NOT NULL
+);
+CREATE TABLE console_sessions (
+    secret_hash text PRIMARY KEY,
+    grant_id text COLLATE "C" NOT NULL REFERENCES oidc_grants(id) ON DELETE CASCADE,
+    member_id text COLLATE "C" NOT NULL REFERENCES members(id),
+    csrf text NOT NULL,
+    expires_at timestamptz NOT NULL,
+    absolute_expires_at timestamptz NOT NULL
+);

@@ -10,7 +10,7 @@ memberid database init
 
 This is an explicit installation operation. It refuses existing user relations and never resets, replaces, or migrates an existing database. Normal startup does not initialize schema.
 
-Fresh schema version 13 includes the reserved enabled organization `org_system`, without any Members or administrator assignments. See [administrator setup](administration.md) for explicit first-administrator provisioning and recovery, including phone and DingTalk-only paths.
+Fresh schema version 14 includes the reserved enabled organization `org_system`, without any Members or administrator assignments. See [console setup](console.md) for explicit first-administrator provisioning and recovery, including phone and DingTalk-only paths.
 
 ## Check an existing database
 

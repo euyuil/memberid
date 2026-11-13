@@ -35,4 +35,4 @@ The adapter and persisted verification service are implemented and tested. The c
 
 Tests inject a synthetic sender and use uniquely named databases in a disposable PostgreSQL server. They cover concurrent sends, concurrent verification, cross-transaction rejection, replay, persisted attempt limits, replacement, expiry, failed delivery, and absence of inferred membership. HTTP transport tests cover request encoding, an independently calculated signature vector, provider denials, redirect refusal, redacted errors, and no retries. These checks do not establish real SMS delivery.
 
-The initial database schema is now version 13. Normal startup checks its version and never upgrades or resets an existing database. This early development increment supports fresh installation; preserve existing databases and use an explicitly selected new database when testing the new schema.
+The initial database schema is now version 14. Normal startup checks its version and never upgrades or resets an existing database. This early development increment supports fresh installation; preserve existing databases and use an explicitly selected new database when testing the new schema.

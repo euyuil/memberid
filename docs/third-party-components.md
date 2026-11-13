@@ -25,7 +25,7 @@ Upstream records labelled `other` were inspected individually: the reviewed `@ac
 
 CI downloads the exact Gitleaks Linux x64 archive and verifies SHA-256 `551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb`. The archive contains the binary, README, and upstream MIT license; those files remain together in the runner's tool directory. Its compiled dependency versions and inspected license families are recorded in [the scanner inventory](gitleaks-components.md), including the conditions for external-tool-only MPL-2.0 usage. Review changes to the scanner and its distribution before updating this pin.
 
-No third-party fonts, icons, browser bundles, copied UI components, or generated client libraries are included in this initial implementation.
+The administration console now includes reviewed shadcn component source, React, Base UI, Lucide icons, and generated local CSS/JavaScript. It uses system fonts. Exact frontend/toolchain versions, transitive packages, platform-specific optional packages, and distribution boundaries are recorded in [the console inventory](web-components.md). Retained browser/source notices are in `third_party/web/NOTICES.txt` and accompany every distribution.
 
 ## PostgreSQL driver and tests
 
@@ -49,6 +49,7 @@ The following additional resolved runtime modules were reviewed from their exact
 | github.com/go-logr/logr | v1.4.4 | Apache-2.0 |
 | github.com/go-logr/stdr | v1.2.2 | Apache-2.0 |
 | github.com/gorilla/securecookie | v1.1.2 | BSD-3-Clause |
+| github.com/google/uuid | v1.6.0 | BSD-3-Clause |
 | github.com/muhlemmer/gu | v0.3.1 | Unlicense |
 | github.com/muhlemmer/httpforwarded | v0.1.0 | BSD-3-Clause |
 | github.com/rs/cors | v1.11.1 | MIT |
@@ -65,6 +66,8 @@ The existing pgx, x/sync, and x/text versions above remain part of the executabl
 Apache-2.0 preservation, notice, modification-marking, and patent conditions apply to distributed material. MIT and BSD notice/disclaimer conditions also apply. The exact `gu` Unlicense text grants unrestricted public-domain use with a warranty disclaimer; retain it as provenance. These reviewed components impose no application source-disclosure or commercial-use restriction. Their terms do not determine the project's own license.
 
 The resolved module graph also includes upstream test/tool-only modules: their actual license files, including nested material, were inspected. They use MIT, BSD, ISC, and Apache terms, remain unmodified in the module cache, and are not linked into the MemberID executable or shipped in a browser. A checksum entry is not a distribution of that module. Reassess this boundary if future tests import those modules directly or if additional tooling is packaged.
+
+The console's relying-party import also adds checksum records for upstream tests using `github.com/jeremija/gosubmit` v0.2.8 (MIT) and `golang.org/x/net` v0.55.0 (BSD-3-Clause). Their exact module license files were reviewed; these packages are not imported by MemberID or distributed in its executable. Preserve their notices if that distribution boundary changes.
 
 ## DingTalk stream transport
 

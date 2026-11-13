@@ -154,6 +154,11 @@ func problem(w http.ResponseWriter, status int, code string) {
 }
 
 // Management requests are flat JSON objects with exact, unique field names.
+// DecodeRequest shares the strict management JSON boundary with the console.
+func DecodeRequest(w http.ResponseWriter, r *http.Request, target any) bool {
+	return decode(w, r, target)
+}
+
 func decode(w http.ResponseWriter, r *http.Request, target any) bool {
 	contentType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
 	if err != nil || contentType != "application/json" {

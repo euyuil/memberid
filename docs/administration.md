@@ -1,10 +1,10 @@
 # Administrator identities and operator setup
 
-Fresh schema version **13** creates the enabled organization `org_system`, named `System organization`, with no Members or administrator assignments. The exact ID is reserved: ordinary creation and enrollment cannot claim it, and it cannot be disabled. There is no organization-kind field, default customer organization, organization-less Member, or global User.
+Fresh schema version **14** creates the enabled organization `org_system`, named `System organization`, with no Members or administrator assignments. The exact ID is reserved: ordinary creation and enrollment cannot claim it, and it cannot be disabled. There is no organization-kind field, default customer organization, organization-less Member, or global User.
 
 An administrator is an explicitly assigned Member with at least one currently eligible authentication binding. Membership in `org_system` alone grants no privileges. A system administrator can manage all organizations; an ordinary organization administrator is limited to their own organization. The identity store rechecks a Member administrator's current grant, SSO session, assignment, and eligibility when authorizing mutations. These roles belong to MemberID management and are not added to consuming applications' identity claims.
 
-This delivery exposes operator bootstrap through the CLI. The private management API retains its independent installation-wide credential and does not accept Member actor impersonation. Browser administration is a separate delivery.
+The [shared administration console](console.md) exposes individual administrator access; operator bootstrap remains available through the CLI. The private management API retains its independent installation-wide credential and does not accept Member actor impersonation.
 
 ## Bootstrap and recovery
 
@@ -46,7 +46,7 @@ Manual administrator removal, Member blocking, and binding revocation cannot rem
 
 Successful administrator changes, admission preparation, and selected organization/Member updates or binding revocations write atomic management events. Trusted operator entry points use `installation-operator`; authenticated Member mutations use the initiating Member ID. Rejected operations do not leave success events. Records contain target IDs, action, changed fields, and time; admission union IDs, tokens, codes, and provider secrets are excluded.
 
-These events are a limited management change history, not a complete authentication/security log. Historical actions, failed attempts, and provider reconciliation are not reconstructed. Event reading is currently an internal store capability. Configure database access, backups, and retention for private identity data; automatic retention is not implemented.
+These events are a limited management change history, not a complete authentication/security log. Historical actions, failed attempts, and provider reconciliation are not reconstructed. Administrators can read events within their scope through the console. Configure database access, backups, and retention for private identity data; automatic retention is not implemented.
 
 ## Validation boundaries
 

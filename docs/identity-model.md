@@ -6,7 +6,7 @@ An organization owns its Members. Each Member has a stable identifier that is in
 
 Organization, Member, and authentication-factor identifiers use the `org_`, `mbr_`, and `af_` prefixes followed by a fixed-width opaque encoding of a UUIDv7. Clients retain the complete identifier and do not derive identity from its timestamp, prefix, or contact data. Ordinary OIDC subjects identify Members within an issuer.
 
-The sole reserved exception is `org_system`, created by database initialization for platform administrator identities. It has no `kind` field, cannot be disabled, and is never a default destination for customers or unaffiliated people. Every Member still belongs to one organization. A Member must have an explicit administrator assignment and current eligibility to manage MemberID; belonging to `org_system` alone grants no privileges. See [administration access and bootstrap](administration.md).
+The sole reserved exception is `org_system`, created by database initialization for platform administrator identities. It has no `kind` field, cannot be disabled, and is never a default destination for customers or unaffiliated people. Every Member still belongs to one organization. A Member must have an explicit administrator assignment and current eligibility to manage MemberID; belonging to `org_system` alone grants no privileges. See [administration access and bootstrap](console.md).
 
 ## Factors and explicit relationships
 
