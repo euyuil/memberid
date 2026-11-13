@@ -30,6 +30,8 @@ Clients receive only requested supported identity information. `profile` supplie
 
 Interactive consent is required unless the operator explicitly marks the registered policy `preauthorized`. `prompt=consent` still requires confirmation. `prompt=login` and `max_age` require appropriate fresh authentication. `prompt=none` returns a standard interaction error when authentication, consent, or an unambiguous eligible Member is unavailable. An existing session does not silently select one of several organization identities.
 
+When an authorization request supplies `id_token_hint`, the provider library validates it and MemberID retains its subject for that transaction. Completing authentication as a different Member or factor returns `login_required` to the registered callback instead of issuing a code for the other identity. This also applies to silent authorization.
+
 A separately registered `subjectKind=factor` client may receive a verified phone-factor subject before membership exists. This policy requires an operator-selected evidence scope and fixed audience. It does not create a Member or grant access to an organization. Ordinary clients cannot request this subject mode themselves.
 
 ## Token validation and eligibility
