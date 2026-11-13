@@ -20,6 +20,8 @@ Authorization uses `response_type=code`, mandatory PKCE `S256`, and the `openid`
 
 Clients explicitly registered with `refresh=true` can request `offline_access` and use rotating Refresh Tokens at the standard token endpoint. Other clients cannot obtain or use refresh grants. Discovery advertises refresh only when at least one registered client enables it. There is no private renewal endpoint. Implicit flow, password grants, client credentials, token exchange, dynamic registration, request objects, device flow, and iframe session checks are not enabled.
 
+Client authentication failures at the token, introspection, and revocation endpoints return HTTP 401 with `WWW-Authenticate: Basic realm="MemberID"`. Token and revocation responses include the OAuth `invalid_client` JSON error. Successful requests and other protocol errors do not carry that authentication challenge.
+
 ## Login and independent subjects
 
 The browser follows the application's authorization redirect to MemberID. MemberID binds the login transaction to an HttpOnly browser cookie and verifies login form submissions with an exact Origin and transaction-specific CSRF value. Phone verification or an enabled DingTalk login then establishes a server-side SSO session. The user selects an explicitly bound, currently eligible Member in the organization's context. A client may be restricted to one organization.
