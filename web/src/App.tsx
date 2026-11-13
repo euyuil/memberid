@@ -123,6 +123,32 @@ function Status({ active, text }: { active: boolean; text?: string }) {
     </Badge>
   )
 }
+function MemberStatus({ member }: { member: Member }) {
+  return (
+    <Status
+      active={member.status === "active"}
+      text={member.status === "active" ? "未阻断" : "已阻断"}
+    />
+  )
+}
+
+function signInBlockers(
+  organization: Organization,
+  member: Member,
+  bindings: Binding[]
+) {
+  return [
+    ...(organization.status !== "enabled" ? ["所属组织已停用"] : []),
+    ...(member.blockSources.includes("manual") ? ["成员已被人工封禁"] : []),
+    ...(member.blockSources.includes("externalDeparture")
+      ? ["外部身份已标记为离职"]
+      : []),
+    ...(!bindings.some((binding) => binding.status === "active")
+      ? [bindings.length ? "登录方式的绑定均已撤销" : "成员尚未绑定登录方式"]
+      : []),
+  ]
+}
+
 function NoRecords({
   text,
   description = "新记录会显示在这里。",
@@ -313,6 +339,10 @@ export default function App() {
   const selected = data.detail?.member
   const administrator =
     !!selected && !!data.detail?.administratorIds.includes(selected.id)
+  const blockers =
+    selected && data.detail && data.organization
+      ? signInBlockers(data.organization, selected, data.detail.bindings)
+      : []
   const adminTitle = org === "org_system" ? "平台管理员" : "组织管理员"
   const rename = (field: string, value: string, path: string, title: string) =>
     setAction({
@@ -644,10 +674,7 @@ export default function App() {
                               </Button>
                             </TableCell>
                             <TableCell>
-                              <Status
-                                active={m.status === "active"}
-                                text={m.status === "active" ? "正常" : "已阻断"}
-                              />
+                              <MemberStatus member={m} />
                             </TableCell>
                             <TableCell>
                               {data.members!.administratorIds.includes(m.id) ? (
@@ -692,12 +719,7 @@ export default function App() {
                       </dd>
                       <dt>身份状态</dt>
                       <dd>
-                        <Status
-                          active={selected.status === "active"}
-                          text={
-                            selected.status === "active" ? "正常" : "已阻断"
-                          }
-                        />
+                        <MemberStatus member={selected} />
                       </dd>
                       <dt>阻断原因</dt>
                       <dd>
@@ -785,7 +807,15 @@ export default function App() {
                   </section>
                   <section className="detail-section">
                     <h2>登录方式</h2>
-                    {data.detail.bindings.length ? (
+                    {blockers.length > 0 && (
+                      <div className="grid gap-2">
+                        <Badge variant="destructive">当前无法登录</Badge>
+                        <ul className="list-disc space-y-1 pl-5 text-sm">
+                          {blockers.map((reason) => <li key={reason}>{reason}</li>)}
+                        </ul>
+                      </div>
+                    )}
+                    {data.detail.bindings.length > 0 && (
                       data.detail.bindings.map((b) => (
                         <div className="binding-row" key={b.id}>
                           <strong>
@@ -797,13 +827,11 @@ export default function App() {
                           />
                         </div>
                       ))
-                    ) : (
-                      <p className="muted">
-                        尚未配置登录方式。完成身份验证与绑定后，成员才能登录。
-                      </p>
                     )}
                     <p className="footnote">
-                      绑定、成员和组织状态共同决定能否登录。
+                      {data.detail.bindings.length === 0
+                        ? "请按本组织的身份验证与绑定流程配置登录方式。"
+                        : "登录时还会检查验证因子及提供方当前状态。"}
                     </p>
                   </section>
                   <section className="detail-section">
@@ -1118,7 +1146,7 @@ function MemberSearch({
           onChange={(event) => setStatus(event.target.value)}
         >
           <option value="">全部状态</option>
-          <option value="active">正常</option>
+          <option value="active">未阻断</option>
           <option value="blocked">已阻断</option>
         </select>
       </label>
