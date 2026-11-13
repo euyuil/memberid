@@ -8,6 +8,7 @@ import {
   History,
   LogOut,
   Plus,
+  Search,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -96,7 +97,7 @@ type Action = {
 const messages: Record<string, string> = {
   forbidden: "没有操作权限，或成员尚未具备可用的登录方式。",
   last_administrator: "需要保留至少一名可用管理员，请先设置另一名管理员。",
-  invalid_request: "请检查填写内容。名称不能为空，最多 128 个字符。",
+  invalid_request: "请检查填写内容。",
   not_found: "记录不存在，请返回列表刷新。",
   conflict: "当前状态发生冲突，请刷新后重新检查。",
   invalid_csrf: "页面验证已失效，请刷新后重试。",
@@ -122,12 +123,18 @@ function Status({ active, text }: { active: boolean; text?: string }) {
     </Badge>
   )
 }
-function NoRecords({ text }: { text: string }) {
+function NoRecords({
+  text,
+  description = "新记录会显示在这里。",
+}: {
+  text: string
+  description?: string
+}) {
   return (
     <Empty>
       <EmptyHeader>
         <EmptyTitle>{text}</EmptyTitle>
-        <EmptyDescription>新记录会显示在这里。</EmptyDescription>
+        <EmptyDescription>{description}</EmptyDescription>
       </EmptyHeader>
     </Empty>
   )
@@ -147,6 +154,13 @@ export default function App() {
   const events = params.get("view") === "events"
   const historyTarget = params.get("target") ?? ""
   const after = params.get("after") ?? ""
+  const memberFilters = {
+    q: params.get("q") ?? "",
+    status: params.get("status") ?? "",
+    administrator: params.get("administrator") ?? "",
+  }
+  const memberListRoute = { org, ...memberFilters, ...(after ? { after } : {}) }
+  const memberSearchActive = Object.values(memberFilters).some(Boolean)
 
   useEffect(() => {
     const change = () => {
@@ -226,7 +240,7 @@ export default function App() {
             : {
                 organization,
                 members: await request<Data["members"]>(
-                  `/api/organizations/${encodeURIComponent(org)}/members?after=${encodeURIComponent(after)}`,
+                  `/api/organizations/${encodeURIComponent(org)}/members?${new URLSearchParams({ ...memberFilters, after })}`,
                   options
                 ),
               }
@@ -439,7 +453,7 @@ export default function App() {
                   {data.historyMember && (
                     <Button
                       variant="outline"
-                      onClick={() => navigate({ org, member: historyTarget })}
+                      onClick={() => navigate({ ...memberListRoute, member: historyTarget })}
                     >
                       返回成员详情
                     </Button>
@@ -461,7 +475,7 @@ export default function App() {
               {org && !events && (member || actor.platform) && (
                 <Button
                   variant="outline"
-                  onClick={() => navigate(member ? { org } : {})}
+                  onClick={() => navigate(member ? memberListRoute : {})}
                 >
                   {member ? "返回成员列表" : "所有组织"}
                 </Button>
@@ -475,6 +489,14 @@ export default function App() {
               </Alert>
             )}
           </div>
+          {org && !events && !member && (actor.platform || org === actor.organizationId) && (
+            <MemberSearch
+              key={`${org}:${JSON.stringify(memberFilters)}`}
+              filters={memberFilters}
+              onSubmit={(filters) => navigate({ org, ...filters })}
+              onClear={() => navigate({ org })}
+            />
+          )}
           {loading ? (
             <div className="flex flex-col gap-4">
               <Skeleton className="h-12 w-full" />
@@ -531,7 +553,7 @@ export default function App() {
                   <Pager
                     after={after}
                     next={data.organizations.nextAfter}
-                    org=""
+                    route={{}}
                   />
                 </section>
               )}
@@ -614,7 +636,9 @@ export default function App() {
                             <TableCell>
                               <Button
                                 variant="link"
-                                onClick={() => navigate({ org, member: m.id })}
+                                onClick={() =>
+                                  navigate({ ...memberListRoute, member: m.id })
+                                }
                               >
                                 {m.displayName}
                               </Button>
@@ -640,12 +664,19 @@ export default function App() {
                       </TableBody>
                     </Table>
                     {data.members?.items.length === 0 && (
-                      <NoRecords text="还没有成员" />
+                      <NoRecords
+                        text={memberSearchActive ? "没有符合条件的成员" : "还没有成员"}
+                        description={
+                          memberSearchActive
+                            ? "修改搜索条件或清除筛选后再试。"
+                            : undefined
+                        }
+                      />
                     )}
                     <Pager
                       after={after}
                       next={data.members?.nextAfter}
-                      org={org}
+                      route={{ org, ...memberFilters }}
                     />
                   </section>
                 </>
@@ -783,7 +814,7 @@ export default function App() {
                     <Button
                       variant="outline"
                       onClick={() =>
-                        navigate({ view: "events", org, target: member })
+                        navigate({ ...memberListRoute, view: "events", target: member })
                       }
                     >
                       查看记录
@@ -849,8 +880,8 @@ export default function App() {
                       disabled={!params.get("before")}
                       onClick={() =>
                         navigate({
+                          ...memberListRoute,
                           view: "events",
-                          org,
                           target: historyTarget,
                         })
                       }
@@ -862,8 +893,8 @@ export default function App() {
                       disabled={data.events.length < 50}
                       onClick={() =>
                         navigate({
+                          ...memberListRoute,
                           view: "events",
-                          org,
                           target: historyTarget,
                           before: String(data.events!.at(-1)!.id),
                         })
@@ -1042,28 +1073,111 @@ function OrganizationChoices({
   )
 }
 
+type MemberFilters = {
+  q: string
+  status: string
+  administrator: string
+}
+
+function MemberSearch({
+  filters,
+  onSubmit,
+  onClear,
+}: {
+  filters: MemberFilters
+  onSubmit: (filters: MemberFilters) => void
+  onClear: () => void
+}) {
+  const [query, setQuery] = useState(filters.q)
+  const [status, setStatus] = useState(filters.status)
+  const [administrator, setAdministrator] = useState(filters.administrator)
+  return (
+    <form
+      aria-label="查找成员"
+      className="mb-4 flex flex-wrap items-end gap-3 rounded-lg border p-4"
+      onSubmit={(event) => {
+        event.preventDefault()
+        onSubmit({ q: query.trim(), status, administrator })
+      }}
+    >
+      <label className="grid w-full max-w-72 gap-1 text-xs">
+        姓名或成员 ID
+        <Input
+          type="search"
+          placeholder="输入姓名或成员 ID"
+          value={query}
+          maxLength={128}
+          onChange={(event) => setQuery(event.target.value)}
+        />
+      </label>
+      <label className="grid gap-1 text-xs">
+        身份状态
+        <select
+          className="h-8 rounded-lg border bg-background px-2 text-sm"
+          value={status}
+          onChange={(event) => setStatus(event.target.value)}
+        >
+          <option value="">全部状态</option>
+          <option value="active">正常</option>
+          <option value="blocked">已阻断</option>
+        </select>
+      </label>
+      <label className="grid gap-1 text-xs">
+        管理权限
+        <select
+          className="h-8 rounded-lg border bg-background px-2 text-sm"
+          value={administrator}
+          onChange={(event) => setAdministrator(event.target.value)}
+        >
+          <option value="">全部成员</option>
+          <option value="yes">管理员</option>
+          <option value="no">普通成员</option>
+        </select>
+      </label>
+      <Button type="submit" variant="outline">
+        <Search data-icon="inline-start" />
+        搜索
+      </Button>
+      {(query || status || administrator || Object.values(filters).some(Boolean)) && (
+        <Button
+          type="button"
+          variant="ghost"
+          onClick={() => {
+            setQuery("")
+            setStatus("")
+            setAdministrator("")
+            onClear()
+          }}
+        >
+          清除筛选
+        </Button>
+      )}
+    </form>
+  )
+}
+
 function Pager({
   after,
   next,
-  org,
+  route,
 }: {
   after: string
   next?: string
-  org: string
+  route: Record<string, string>
 }) {
   return (
     <div className="pagination">
       <Button
         variant="outline"
         disabled={!after}
-        onClick={() => navigate(org ? { org } : {})}
+        onClick={() => navigate(route)}
       >
         第一页
       </Button>
       <Button
         variant="outline"
         disabled={!next}
-        onClick={() => navigate({ ...(org ? { org } : {}), after: next! })}
+        onClick={() => next && navigate({ ...route, after: next })}
       >
         下一页
       </Button>
@@ -1101,7 +1215,7 @@ function ActionDialog({
             e.preventDefault()
             setError("")
             if (action.field && (!value.trim() || [...value].length > 128)) {
-              setError(messages.invalid_request)
+              setError("请检查填写内容。名称不能为空，最多 128 个字符。")
               return
             }
             setPending(true)

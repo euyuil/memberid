@@ -278,7 +278,13 @@ func (s *Service) organizations(w http.ResponseWriter, r *http.Request) {
 }
 func (s *Service) members(w http.ResponseWriter, r *http.Request) {
 	org := r.PathValue("organizationId")
-	v, e := s.store.Members(r.Context(), org, r.URL.Query().Get("after"), 50)
+	q := r.URL.Query()
+	filter := identity.MemberDirectoryFilter{
+		Query:         q.Get("q"),
+		Status:        q.Get("status"),
+		Administrator: q.Get("administrator"),
+	}
+	v, e := s.store.MemberDirectory(r.Context(), org, q.Get("after"), 50, filter)
 	if e != nil {
 		respond(w, nil, e)
 		return

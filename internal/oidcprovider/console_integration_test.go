@@ -130,6 +130,63 @@ func TestConsoleOIDCOrganizationScopeAndRevocation(t *testing.T) {
 	consoleJSON(t, f, server, "GET", "/api/session", "", "", 401)
 }
 
+func TestConsoleMemberSearchAcrossPagesAndWithinOrganization(t *testing.T) {
+	f := newFixture(t)
+	if err := f.store.SetAdministrator(t.Context(), identity.ManagementActor{}, f.member.OrganizationID, f.member.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	server := consoleFixture(t, f)
+	consoleLogin(t, f, server, f.member.ID)
+	base := "/api/organizations/" + f.member.OrganizationID + "/members"
+
+	// Choose the search target from the second page so its position is deterministic.
+	for range 50 {
+		if _, err := f.store.CreateMember(t.Context(), f.member.OrganizationID, "", "Other member"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	initial := consoleJSON(t, f, server, "GET", base, "", "", 200)
+	next, ok := initial["nextAfter"].(string)
+	if !ok || next == "" || len(initial["items"].([]any)) != 50 {
+		t.Fatalf("unfiltered directory did not preserve its first page: %+v", initial)
+	}
+	page := consoleJSON(t, f, server, "GET", base+"?after="+url.QueryEscape(next), "", "", 200)
+	members := page["items"].([]any)
+	if len(members) != 1 {
+		t.Fatalf("expected one member on the second page, got %d", len(members))
+	}
+	targetID := members[0].(map[string]any)["id"].(string)
+	name := "Needle 100%"
+	if _, err := f.store.UpdateMember(t.Context(), f.member.OrganizationID, targetID, identity.MemberChange{DisplayName: &name}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.SetExternalDeparture(t.Context(), f.member.OrganizationID, targetID, true); err != nil {
+		t.Fatal(err)
+	}
+	assertMembers := func(query url.Values, want ...string) {
+		t.Helper()
+		response := consoleJSON(t, f, server, "GET", base+"?"+query.Encode(), "", "", 200)
+		items := response["items"].([]any)
+		if len(items) != len(want) {
+			t.Fatalf("filter %v returned %d Members, want %d", query, len(items), len(want))
+		}
+		for i, id := range want {
+			if item := items[i].(map[string]any); item["id"] != id {
+				t.Fatalf("filter %v returned Member %v, want %s", query, item["id"], id)
+			}
+		}
+	}
+	assertMembers(url.Values{"q": {"  nEeDle 100% "}, "status": {"blocked"}, "administrator": {"no"}}, targetID)
+	assertMembers(url.Values{"q": {targetID}}, targetID)
+	assertMembers(url.Values{"q": {targetID}, "status": {"blocked"}}, targetID)
+	assertMembers(url.Values{"q": {"%"}}, targetID)
+	assertMembers(url.Values{"q": {"needle"}, "status": {"active"}})
+	assertMembers(url.Values{"status": {"active"}, "administrator": {"yes"}}, f.member.ID)
+	assertMembers(url.Values{"q": {f.otherMember.ID}})
+	consoleJSON(t, f, server, "GET", base+"?status=disabled", "", "", 400)
+	consoleJSON(t, f, server, "GET", "/api/organizations/"+f.otherMember.OrganizationID+"/members?q=example", "", "", 403)
+}
+
 func TestConsolePlatformLoginAndPersonalAudit(t *testing.T) {
 	f := newFixture(t)
 	m, e := f.store.CreateMember(t.Context(), identity.SystemOrganizationID, "", "Platform operator")
