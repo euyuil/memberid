@@ -22,6 +22,8 @@ Authorization responses support `query` (the default) and `fragment`, as adverti
 
 Clients explicitly registered with `refresh=true` can request `offline_access` and use rotating Refresh Tokens at the standard token endpoint. Other clients cannot obtain or use refresh grants. Discovery advertises refresh only when at least one registered client enables it. There is no private renewal endpoint. Implicit flow, password grants, client credentials, token exchange, dynamic registration, request objects, device flow, and iframe session checks are not enabled.
 
+Client authentication failures at the token, introspection, and revocation endpoints return HTTP 401 with `WWW-Authenticate: Basic realm="MemberID"`. Token and revocation responses include the OAuth `invalid_client` JSON error. Successful requests and other protocol errors do not carry that authentication challenge.
+
 Authorization requests using `request_uri` receive `request_uri_not_supported`, matching Discovery's `request_uri_parameter_supported=false`. The error is returned only to a callback registered for the identified client; unknown clients and unregistered callbacks receive a local error. An empty `request_uri` is treated as absent.
 
 ## Login and independent subjects

@@ -108,6 +108,15 @@ func (w userinfoWriter) WriteHeader(status int) {
 	w.ResponseWriter.WriteHeader(status)
 }
 
+type clientAuthWriter struct{ http.ResponseWriter }
+
+func (w clientAuthWriter) WriteHeader(status int) {
+	if status == http.StatusUnauthorized {
+		w.Header().Set("WWW-Authenticate", `Basic realm="MemberID"`)
+	}
+	w.ResponseWriter.WriteHeader(status)
+}
+
 func (service *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	// Preserve Origin on same-origin form POSTs without sending cross-origin referrers.
@@ -130,6 +139,7 @@ func (service *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if r.URL.Path == "/oauth/token" || r.URL.Path == "/oauth/introspect" || r.URL.Path == "/oauth/revoke" {
+		w = clientAuthWriter{w}
 		if r.Method != http.MethodPost {
 			w.Header().Set("Allow", "POST")
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -141,7 +151,6 @@ func (service *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if _, _, ok := r.BasicAuth(); !ok {
-			w.Header().Set("WWW-Authenticate", `Basic realm="MemberID"`)
 			op.RequestError(w, r, oidc.ErrInvalidClient().WithDescription("client_secret_basic is required"), nil)
 			return
 		}
