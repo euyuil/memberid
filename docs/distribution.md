@@ -1,10 +1,10 @@
 # Distribution and deployment
 
-MemberID runs as one executable with PostgreSQL and protected installation configuration. Its public OIDC process and private management process use the same executable. Consumers integrate through OIDC and the documented management API; they do not need a source checkout or a special application build.
+MemberID runs as one executable with PostgreSQL and protected installation configuration. Its public OIDC process, private management process, and browser administration console use the same executable. Consumers integrate through OIDC and the documented management API; they do not need a source checkout or a special application build.
 
 ## Build a local distribution
 
-Use the Go version in `go.mod`, a POSIX shell, and the standard `cp`, `find`, `sort`, `xargs`, and `sha256sum` tools. Git Bash supplies these tools on Windows. Run from a clean, reviewed checkout after the [contributor checks](../CONTRIBUTING.md):
+Use the Go version in `go.mod`, Node.js 26.13.1 LTS with npm 11.20.0, a POSIX shell, and the standard `cp`, `find`, `sort`, `xargs`, and `sha256sum` tools. Git Bash supplies the shell tools on Windows. Run from a clean, reviewed checkout after the [contributor checks](../CONTRIBUTING.md):
 
 ```sh
 mkdir -p dist
@@ -13,6 +13,8 @@ sh scripts/package.sh dev-example dist/memberid-example
 ```
 
 The selected version appears in `memberid version` and `BUILDINFO`; it is an explicit build label, not a claim that a tagged release was published. Packaging currently supports `linux/amd64` and `windows/amd64`. It uses the current Go target by default; set `GOOS=linux GOARCH=amd64` before invoking the script when cross-building the Linux package from Windows. Use a different new output directory for each target or version.
+
+Packaging installs `web/package-lock.json` with `npm ci`, builds the frontend, and embeds its HTML/CSS/JavaScript in the executable. Node, npm, `node_modules`, source maps, and build caches are not distributed. `serve-console` uses this embedded UI on a separate listener; see [console setup](console.md) for client registration, origins, bootstrap, and HTTPS routing. No JavaScript package manager is required at runtime.
 
 The script disables parent workspaces and cgo, uses the existing module lockfile without updates, trims filesystem paths, and disables implicit VCS metadata. It copies only the executable, build information, public documentation, and reviewed third-party notices. The Linux package also includes its container recipe. No source tree, Git history, installation keys, database, cache, or local runtime directory is copied. `SHA256SUMS` covers every package file except the checksum file itself. It detects file changes; it is not an artifact signature or proof of origin.
 

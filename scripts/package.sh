@@ -25,12 +25,14 @@ esac
 # The caller chooses an existing parent directory; no data is removed on failure.
 mkdir -- "$output"
 output=$(cd "$output" && pwd)
+npm --prefix web ci
+npm --prefix web run build
 go build -mod=readonly -trimpath -buildvcs=false -ldflags "-X main.version=$version" -o "$output/$binary" ./cmd/memberid
 cp -R third_party "$output/third_party"
 cp -R docs "$output/docs"
 cp packaging/README.md "$output/README.md"
 cp CONTRIBUTING.md "$output/CONTRIBUTING.md"
-printf 'version=%s\ngoos=%s\ngoarch=%s\ngo=%s\ncgo=0\n' "$version" "$goos" "$goarch" "$(go env GOVERSION)" > "$output/BUILDINFO"
+printf 'version=%s\ngoos=%s\ngoarch=%s\ngo=%s\nnode=%s\nnpm=%s\ncgo=0\n' "$version" "$goos" "$goarch" "$(go env GOVERSION)" "$(node --version)" "$(npm --version)" > "$output/BUILDINFO"
 if [ "$goos" = linux ]; then
   cp packaging/Dockerfile "$output/Dockerfile"
   cp packaging/dockerignore "$output/.dockerignore"
