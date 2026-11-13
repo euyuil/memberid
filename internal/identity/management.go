@@ -2,6 +2,7 @@ package identity
 
 import (
 	"context"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -35,15 +36,38 @@ func (store *Store) Organizations(ctx context.Context, after string, limit int) 
 	return page, rows.Err()
 }
 
+type MemberDirectoryFilter struct {
+	Query         string
+	Status        string
+	Administrator string
+}
+
 func (store *Store) Members(ctx context.Context, organizationID, after string, limit int) (Page[Member], error) {
+	return store.MemberDirectory(ctx, organizationID, after, limit, MemberDirectoryFilter{})
+}
+
+func (store *Store) MemberDirectory(ctx context.Context, organizationID, after string, limit int, filter MemberDirectoryFilter) (Page[Member], error) {
 	page := Page[Member]{Items: []Member{}}
 	if !ValidID(organizationID, OrganizationKind) || limit < 1 || limit > 100 || after != "" && !ValidID(after, MemberKind) {
+		return page, ErrInvalid
+	}
+	filter.Query = strings.TrimSpace(filter.Query)
+	if filter.Query != "" && !validText(filter.Query, 128) ||
+		filter.Status != "" && filter.Status != "active" && filter.Status != "blocked" ||
+		filter.Administrator != "" && filter.Administrator != "yes" && filter.Administrator != "no" {
 		return page, ErrInvalid
 	}
 	if _, err := store.Organization(ctx, organizationID); err != nil {
 		return page, err
 	}
-	rows, err := store.pool.Query(ctx, "SELECT "+memberColumns+" FROM members WHERE organization_id=$1 AND id>$2 ORDER BY id LIMIT $3", organizationID, after, limit+1)
+	rows, err := store.pool.Query(ctx, "SELECT "+memberColumns+` FROM members AS m
+ WHERE organization_id=$1 AND id>$2
+ AND ($4='' OR strpos(lower(display_name),lower($4))>0 OR strpos(id,lower($4))>0)
+ AND ($5='' OR (manual_block OR external_departure)=($5='blocked'))
+ AND ($6='' OR EXISTS(
+     SELECT 1 FROM administrators a WHERE a.organization_id=m.organization_id AND a.member_id=m.id
+ )=($6='yes'))
+ ORDER BY id LIMIT $3`, organizationID, after, limit+1, filter.Query, filter.Status, filter.Administrator)
 	if err != nil {
 		return page, err
 	}
