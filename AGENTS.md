@@ -67,7 +67,12 @@ The repository is being bootstrapped. These guidelines define intended implement
 
 ## Commits and Pull Requests
 
-- A request for a draft or review does not authorize staging, committing, pushing, or merging it. Respect explicit task boundaries and leave review-only work uncommitted.
+- When the repository owner requests implementation or fixes, that request authorizes the complete delivery workflow within the requested scope: create branches, edit code, run checks, commit, push, open PRs, address CI and review findings, and squash-merge into `main`. Do not request another merge confirmation once the merge conditions are satisfied.
+- Explicit task boundaries override this default. Discussion, planning, review-only work, and requests to prepare changes without submitting them do not authorize publication or merging. Follow explicit instructions such as "do not commit", "draft PR only", or "wait for my review".
+- For a task containing multiple independent issues, work sequentially by default: revalidate one issue against current `main`, implement a focused fix if needed, validate it, submit one PR, wait for its checks, resolve blocking findings, and squash-merge it before starting implementation of the next issue. Start the next branch from the updated `main`. Do not accumulate completed, unmerged PRs unless the owner requests that workflow.
+- Before fixing each issue, confirm that it still exists and warrants a change. If it is not a real issue or is already resolved, record the evidence and skip it. Prefer a focused correction over speculative abstractions or unnecessary defensive code.
+- Before merging, review the complete PR diff and existing review feedback, verify that required checks pass for the latest revision, and satisfy repository protection and approval requirements. Resolve routine CI failures and merge conflicts within scope without asking for renewed permission. Never bypass checks or required approvals.
+- An implementation item is complete only after its PR is verified as merged into `main`, or the issue is explicitly skipped with evidence. Opening a PR alone does not complete an implementation task.
 - Use Conventional Commits, such as `feat: add OIDC client registration`. Keep each commit focused.
 - Scope each PR to one clearly stated purpose and a complete outcome that can be reviewed, validated, and merged independently. Include the implementation, tests, and documentation needed for that outcome.
 - Split unrelated cleanup, broad refactoring, and additional features into separate PRs when they provide independently useful results. Do not bundle independent concerns into the same PR.

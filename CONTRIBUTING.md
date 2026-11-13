@@ -35,7 +35,7 @@ CI builds each native package, verifies its checksums and version, and checks th
 
 ## Pull requests
 
-Create a focused purpose-named branch from current `main`. Submit one independently reviewable outcome with its tests and documentation. Wait for CI and resolve blocking review findings before squash merging. Start dependent work from the updated `main`; do not accumulate completed PRs.
+Create a focused purpose-named branch from current `main`. For each independent issue, revalidate it, implement and validate the fix, submit one PR, wait for required checks, resolve blocking findings, and squash-merge it. Verify the merge, then start the next issue from the updated `main`. Do not accumulate completed, unmerged PRs unless the owner explicitly requests that workflow.
 
 CI runs the build and tests on Linux and Windows, Linux race tests, and full-history secret scanning. The security job checks the pinned Gitleaks archive checksum before execution. Workflow dependencies are pinned to reviewed revisions.
 
