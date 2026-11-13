@@ -67,7 +67,7 @@ type Event = {
   organizationId: string
   memberId: string
   action: string
-  changes: object
+  changes: Record<string, unknown>
   createdAt: string
 }
 type Page<T> = { items: T[]; nextAfter?: string }
@@ -147,6 +147,46 @@ function signInBlockers(
       ? [bindings.length ? "登录方式的绑定均已撤销" : "成员尚未绑定登录方式"]
       : []),
   ]
+}
+
+const eventLabels: Record<string, string> = {
+  "organization.create": "创建组织",
+  "organization.update": "修改组织",
+  "member.create": "创建成员",
+  "member.update": "修改成员",
+  "administrator.update": "管理员任免",
+  "binding.revoke": "撤销绑定",
+  "dingtalk.admission": "设置钉钉准入",
+}
+
+function operationSummary({ action, changes }: Event) {
+  const details: string[] = []
+  if (
+    (action === "organization.create" || action === "organization.update") &&
+    typeof changes.name === "string"
+  ) {
+    details.push(`组织名称设为「${changes.name}」`)
+  }
+  if (action === "organization.update") {
+    if (changes.status === "enabled") details.push("恢复组织")
+    if (changes.status === "disabled") details.push("停用组织")
+  }
+  if (
+    (action === "member.create" || action === "member.update") &&
+    typeof changes.displayName === "string"
+  ) {
+    details.push(`成员名称设为「${changes.displayName}」`)
+  }
+  if (action === "member.update" && typeof changes.manualBlocked === "boolean") {
+    details.push(changes.manualBlocked ? "人工封禁" : "解除人工封禁")
+  }
+  if (action === "administrator.update" && typeof changes.enabled === "boolean") {
+    details.push(changes.enabled ? "授予管理员权限" : "撤销管理员权限")
+  }
+  if (action === "dingtalk.admission" && typeof changes.enabled === "boolean") {
+    details.push(changes.enabled ? "设置钉钉准入" : "取消钉钉准入")
+  }
+  return details
 }
 
 function NoRecords({
@@ -469,7 +509,7 @@ export default function App() {
                 {events
                   ? historyTarget
                     ? `仅查看成员 ${data.historyMember?.displayName ?? historyTarget} 的操作记录。`
-                    : "查看管理变更的操作者、对象和结果。"
+                    : "查看已完成的管理操作及其变更内容。"
                   : member
                     ? "资料、登录方式与管理权限分别维护。"
                     : org
@@ -859,44 +899,61 @@ export default function App() {
                         <TableHead>时间</TableHead>
                         <TableHead>操作者</TableHead>
                         <TableHead>操作</TableHead>
-                        <TableHead>对象 / 变更</TableHead>
-                        <TableHead>结果</TableHead>
+                        <TableHead>对象</TableHead>
+                        <TableHead>变更</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {data.events.map((e) => (
-                        <TableRow key={e.id}>
-                          <TableCell>
-                            {new Date(e.createdAt).toLocaleString("zh-CN")}
-                          </TableCell>
-                          <TableCell>
-                            <code>{e.actor}</code>
-                          </TableCell>
-                          <TableCell>
-                            {{
-                              "organization.create": "创建组织",
-                              "organization.update": "修改组织",
-                              "member.create": "创建成员",
-                              "member.update": "修改成员",
-                              "administrator.update": "管理员任免",
-                              "binding.revoke": "撤销绑定",
-                            }[e.action] ?? e.action}
-                          </TableCell>
-                          <TableCell>
-                            {e.memberId && e.memberId === data.historyMember?.id && (
-                              <div>{data.historyMember.displayName}</div>
-                            )}
-                            <code>{e.memberId || e.organizationId}</code>
-                            <details>
-                              <summary>查看变更</summary>
-                              <pre>{JSON.stringify(e.changes, null, 2)}</pre>
-                            </details>
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant="secondary">成功</Badge>
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                      {data.events.map((event) => {
+                        const summary = operationSummary(event)
+                        const targetName = event.memberId
+                          ? event.memberId === data.historyMember?.id
+                            ? data.historyMember.displayName
+                            : undefined
+                          : event.organizationId === data.organization?.id
+                            ? data.organization.name
+                            : undefined
+                        const operator = event.actor === "installation-operator"
+                        const currentActor = event.actor === actor.memberId
+                        return (
+                          <TableRow key={event.id}>
+                            <TableCell>
+                              {new Date(event.createdAt).toLocaleString("zh-CN")}
+                            </TableCell>
+                            <TableCell>
+                              {operator ? (
+                                "安装运维"
+                              ) : (
+                                <>
+                                  {currentActor && <div>{actor.displayName}（当前操作者）</div>}
+                                  <code>{event.actor}</code>
+                                </>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              {eventLabels[event.action] ?? event.action}
+                            </TableCell>
+                            <TableCell>
+                              {targetName && <div>{targetName}</div>}
+                              <code>{event.memberId || event.organizationId}</code>
+                              {!org && event.memberId && (
+                                <div>
+                                  <code>{event.organizationId}</code>
+                                </div>
+                              )}
+                            </TableCell>
+                            <TableCell className="min-w-40 whitespace-normal">
+                              {summary.map((line) => (
+                                <p key={line} className="wrap-anywhere">{line}</p>
+                              ))}
+                              <details>
+                                <summary>原始变更</summary>
+                                <pre>{JSON.stringify(event.changes, null, 2)}</pre>
+                              </details>
+                            </TableCell>
+                          </TableRow>
+                        )
+                      })}
                     </TableBody>
                   </Table>
                   {data.events.length === 0 && (
