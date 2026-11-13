@@ -102,6 +102,10 @@ func (service *Service) members(r *http.Request, request *authorizationRequest, 
 }
 
 func (service *Service) finish(w http.ResponseWriter, r *http.Request, request *authorizationRequest) error {
+	if request.HintSubject != "" && request.GetSubject() != request.HintSubject {
+		service.loginError(w, r, request, "login_required")
+		return nil
+	}
 	if !request.AbsoluteExpiry.After(service.now().Add(5 * time.Minute)) {
 		return oidc.ErrInvalidGrant()
 	}

@@ -2,6 +2,8 @@ package identity
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5"
 )
 
 type Page[T any] struct {
@@ -66,10 +68,29 @@ type OrganizationChange struct {
 }
 
 func (store *Store) UpdateOrganization(ctx context.Context, id string, change OrganizationChange) (Organization, error) {
+	var result Organization
+	err := pgx.BeginFunc(ctx, store.pool, func(tx pgx.Tx) error {
+		if err := managementLock(ctx, tx); err != nil {
+			return err
+		}
+		var err error
+		result, err = updateOrganization(ctx, tx, id, change)
+		if err != nil {
+			return err
+		}
+		return managementEvent(ctx, tx, ManagementActor{}, id, "", "organization.update", change)
+	})
+	return result, err
+}
+
+func updateOrganization(ctx context.Context, database queryer, id string, change OrganizationChange) (Organization, error) {
+	if id == SystemOrganizationID && change.Status != nil && *change.Status != "enabled" {
+		return Organization{}, ErrForbidden
+	}
 	if !ValidID(id, OrganizationKind) || change.Name == nil && change.Status == nil || change.Name != nil && !validText(*change.Name, 128) || change.Status != nil && *change.Status != "enabled" && *change.Status != "disabled" {
 		return Organization{}, ErrInvalid
 	}
-	return readOrganization(store.pool.QueryRow(ctx, "UPDATE organizations SET name=COALESCE($2,name),status=COALESCE($3,status),lifecycle_revision=lifecycle_revision+CASE WHEN $3 IS NOT NULL AND status<>$3 THEN 1 ELSE 0 END,updated_at=clock_timestamp() WHERE id=$1 RETURNING "+organizationColumns, id, change.Name, change.Status))
+	return readOrganization(database.QueryRow(ctx, "UPDATE organizations SET name=COALESCE($2,name),status=COALESCE($3,status),lifecycle_revision=lifecycle_revision+CASE WHEN $3 IS NOT NULL AND status<>$3 THEN 1 ELSE 0 END,updated_at=clock_timestamp() WHERE id=$1 RETURNING "+organizationColumns, id, change.Name, change.Status))
 }
 
 type MemberChange struct {
@@ -82,14 +103,34 @@ func validMemberChange(change MemberChange) bool {
 }
 
 func (store *Store) UpdateMember(ctx context.Context, organizationID, memberID string, change MemberChange) (Member, error) {
-	return updateMember(ctx, store.pool, organizationID, memberID, change)
+	var result Member
+	err := pgx.BeginFunc(ctx, store.pool, func(tx pgx.Tx) error {
+		var err error
+		result, err = updateMember(ctx, tx, organizationID, memberID, change)
+		if err != nil {
+			return err
+		}
+		return managementEvent(ctx, tx, ManagementActor{}, organizationID, memberID, "member.update", change)
+	})
+	return result, err
 }
 
-func updateMember(ctx context.Context, database queryer, organizationID, memberID string, change MemberChange) (Member, error) {
+func updateMember(ctx context.Context, database pgx.Tx, organizationID, memberID string, change MemberChange) (Member, error) {
 	if !ValidID(organizationID, OrganizationKind) || !ValidID(memberID, MemberKind) || !validMemberChange(change) {
 		return Member{}, ErrInvalid
 	}
-	return readMember(database.QueryRow(ctx, "UPDATE members SET display_name=COALESCE($3,display_name),manual_block=COALESCE($4,manual_block),eligibility_revision=eligibility_revision+CASE WHEN $4 IS NOT NULL AND manual_block<>$4 THEN 1 ELSE 0 END,updated_at=clock_timestamp() WHERE id=$1 AND organization_id=$2 RETURNING "+memberColumns, memberID, organizationID, change.DisplayName, change.ManualBlocked))
+	if err := managementLock(ctx, database); err != nil {
+		return Member{}, err
+	}
+	before, err := availableAdministrators(ctx, database, organizationID)
+	if err != nil {
+		return Member{}, err
+	}
+	member, err := readMember(database.QueryRow(ctx, "UPDATE members SET display_name=COALESCE($3,display_name),manual_block=COALESCE($4,manual_block),eligibility_revision=eligibility_revision+CASE WHEN $4 IS NOT NULL AND manual_block<>$4 THEN 1 ELSE 0 END,updated_at=clock_timestamp() WHERE id=$1 AND organization_id=$2 RETURNING "+memberColumns, memberID, organizationID, change.DisplayName, change.ManualBlocked))
+	if err != nil {
+		return member, err
+	}
+	return member, preserveAdministrators(ctx, database, organizationID, before)
 }
 
 func (store *Store) Bindings(ctx context.Context, organizationID, memberID string) ([]Binding, error) {

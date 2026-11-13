@@ -50,6 +50,9 @@ func (store *Store) Enrollment(ctx context.Context, organizationID string) (Enro
 // An accepted replay returns its original receipt and never changes current identity or eligibility.
 func (store *Store) EnrollOrganization(ctx context.Context, input OrganizationEnrollment) (EnrollmentReceipt, error) {
 	var receipt EnrollmentReceipt
+	if input.OrganizationID == SystemOrganizationID {
+		return receipt, ErrInvalid
+	}
 	if !ValidID(input.OrganizationID, OrganizationKind) || !ValidID(input.MemberID, MemberKind) || !ValidID(input.FactorID, FactorKind) || !ValidUUID(input.BindingID) || !validText(input.Name, 128) {
 		return receipt, ErrInvalid
 	}

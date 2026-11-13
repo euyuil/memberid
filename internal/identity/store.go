@@ -57,6 +57,9 @@ func readBinding(row pgx.Row) (Binding, error) {
 }
 
 func (store *Store) CreateOrganization(ctx context.Context, id, name string) (Organization, error) {
+	if id == SystemOrganizationID {
+		return Organization{}, ErrInvalid
+	}
 	if !validText(name, 128) {
 		return Organization{}, ErrInvalid
 	}
@@ -106,7 +109,7 @@ func (store *Store) Member(ctx context.Context, organizationID, memberID string)
 
 // Manual blocking and provider departure are independent evidence sources.
 func (store *Store) SetManualBlock(ctx context.Context, organizationID, memberID string, blocked bool) (Member, error) {
-	return store.setMemberBlock(ctx, organizationID, memberID, "manual_block", blocked)
+	return store.UpdateMember(ctx, organizationID, memberID, MemberChange{ManualBlocked: &blocked})
 }
 
 func (store *Store) SetExternalDeparture(ctx context.Context, organizationID, memberID string, departed bool) (Member, error) {
@@ -196,12 +199,24 @@ func (store *Store) RevokeBinding(ctx context.Context, organizationID, memberID,
 	if !ValidID(organizationID, OrganizationKind) || !ValidID(memberID, MemberKind) || !ValidID(factorID, FactorKind) {
 		return ErrInvalid
 	}
-	result, err := store.pool.Exec(ctx, "UPDATE member_auth_factor_bindings SET status='revoked',revoked_at=COALESCE(revoked_at,clock_timestamp()) WHERE member_id=$1 AND organization_id=$2 AND authentication_factor_id=$3", memberID, organizationID, factorID)
-	if err != nil {
-		return storageError(err)
-	}
-	if result.RowsAffected() != 1 {
-		return ErrNotFound
-	}
-	return nil
+	return pgx.BeginFunc(ctx, store.pool, func(tx pgx.Tx) error {
+		if err := managementLock(ctx, tx); err != nil {
+			return err
+		}
+		before, err := availableAdministrators(ctx, tx, organizationID)
+		if err != nil {
+			return err
+		}
+		result, err := tx.Exec(ctx, "UPDATE member_auth_factor_bindings SET status='revoked',revoked_at=COALESCE(revoked_at,clock_timestamp()) WHERE member_id=$1 AND organization_id=$2 AND authentication_factor_id=$3", memberID, organizationID, factorID)
+		if err != nil {
+			return storageError(err)
+		}
+		if result.RowsAffected() != 1 {
+			return ErrNotFound
+		}
+		if err = preserveAdministrators(ctx, tx, organizationID, before); err != nil {
+			return err
+		}
+		return managementEvent(ctx, tx, ManagementActor{}, organizationID, memberID, "binding.revoke", map[string]string{"authenticationFactorId": factorID})
+	})
 }

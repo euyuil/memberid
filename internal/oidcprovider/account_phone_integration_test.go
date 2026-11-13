@@ -233,7 +233,7 @@ func TestPhoneAccountRejectsEligibilityChanges(t *testing.T) {
 			case "source disabled":
 				query = "UPDATE authentication_factors SET status='disabled' WHERE type='dingtalk'"
 			case "organization disabled":
-				query = "UPDATE organizations SET status='disabled'"
+				query = "UPDATE organizations SET status='disabled' WHERE id<>'org_system'"
 			case "application revoked":
 				query = "UPDATE dingtalk_applications SET authorization_status='revoked'"
 			case "request canceled":

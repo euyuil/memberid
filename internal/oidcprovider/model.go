@@ -98,6 +98,7 @@ type authorizationRequest struct {
 	Revision int64 `json:"-"`
 	grant
 	Input        oidc.AuthRequest       `json:"input"`
+	HintSubject  string                 `json:"hintSubject,omitempty"`
 	BrowserHash  string                 `json:"browserHash"`
 	CSRF         string                 `json:"csrf"`
 	PhoneNumber  string                 `json:"phoneNumber,omitempty"`

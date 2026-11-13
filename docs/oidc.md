@@ -18,9 +18,13 @@ Discover configuration at `ISSUER/.well-known/openid-configuration`.
 
 Authorization uses `response_type=code`, mandatory PKCE `S256`, and the `openid` scope. Token exchange, introspection, and revocation require a form-encoded POST body and `client_secret_basic`. Query-string credentials, body client secrets, and combined client-authentication methods are rejected. ID Tokens and JWT access tokens use RS256 and a public-key-derived `kid`. Discovery advertises only the enabled profile, including the registered custom evidence scopes.
 
+Authorization responses support `query` (the default) and `fragment`, as advertised in Discovery. `form_post` and other response modes are not enabled and receive `invalid_request` before login. Clients must select one of the advertised modes; successful responses and interaction errors use that selected mode.
+
 Clients explicitly registered with `refresh=true` can request `offline_access` and use rotating Refresh Tokens at the standard token endpoint. Other clients cannot obtain or use refresh grants. Discovery advertises refresh only when at least one registered client enables it. There is no private renewal endpoint. Implicit flow, password grants, client credentials, token exchange, dynamic registration, request objects, device flow, and iframe session checks are not enabled.
 
 Client authentication failures at the token, introspection, and revocation endpoints return HTTP 401 with `WWW-Authenticate: Basic realm="MemberID"`. Token and revocation responses include the OAuth `invalid_client` JSON error. Successful requests and other protocol errors do not carry that authentication challenge.
+
+Authorization requests using `request_uri` receive `request_uri_not_supported`, matching Discovery's `request_uri_parameter_supported=false`. The error is returned only to a callback registered for the identified client; unknown clients and unregistered callbacks receive a local error. An empty `request_uri` is treated as absent.
 
 ## Login and independent subjects
 
@@ -31,6 +35,8 @@ The stable account key is `(iss, sub)`, where ordinary clients receive the indep
 Clients receive only requested supported identity information. `profile` supplies the Member display name and a stable Member-based `preferred_username` through UserInfo; `phone` supplies the verified phone number and verification flag for phone authentication; DingTalk login does not manufacture phone claims. The `email` scope is accepted for standard client compatibility, but no email claims are issued until a verified email source exists. Applications that require email-based provisioning must use an explicit account-linking or provisioning process.
 
 Interactive consent is required unless the operator explicitly marks the registered policy `preauthorized`. `prompt=consent` still requires confirmation. `prompt=login` and `max_age` require appropriate fresh authentication. `prompt=none` returns a standard interaction error when authentication, consent, or an unambiguous eligible Member is unavailable. An existing session does not silently select one of several organization identities.
+
+When an authorization request supplies `id_token_hint`, the provider library validates it and MemberID retains its subject for that transaction. Completing authentication as a different Member or factor returns `login_required` to the registered callback instead of issuing a code for the other identity. This also applies to silent authorization.
 
 A separately registered `subjectKind=factor` client may receive a verified phone-factor subject before membership exists. This policy requires an operator-selected evidence scope and fixed audience. It does not create a Member or grant access to an organization. Ordinary clients cannot request this subject mode themselves.
 
@@ -52,7 +58,9 @@ Session credentials, authorization-code values, and random Refresh Token credent
 
 Revocation affects the authenticated client's grant. The endpoint requires a nonempty `token`, ignores `token_type_hint` when finding supported token types, and treats unknown or differently owned credentials as successful no-ops. A bare token identifier is not a revocable credential. The provider uses the maintained library's authenticated AES-256-GCM implementation without its legacy unauthenticated opaque-token decoder. See [RFC 7009](https://www.rfc-editor.org/rfc/rfc7009.html#section-2.1).
 
-Access-token introspection is restricted to that client; Refresh Token introspection is not provided. Refresh Token revocation invalidates its entire grant, including its access tokens at online verifiers. RP-initiated logout requires a valid `id_token_hint`, validates any registered post-logout destination, revokes the associated MemberID SSO session and grants, and clears the browser session cookie. It does not erase another application's local session. Back-channel logout is not implemented. Already issued JWTs accepted only through offline signature validation remain usable until expiry; use online introspection where immediate revocation is required.
+Access-token introspection is restricted to that client; Refresh Token introspection is not provided. Refresh Token revocation invalidates its entire grant, including its access tokens at online verifiers. RP-initiated logout accepts GET and form-encoded POST requests. A valid `id_token_hint` identifying the current browser session permits direct logout. Without that hint, or when it identifies a different session, MemberID asks whether to end the current browser session; cancellation preserves it. A `client_id` can identify the registration for an exact `post_logout_redirect_uri` when no hint is supplied. Invalid hints and unregistered destinations are rejected. POST requests first redirect to a local GET so SameSite cookies can identify the session after a cross-site RP submission.
+
+Logout confirmation is protected by an expiring, encrypted request bound to the browser and current session, plus an exact Origin check. A confirmation opened before a new login cannot log out that new session. Successful logout revokes the selected current session and its grants and clears its cookie; it never revokes another browser's session merely because a hint refers to it. Repeating logout without an active session is harmless. Logout does not erase another application's local session. Back-channel logout is not implemented. Already issued JWTs accepted only through offline signature validation remain usable until expiry; use online introspection where immediate revocation is required.
 
 Production cookies use `Secure`, `HttpOnly`, `SameSite=Lax`, and the `__Host-` prefix. Production requires an HTTPS issuer. The explicit `127.0.0.1` development exception uses non-Secure local cookies. Serve authentication through a trusted TLS endpoint, preserve the configured issuer origin, and avoid logging authorization headers, token responses, cookies, codes, or login form bodies.
 
@@ -85,7 +93,7 @@ Follow [operator setup](operations.md) to initialize a new dedicated database an
 memberid serve --directory .local/memberid --listen 127.0.0.1:8080
 ```
 
-Phone and DingTalk can be enabled independently. DingTalk-only login requires no SMS credentials. Omitting `--directory` starts health-only mode. File configuration and client-policy changes take effect after a restart; organization DingTalk credentials are loaded with explicit revision checks. This initial schema is version 12; startup refuses older schemas, and no existing database is reset or migrated automatically.
+Phone and DingTalk can be enabled independently. DingTalk-only login requires no SMS credentials. Omitting `--directory` starts health-only mode. File configuration and client-policy changes take effect after a restart; organization DingTalk credentials are loaded with explicit revision checks. This initial schema is version 14; startup refuses older schemas, and no existing database is reset or migrated automatically.
 
 For the first Member, create its organization and Member through the operator CLI, then let the person verify their phone in an application login. Verification creates only the factor. An authorized operator can inspect that existing factor and explicitly bind it:
 

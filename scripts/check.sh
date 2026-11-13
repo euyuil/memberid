@@ -1,6 +1,9 @@
 #!/bin/sh
 set -eu
 export GOWORK=off
+npm --prefix web ci
+npm --prefix web run lint
+npm --prefix web run build
 unformatted=$(gofmt -l cmd internal)
 if [ -n "$unformatted" ]; then
   printf 'Run gofmt on:\n%s\n' "$unformatted" >&2

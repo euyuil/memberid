@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sign out · MemberID</title>
+<style nonce="{{.Nonce}}">
+:root{font-family:system-ui,sans-serif;color:#172a34;background:#f3f6f7;color-scheme:light}
+*{box-sizing:border-box}body{margin:0;padding:2rem 1rem}main{max-width:30rem;margin:auto;background:white;border:1px solid #d8e2e6;border-radius:1rem;padding:1.5rem}h1{margin:0 0 .5rem;font-size:1.6rem}p{line-height:1.5}button{font:inherit;min-height:2.75rem;border:1px solid #17566b;border-radius:.4rem;padding:.5rem .7rem;width:100%;background:#17566b;color:white;cursor:pointer;margin:.6rem 0}.secondary{background:white;color:#17566b}
+</style>
+</head>
+<body><main>
+<h1>Sign out of MemberID?</h1>
+<p>This ends the MemberID session in this browser and its application grants. Other applications may keep their own signed-in sessions.</p>
+<form method="post" action="/logout/confirm">
+<input type="hidden" name="request" value="{{.Request}}">
+<button name="action" value="confirm">Sign out</button>
+<button name="action" value="cancel" class="secondary">Stay signed in</button>
+</form>
+</main></body></html>
