@@ -1,16 +1,18 @@
 CREATE TABLE memberid_schema (
-    version integer PRIMARY KEY CHECK (version = 12)
+    version integer PRIMARY KEY CHECK (version = 13)
 );
-INSERT INTO memberid_schema(version) VALUES (12);
+INSERT INTO memberid_schema(version) VALUES (13);
 
 CREATE TABLE organizations (
-    id text COLLATE "C" PRIMARY KEY CHECK (id ~ '^org_[0-9bcdfghjkmnpqrstvwxz]{27}$'),
+    id text COLLATE "C" PRIMARY KEY CHECK (id = 'org_system' OR id ~ '^org_[0-9bcdfghjkmnpqrstvwxz]{27}$'),
     name text NOT NULL CHECK (char_length(name) BETWEEN 1 AND 128),
     status text NOT NULL DEFAULT 'enabled' CHECK (status IN ('enabled', 'disabled')),
     lifecycle_revision bigint NOT NULL DEFAULT 0 CHECK (lifecycle_revision >= 0),
     created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-    updated_at timestamptz NOT NULL DEFAULT clock_timestamp()
+    updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+    CHECK (id <> 'org_system' OR status = 'enabled')
 );
+INSERT INTO organizations(id,name) VALUES ('org_system','System organization');
 
 CREATE TABLE members (
     id text COLLATE "C" PRIMARY KEY CHECK (id ~ '^mbr_[0-9bcdfghjkmnpqrstvwxz]{27}$'),
@@ -181,3 +183,31 @@ CREATE TABLE member_updates (
     created_at timestamptz NOT NULL,
     FOREIGN KEY (member_id, organization_id) REFERENCES members(id, organization_id)
 );
+
+CREATE TABLE administrators (
+    organization_id text COLLATE "C" NOT NULL,
+    member_id text COLLATE "C" PRIMARY KEY,
+    created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+    FOREIGN KEY (member_id, organization_id) REFERENCES members(id, organization_id)
+);
+
+-- Operator-approved targets, not authentication evidence or administrator grants.
+CREATE TABLE system_dingtalk_admissions (
+    member_id text COLLATE "C" PRIMARY KEY REFERENCES members(id),
+    namespace text COLLATE "C" NOT NULL,
+    union_id text NOT NULL,
+    expires_at timestamptz NOT NULL,
+    UNIQUE(namespace, union_id)
+);
+
+CREATE TABLE management_events (
+    id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    actor text NOT NULL,
+    -- Auditing must not acquire organization locks after a Member mutation.
+    organization_id text COLLATE "C" NOT NULL,
+    member_id text COLLATE "C",
+    action text NOT NULL,
+    changes jsonb NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT clock_timestamp()
+);
+CREATE INDEX management_event_directory ON management_events(organization_id,id);

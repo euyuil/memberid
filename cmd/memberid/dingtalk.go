@@ -16,8 +16,11 @@ import (
 )
 
 func manageDingTalk(ctx context.Context, args []string, stdout, stderr io.Writer) error {
+	if len(args) > 0 && (args[0] == "allow-system-member" || args[0] == "cancel-system-member") {
+		return prepareSystemDingTalk(ctx, args, stdout, stderr)
+	}
 	if len(args) == 0 || args[0] != "inspect" && args[0] != "configure" && args[0] != "sync" && args[0] != "reconcile" {
-		return errors.New("usage: memberid dingtalk <inspect|configure|sync|reconcile>")
+		return errors.New("usage: memberid dingtalk <inspect|configure|sync|reconcile|allow-system-member|cancel-system-member>")
 	}
 	flags := flag.NewFlagSet("dingtalk "+args[0], flag.ContinueOnError)
 	flags.SetOutput(stderr)

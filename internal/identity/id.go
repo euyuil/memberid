@@ -11,6 +11,9 @@ import (
 
 type Kind string
 
+// SystemOrganizationID is reserved for installation administrators.
+const SystemOrganizationID = "org_system"
+
 const (
 	OrganizationKind Kind = "org"
 	MemberKind       Kind = "mbr"
@@ -46,6 +49,9 @@ func NewID(kind Kind) (string, error) {
 }
 
 func ValidID(id string, kind Kind) bool {
+	if kind == OrganizationKind && id == SystemOrganizationID {
+		return true
+	}
 	prefix, suffix, ok := strings.Cut(id, "_")
 	if !ok || !knownKind(kind) || prefix != string(kind) || len(suffix) != idWidth {
 		return false

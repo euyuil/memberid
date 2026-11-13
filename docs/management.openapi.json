@@ -847,7 +847,8 @@
     "schemas": {
       "OrganizationID": {
         "type": "string",
-        "pattern": "^org_[0-9bcdfghjkmnpqrstvwxz]{27}$"
+        "pattern": "^org_(system|[0-9bcdfghjkmnpqrstvwxz]{27})$",
+        "description": "org_system is reserved for existing lookups; creation and enrollment reject it."
       },
       "MemberID": {
         "type": "string",
@@ -1065,7 +1066,8 @@
         "additionalProperties": false,
         "properties": {
           "id": {
-            "$ref": "#/components/schemas/OrganizationID"
+            "type": "string",
+            "pattern": "^org_[0-9bcdfghjkmnpqrstvwxz]{27}$"
           },
           "name": {
             "type": "string",
@@ -1253,7 +1255,8 @@
         "additionalProperties": false,
         "properties": {
           "organizationId": {
-            "$ref": "#/components/schemas/OrganizationID"
+            "type": "string",
+            "pattern": "^org_[0-9bcdfghjkmnpqrstvwxz]{27}$"
           },
           "name": {
             "type": "string",

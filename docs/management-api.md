@@ -16,7 +16,7 @@ This process starts without an SMS provider, OIDC client, or authenticated Membe
 
 Every management request, including `/healthz`, requires `Authorization: Bearer MANAGEMENT_CREDENTIAL`. Load the initial random credential from the protected installation's `management-secret` file into the caller's secret store; after [credential rotation](operations.md#rotate-the-management-credential), use the newly selected credential file. Rotation takes effect only when every management process is restarted with the updated verifier. Never put it in a URL, browser, ordinary log, repository, or client-side application. The server retains and compares only its SHA-256 verifier from `secrets.json`; it does not read the plaintext credential file during serving. OIDC access tokens, ID Tokens, client secrets, and browser login cookies do not grant management access.
 
-The credential authorizes every organization in the installation. It represents the `installation-manager` principal, not an end-user Member. There is no tenant administrator delegation or actor impersonation parameter. Restrict access to trusted integration backends and operators. Requests with an `Origin` header are rejected, and the listener does not enable CORS.
+The credential authorizes every organization in the installation. It represents the `installation-manager` principal, not an end-user Member. This private API has no tenant administrator delegation or actor impersonation parameter. Administrator assignment and bootstrap are described in [administrator setup](administration.md). Restrict this private API to trusted integration backends and operators. Requests with an `Origin` header are rejected, and the listener does not enable CORS.
 
 The default listener is loopback HTTP. An explicitly isolated private-network or container deployment may pass `--allow-private-listen` with a literal private or wildcard bind address. This flag does not configure encryption or firewall rules: terminate TLS at a private proxy for network clients and restrict the upstream network to that proxy and trusted callers. Do not publish the management port or route it through public OIDC ingress. Hostnames and public bind addresses are refused. `/healthz` reports process availability, not provider or database readiness.
 
@@ -45,6 +45,8 @@ Authenticated non-GET operations emit the fixed management principal, HTTP metho
 
 Creation generates an identifier when `id` is omitted. An explicitly supplied identifier must use the [identity model](identity-model.md) format and must be unused. Duplicate creation returns 409; it does not update, merge, or reassign an identity. Display names are nonblank text of at most 128 Unicode code points without control characters. Changing a name preserves the stable Member subject.
 
+Fresh initialization includes the reserved organization `org_system`. It is returned by organization queries and accepted as an existing organization ID, but rejected for creation or enrollment and cannot be disabled (403). Member blocking and binding revocation preserve the last currently available administrator (409); the same guard applies to immutable Member updates. This credential does not impersonate a platform Member.
+
 Every Member lookup or mutation is constrained by its organization. A Member in another organization returns 404. Disabling an organization prevents its Members from passing current eligibility without deleting their identities. Manual unblock preserves an independent external-departure block. An organization's enabled status and the Member's own status are separate facts; inspect eligibility for the complete binding decision.
 
 Binding requires an existing verified factor ID. This API does not create a factor from a phone number, verify a contact attribute, create a login session, or infer that two Members represent the same person. Repeating an active identical binding preserves its identity. A conflicting or revoked relationship remains reserved and returns 409 instead of transferring access. One factor can be explicitly bound to independent Members in different organizations, but cannot be shared by different Members in the same organization.
@@ -59,7 +61,7 @@ The receipt contains `id`, `organizationId`, `memberId`, the resulting `member` 
 
 Receipts persist across restarts and have no automatic expiry or deletion endpoint. Include them in database backups and capacity planning. Deleting receipts directly would destroy the safe-retry guarantee. A new intentional update uses a new ID. Ordinary PATCH remains available, but repeating PATCH after an uncertain result can overwrite an intervening update; it does not provide an immutable receipt.
 
-Updates use the same installation management credential and organization-bound lookup as other management operations. They do not impersonate an initiating Member or assign application permissions. The fresh-install schema is version 12; startup rejects older schemas without resetting or migrating existing data.
+Updates use the same installation management credential and organization-bound lookup as other management operations. They do not impersonate an initiating Member or assign application permissions. The fresh-install schema is version 13; startup rejects older schemas without resetting or migrating existing data.
 
 ## Directory pagination
 
