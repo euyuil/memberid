@@ -28,11 +28,6 @@ type Service struct {
 }
 
 type browserKey struct{}
-type logoutKey struct{}
-type logoutContext struct {
-	secret string
-	clear  func()
-}
 
 func New(configuration *config.Loaded, store *identity.Store, phone *identity.PhoneVerifier, dingtalk *identity.DingTalkVerifier, directory *identity.DingTalkDirectory) (*Service, error) {
 	if configuration == nil || store == nil || dingtalk != nil && directory == nil || phone == nil && dingtalk == nil || configuration.SigningKey == nil || len(configuration.PublicKeys) == 0 {
@@ -165,13 +160,12 @@ func (service *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		r.PostForm.Del("token_type_hint")
 	}
 	browser := service.cookieValue(r, "browser")
-	interactive := r.URL.Path == "/account/link/dingtalk" || r.URL.Path == "/login" || strings.HasPrefix(r.URL.Path, "/oauth/authorize")
+	interactive := r.URL.Path == "/account/link/dingtalk" || r.URL.Path == "/login" || r.URL.Path == "/oauth/logout" || strings.HasPrefix(r.URL.Path, "/oauth/authorize")
 	if interactive && len(browser) != 43 {
 		browser = config.RandomSecret()
 		service.cookie(w, "browser", browser, sessionIdleLifetime)
 	}
 	ctx := context.WithValue(r.Context(), browserKey{}, browser)
-	ctx = context.WithValue(ctx, logoutKey{}, logoutContext{secret: service.cookieValue(r, "session"), clear: func() { service.cookie(w, "session", "", -time.Second) }})
 	r = r.WithContext(ctx)
 	switch r.URL.Path {
 	case "/.well-known/openid-configuration":
@@ -206,6 +200,12 @@ func (service *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	case "/login":
 		service.login(w, r)
+		return
+	case "/oauth/logout":
+		service.logout(w, r)
+		return
+	case "/logout/confirm":
+		service.confirmLogout(w, r)
 		return
 	case "/signed-out":
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")

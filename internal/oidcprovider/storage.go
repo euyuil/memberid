@@ -332,18 +332,10 @@ func (s *storage) RevokeToken(ctx context.Context, id, subject, clientID string)
 	return nil
 }
 func (s *storage) TerminateSession(context.Context, string, string) error {
-	return oidc.ErrInvalidRequest().WithDescription("id_token_hint is required")
+	return oidc.ErrInvalidRequest().WithDescription("Use the browser logout endpoint")
 }
-func (s *storage) TerminateSessionFromRequest(ctx context.Context, input *op.EndSessionRequest) (string, error) {
-	if input.IDTokenHintClaims == nil || input.IDTokenHintClaims.SessionID == "" {
-		return "", oidc.ErrInvalidRequest()
-	}
-	sessionID := input.IDTokenHintClaims.SessionID
-	logout, ok := ctx.Value(logoutKey{}).(logoutContext)
-	if !ok {
-		return "", oidc.ErrInvalidRequest()
-	}
-	err := pgx.BeginFunc(ctx, s.service.store.Database(), func(tx pgx.Tx) error {
+func (s *storage) endSession(ctx context.Context, sessionID, secret string) error {
+	return pgx.BeginFunc(ctx, s.service.store.Database(), func(tx pgx.Tx) error {
 		var expected string
 		err := tx.QueryRow(ctx, "SELECT secret_hash FROM oidc_sessions WHERE id=$1 FOR UPDATE", sessionID).Scan(&expected)
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -352,14 +344,7 @@ func (s *storage) TerminateSessionFromRequest(ctx context.Context, input *op.End
 		if err != nil {
 			return err
 		}
-		if logout.secret != "" && !sameSecret(expected, config.SecretHash(logout.secret)) {
-			return oidc.ErrInvalidRequest()
-		}
-		var issued bool
-		if err := tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM oidc_grants WHERE session_id=$1 AND client_id=$2 AND COALESCE(NULLIF(data->>'memberId',''),data->>'factorId')=$3)", sessionID, input.ClientID, input.UserID).Scan(&issued); err != nil {
-			return err
-		}
-		if !issued {
+		if !sameSecret(expected, config.SecretHash(secret)) {
 			return oidc.ErrInvalidRequest()
 		}
 		if _, err := tx.Exec(ctx, "UPDATE oidc_sessions SET revoked_at=$2 WHERE id=$1", sessionID, s.service.now()); err != nil {
@@ -368,8 +353,4 @@ func (s *storage) TerminateSessionFromRequest(ctx context.Context, input *op.End
 		_, err = tx.Exec(ctx, "UPDATE oidc_grants SET revoked_at=$2 WHERE session_id=$1", sessionID, s.service.now())
 		return err
 	})
-	if err == nil {
-		logout.clear()
-	}
-	return input.RedirectURI, err
 }
