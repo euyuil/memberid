@@ -123,22 +123,30 @@ func (service *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Referrer-Policy", "same-origin")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("X-Frame-Options", "DENY")
+	clientEndpoint := r.URL.Path == "/oauth/token" || r.URL.Path == "/oauth/introspect" || r.URL.Path == "/oauth/revoke"
+	invalidRequest := func(description string) {
+		if clientEndpoint {
+			op.RequestError(w, r, oidc.ErrInvalidRequest().WithDescription("%s", description), nil)
+			return
+		}
+		http.Error(w, description, http.StatusBadRequest)
+	}
 	if len(r.URL.RawQuery) > 32<<10 {
-		http.Error(w, "Request is too large", http.StatusBadRequest)
+		invalidRequest("Request is too large")
 		return
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, 32<<10)
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "Invalid request", http.StatusBadRequest)
+		invalidRequest("Invalid request")
 		return
 	}
 	for _, values := range r.Form {
 		if len(values) != 1 {
-			http.Error(w, "Repeated parameter", http.StatusBadRequest)
+			invalidRequest("Repeated parameter")
 			return
 		}
 	}
-	if r.URL.Path == "/oauth/token" || r.URL.Path == "/oauth/introspect" || r.URL.Path == "/oauth/revoke" {
+	if clientEndpoint {
 		w = clientAuthWriter{w}
 		if r.Method != http.MethodPost {
 			w.Header().Set("Allow", "POST")
