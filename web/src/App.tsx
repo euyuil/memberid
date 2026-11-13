@@ -93,6 +93,7 @@ type Action = {
   field?: string
   value?: string
   destructive?: boolean
+  openCreated?: (id: string) => void
 }
 const messages: Record<string, string> = {
   forbidden: "没有操作权限，或成员尚未具备可用的登录方式。",
@@ -230,6 +231,7 @@ export default function App() {
 
   useEffect(() => {
     const change = () => {
+      setAction(null)
       setData({})
       setLoading(true)
       setError("")
@@ -405,6 +407,8 @@ export default function App() {
       method: "POST",
       body: {},
       field: isOrganization ? "name" : "displayName",
+      openCreated: (id) =>
+        navigate(isOrganization ? { org: id } : { ...memberListRoute, member: id }),
     })
 
   return (
@@ -1006,9 +1010,17 @@ export default function App() {
           action={action}
           csrf={session.csrf}
           onClose={() => setAction(null)}
-          onComplete={() => {
+          onComplete={(id, submittedFrom) => {
+            if (window.location.hash !== submittedFrom) {
+              refresh()
+              return
+            }
             setAction(null)
-            refresh()
+            if (id && action.openCreated) {
+              action.openCreated(id)
+            } else {
+              refresh()
+            }
           }}
         />
       )}
@@ -1278,7 +1290,7 @@ function ActionDialog({
   action: Action
   csrf: string
   onClose: () => void
-  onComplete: () => void
+  onComplete: (id: string | undefined, submittedFrom: string) => void
 }) {
   const [value, setValue] = useState(action.value ?? "")
   const [pending, setPending] = useState(false)
@@ -1303,9 +1315,10 @@ function ActionDialog({
               setError("请检查填写内容。名称不能为空，最多 128 个字符。")
               return
             }
+            const submittedFrom = window.location.hash
             setPending(true)
             try {
-              await request(action.path, {
+              const result = await request<{ id?: string }>(action.path, {
                 method: action.method,
                 headers: {
                   "Content-Type": "application/json",
@@ -1315,7 +1328,7 @@ function ActionDialog({
                   action.field ? { [action.field]: value } : action.body
                 ),
               })
-              onComplete()
+              onComplete(result.id, submittedFrom)
             } catch (err) {
               setError((err as Error).message)
             } finally {
