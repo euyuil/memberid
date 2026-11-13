@@ -39,7 +39,9 @@ CI builds each native package, verifies its checksums and version, and checks th
 
 Create a focused purpose-named branch from current `main`. For each independent issue, implement and validate the fix, submit one PR, wait for required checks, resolve blocking findings, and squash-merge it. Verify the merge, then start the next issue from the updated `main`. Do not accumulate completed, unmerged PRs unless the owner explicitly requests that workflow.
 
-PR integration uses squash merge only. Direct pushes and force pushes to `main` are prohibited. These restrictions do not forbid merge commits or history updates on other branches: update an existing PR by merging `main` into its branch or rebasing that branch when needed. Push normally after a merge; after a rebase, use `git push --force-with-lease origin BRANCH` with the actual non-`main` branch name. A rejected lease means the remote branch changed; inspect and preserve that work before retrying.
+Merge pull requests using squash merge. The PR merge operation must not create a merge commit; merge commits already present in the source branch are allowed.
+
+Direct pushes and force pushes to `main` are prohibited. Other branches may be merged, rebased, or force-pushed when needed. Update an existing PR by merging `main` into its branch or rebasing that branch. Push normally after a merge; after a rebase, use `git push --force-with-lease origin BRANCH` with the actual non-`main` branch name. A rejected lease means the remote branch changed; inspect and preserve that work before retrying.
 
 GitHub must retain the four required checks: `Build and test (ubuntu-24.04)`, `Build and test (windows-2025)`, `Repository security`, and `PostgreSQL integration`. Keep "Require branches to be up to date before merging" disabled and the PR branch-update option enabled. A newer `main` commit alone does not require updating or replacing the PR. Resolve merge conflicts or incompatible changes in the existing PR, and wait for required checks on its latest revision before squash merging.
 
