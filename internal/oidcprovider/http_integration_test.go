@@ -205,6 +205,9 @@ func (f *fixture) loginPage(client, scopes string) (reply, string) {
 	f.status(r, 302)
 	r = f.call(f.browser, "GET", r.header.Get("Location"), nil, nil)
 	f.status(r, 200)
+	if r.header.Get("Referrer-Policy") != "same-origin" {
+		f.t.Fatal("login policy must preserve same-origin form Origin and suppress cross-origin referrers")
+	}
 	return r, verifier
 }
 func (f *fixture) verifyPhone(page reply) reply {
@@ -341,7 +344,12 @@ func TestAuthorizationTransactionSecurity(t *testing.T) {
 	requestID := hidden(t, page.body, "request")
 	f.status(f.call(browserClient(), "GET", "/login?request="+requestID, nil, nil), 400)
 	form := url.Values{"request": {requestID}, "csrf": {hidden(t, page.body, "csrf")}, "action": {"send"}, "phone": {"19900000001"}}
-	f.status(f.call(f.browser, "POST", "/login", form, map[string]string{"Origin": "https://untrusted.example.test"}), 403)
+	for _, origin := range []string{"", "null", "https://untrusted.example.test"} {
+		f.status(f.call(f.browser, "POST", "/login", form, map[string]string{"Origin": origin}), 403)
+		if f.sender.latest() != "" {
+			t.Fatal("rejected login origin sent a verification code")
+		}
+	}
 	form.Set("csrf", "wrong")
 	f.status(f.call(f.browser, "POST", "/login", form, map[string]string{"Origin": f.server.URL}), 403)
 	page = f.verifyPhone(page)

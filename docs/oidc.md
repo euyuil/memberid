@@ -54,6 +54,8 @@ Access-token introspection is restricted to that client; Refresh Token introspec
 
 Production cookies use `Secure`, `HttpOnly`, `SameSite=Lax`, and the `__Host-` prefix. Production requires an HTTPS issuer. The explicit `127.0.0.1` development exception uses non-Secure local cookies. Serve authentication through a trusted TLS endpoint, preserve the configured issuer origin, and avoid logging authorization headers, token responses, cookies, codes, or login form bodies.
 
+Authentication pages use `Referrer-Policy: same-origin`: same-origin form submissions retain their `Origin`, while cross-origin navigations send no `Referer`. Keep this policy at reverse proxies. `no-referrer` causes browsers to send `Origin: null` on ordinary form POSTs and breaks the strict origin check; see the [Fetch origin-header algorithm](https://fetch.spec.whatwg.org/#append-a-request-origin-header). Login submissions still require the exact issuer origin, a valid transaction cookie, and the transaction's CSRF value. Missing, opaque (`null`), and foreign origins are rejected.
+
 ## Standard refresh
 
 Request `offline_access` during authorization only for a client whose operator registration enables refresh. MemberID obtains explicit consent during that login unless a preauthorized policy supplies the operator's prior consent decision. Once the grant exists, refresh does not require another confirmation, browser navigation, iframe, SSO cookie, or shared origin:
