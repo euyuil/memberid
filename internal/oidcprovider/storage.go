@@ -16,7 +16,7 @@ import (
 	"github.com/zitadel/oidc/v3/pkg/op"
 )
 
-func (s *storage) CreateAuthRequest(ctx context.Context, input *oidc.AuthRequest, _ string) (op.AuthRequest, error) {
+func (s *storage) CreateAuthRequest(ctx context.Context, input *oidc.AuthRequest, hintSubject string) (op.AuthRequest, error) {
 	registered, err := s.client(input.ClientID)
 	if err != nil {
 		return nil, err
@@ -52,7 +52,7 @@ func (s *storage) CreateAuthRequest(ctx context.Context, input *oidc.AuthRequest
 	if registered.registration.EvidenceScope != "" && slices.Contains(input.Scopes, registered.registration.EvidenceScope) {
 		audience = registered.registration.EvidenceAudience
 	}
-	request := &authorizationRequest{grant: grant{ID: newID(), ClientID: input.ClientID, Scopes: input.Scopes, Audience: []string{audience}}, Input: *input, BrowserHash: config.SecretHash(browser), CSRF: config.RandomSecret()}
+	request := &authorizationRequest{grant: grant{ID: newID(), ClientID: input.ClientID, Scopes: input.Scopes, Audience: []string{audience}}, Input: *input, HintSubject: hintSubject, BrowserHash: config.SecretHash(browser), CSRF: config.RandomSecret()}
 	data, err := json.Marshal(request)
 	if err != nil {
 		return nil, err
