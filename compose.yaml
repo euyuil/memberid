@@ -72,8 +72,12 @@ services:
 
   proxy:
     image: caddy:2.11.9-alpine@sha256:003a97808e781aa9f7e75cc2f43d34d461099031faf5e20faefb9f61126836f0
+    environment:
+      MEMBERID_LOCAL_AUTH_HOST: "${MEMBERID_LOCAL_AUTH_HOST:-auth.memberid.localhost}"
+      MEMBERID_LOCAL_ADMIN_HOST: "${MEMBERID_LOCAL_ADMIN_HOST:-admin.memberid.localhost}"
+      MEMBERID_LOCAL_HTTPS_PORT: "${MEMBERID_LOCAL_HTTPS_PORT:-8443}"
     ports:
-      - '127.0.0.1:8443:8443'
+      - "127.0.0.1:${MEMBERID_LOCAL_HTTPS_PORT:-8443}:${MEMBERID_LOCAL_HTTPS_PORT:-8443}"
     tmpfs: [/data, /config]
     volumes:
       - ./dev/Caddyfile:/etc/caddy/Caddyfile:ro
@@ -82,8 +86,8 @@ services:
     networks:
       http:
         aliases:
-          - auth.memberid.localhost
-          - admin.memberid.localhost
+          - "${MEMBERID_LOCAL_AUTH_HOST:-auth.memberid.localhost}"
+          - "${MEMBERID_LOCAL_ADMIN_HOST:-admin.memberid.localhost}"
 
 networks:
   http:
