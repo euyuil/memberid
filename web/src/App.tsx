@@ -6,6 +6,7 @@ import {
   ChevronRight,
   Fingerprint,
   History,
+  KeyRound,
   LogOut,
   Plus,
   Search,
@@ -46,6 +47,7 @@ import {
 } from "@/components/ui/dialog"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Separator } from "@/components/ui/separator"
+import { Providers, type ProviderDirectory } from "@/Providers"
 
 type Actor = {
   memberId: string
@@ -90,6 +92,7 @@ type Data = {
   detail?: Detail
   events?: Event[]
   historyMember?: Member
+  providers?: ProviderDirectory
 }
 type Action = {
   title: string
@@ -106,6 +109,7 @@ const messages: Record<string, string> = {
   forbidden: "没有操作权限，或成员尚未具备可用的登录方式。",
   last_administrator: "需要保留至少一名可用管理员，请先设置另一名管理员。",
   invalid_request: "请检查填写内容。",
+  provider_unavailable: "无法验证应用凭据。请检查应用状态、应用 ID 和密钥。",
   not_found: "记录不存在，请返回列表刷新。",
   conflict: "当前状态发生冲突，请刷新后重新检查。",
   invalid_csrf: "页面验证已失效，请刷新后重试。",
@@ -168,6 +172,7 @@ const eventLabels: Record<string, string> = {
   "administrator.update": "管理员任免",
   "binding.revoke": "撤销绑定",
   "dingtalk.admission": "设置钉钉准入",
+  "provider.configure": "配置身份提供商",
 }
 
 function operationSummary({ action, changes }: Event) {
@@ -196,6 +201,9 @@ function operationSummary({ action, changes }: Event) {
   }
   if (action === "dingtalk.admission" && typeof changes.enabled === "boolean") {
     details.push(changes.enabled ? "设置钉钉准入" : "取消钉钉准入")
+  }
+  if (action === "provider.configure" && typeof changes.displayName === "string") {
+    details.push(`「${changes.displayName}」${changes.enabled ? "已启用" : "已停用"}`)
   }
   return details
 }
@@ -231,10 +239,19 @@ export default function App() {
   const org = params.get("org") || actorOrganization
   const view = params.get("view")
   const events = view === "events"
+  const providers = view === "providers"
   // Organization links without a view previously opened the member directory.
   const membersView =
-    !events && (view === "members" || (view !== "organization" && !!org))
-  const activeView = events ? "events" : membersView ? "members" : "organization"
+    !events &&
+    !providers &&
+    (view === "members" || (view !== "organization" && !!org))
+  const activeView = events
+    ? "events"
+    : providers
+      ? "providers"
+      : membersView
+        ? "members"
+        : "organization"
   const member = membersView && org ? (params.get("member") ?? "") : ""
   const historyTarget = params.get("target") ?? ""
   const after = params.get("after") ?? ""
@@ -322,23 +339,23 @@ export default function App() {
             `/api/organizations/${encodeURIComponent(org)}`,
             options
           )
-          result = member
-            ? {
-                organization,
-                detail: await request<Detail>(
-                  `/api/organizations/${encodeURIComponent(org)}/members/${encodeURIComponent(member)}`,
-                  options
-                ),
-              }
-            : membersView
-              ? {
-                  organization,
-                  members: await request<Data["members"]>(
-                    `/api/organizations/${encodeURIComponent(org)}/members?${memberQuery}`,
-                    options
-                  ),
-                }
-              : { organization }
+          result = { organization }
+          if (providers) {
+            result.providers = await request<ProviderDirectory>(
+              `/api/organizations/${encodeURIComponent(org)}/providers`,
+              options
+            )
+          } else if (member) {
+            result.detail = await request<Detail>(
+              `/api/organizations/${encodeURIComponent(org)}/members/${encodeURIComponent(member)}`,
+              options
+            )
+          } else if (membersView) {
+            result.members = await request<MemberPage>(
+              `/api/organizations/${encodeURIComponent(org)}/members?${memberQuery}`,
+              options
+            )
+          }
         } else if (membersView) {
           result = {
             members: await request<MemberPage>(`/api/members?${memberQuery}`, options),
@@ -459,10 +476,10 @@ export default function App() {
           <div className="nav-group" role="group" aria-labelledby="nav-identity">
             <span id="nav-identity">身份管理</span>
             <Button
-              variant={!membersView && !events ? "secondary" : "ghost"}
+              variant={!membersView && !events && !providers ? "secondary" : "ghost"}
               render={<a href={routeHash({ view: "organization", ...scopeRoute })} />}
               nativeButton={false}
-              aria-current={!membersView && !events ? "page" : undefined}
+              aria-current={!membersView && !events && !providers ? "page" : undefined}
             >
               <Building2 data-icon="inline-start" />
               组织
@@ -475,6 +492,15 @@ export default function App() {
             >
               <Users data-icon="inline-start" />
               成员
+            </Button>
+            <Button
+              variant={providers ? "secondary" : "ghost"}
+              render={<a href={routeHash({ view: "providers", ...scopeRoute })} />}
+              nativeButton={false}
+              aria-current={providers ? "page" : undefined}
+            >
+              <KeyRound data-icon="inline-start" />
+              身份提供商
             </Button>
           </div>
           <div className="nav-group" role="group" aria-labelledby="nav-audit">
@@ -546,9 +572,11 @@ export default function App() {
               <h1>
                 {events
                   ? "操作记录"
-                  : membersView
-                    ? (member ? selected?.displayName ?? "成员详情" : "成员")
-                    : (data.organization?.name ?? "组织")}
+                  : providers
+                    ? "身份提供商"
+                    : membersView
+                      ? (member ? selected?.displayName ?? "成员详情" : "成员")
+                      : (data.organization?.name ?? "组织")}
               </h1>
               {events && (
                 <p className="muted">
@@ -556,6 +584,9 @@ export default function App() {
                     ? `仅查看成员 ${data.historyMember?.displayName ?? historyTarget} 的操作记录。`
                     : "查看已完成的管理操作及其变更内容。"}
                 </p>
+              )}
+              {providers && !org && (
+                <p className="muted">选择组织后管理登录提供商。</p>
               )}
             </div>
             <div className="actions">
@@ -577,7 +608,7 @@ export default function App() {
                   </Button>
                 </>
               )}
-              {actor.platform && !events && !membersView && !org && (
+              {actor.platform && !events && !membersView && !providers && !org && (
                 <Button onClick={() => create(true)}>
                   <Plus data-icon="inline-start" />
                   新建组织
@@ -594,7 +625,7 @@ export default function App() {
                   新增成员
                 </Button>
               )}
-              {!membersView && !events && org && (
+              {!membersView && !events && !providers && org && (
                 <>
                   {actor.platform && (
                     <Button variant="outline" onClick={() => navigate({})}>
@@ -670,7 +701,7 @@ export default function App() {
                           <TableCell>
                             <Button
                               variant="ghost"
-                              aria-label={`管理 ${o.name}`}
+                              aria-label={providers ? `管理 ${o.name} 的身份提供商` : `管理 ${o.name}`}
                               onClick={() =>
                                 navigate({ view: activeView, org: o.id })
                               }
@@ -685,11 +716,23 @@ export default function App() {
                   <Pager
                     after={after}
                     next={data.organizations.nextAfter}
-                    route={{}}
+                    route={providers ? { view: "providers" } : {}}
                   />
                 </section>
               )}
-              {data.organization && !events && !membersView && (
+              {data.providers && data.organization && (
+                <Providers
+                  key={org}
+                  directory={data.providers}
+                  enabled={data.organization.status === "enabled"}
+                  system={org === "org_system"}
+                  base={base}
+                  csrf={session.csrf}
+                  save={request}
+                  onComplete={refresh}
+                />
+              )}
+              {data.organization && !events && !membersView && !providers && (
                 <section className="organization-summary">
                   <div>
                     <Status active={data.organization.status === "enabled"} />

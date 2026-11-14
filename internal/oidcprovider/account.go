@@ -193,7 +193,7 @@ func (service *Service) openAccount(w http.ResponseWriter, r *http.Request, sess
 
 func (service *Service) accountDingTalkPost(w http.ResponseWriter, r *http.Request, session accountSession) {
 	media, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
-	if err != nil || media != "application/x-www-form-urlencoded" || r.URL.RawQuery != "" || r.Header.Get("Origin") != service.configuration.Issuer || !accountFields(r, "request", "csrf", "action") {
+	if err != nil || media != "application/x-www-form-urlencoded" || r.URL.RawQuery != "" || r.Header.Get("Origin") != service.configuration.Issuer || !accountFields(r, "request", "csrf", "action", "provider") {
 		http.Error(w, "Invalid account submission", 403)
 		return
 	}
@@ -220,7 +220,7 @@ func (service *Service) accountDingTalkPost(w http.ResponseWriter, r *http.Reque
 			service.renderAccount(w, r, request, session, member, "Sign in again through your application before linking a new authentication method.")
 			return
 		}
-		app, err := service.dingtalk.Application(r.Context(), member.OrganizationID)
+		app, err := service.dingtalk.ApplicationSource(r.Context(), member.OrganizationID, r.PostForm.Get("provider"))
 		if err != nil {
 			service.renderAccount(w, r, request, session, member, "DingTalk is not available for this organization.")
 			return
@@ -327,6 +327,7 @@ type accountPageData struct {
 	Request                                         accountRequest
 	Member, Organization, Message, Nonce, ReopenURI string
 	CanLink, CanCancel                              bool
+	Providers                                       []identity.Provider
 }
 
 func (service *Service) renderAccount(w http.ResponseWriter, r *http.Request, request accountRequest, session accountSession, member identity.Member, message string) {
@@ -365,6 +366,17 @@ func (service *Service) renderAccount(w http.ResponseWriter, r *http.Request, re
 		request.ClientID = ""
 	}
 	data := accountPageData{Request: request, Member: member.DisplayName, Organization: organization.Name, Message: message, Nonce: config.RandomSecret(), ReopenURI: accountAddress(request.accountDetails), CanLink: available && request.State == "ready" && fresh && !occupied, CanCancel: available && (request.State == "pending" || request.State == "consumed")}
+	providers, err := service.store.Providers(r.Context(), member.OrganizationID)
+	if err != nil {
+		http.Error(w, "Account management temporarily unavailable", 503)
+		return
+	}
+	for _, provider := range providers {
+		if provider.Type == "dingtalk" && provider.Enabled && provider.AuthorizationStatus == "active" {
+			data.Providers = append(data.Providers, provider)
+		}
+	}
+	data.CanLink = data.CanLink && len(data.Providers) > 0
 	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'nonce-"+data.Nonce+"'; form-action 'self' https://login.dingtalk.com; base-uri 'none'; frame-ancestors 'none'")
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_ = accountPage.Execute(w, data)

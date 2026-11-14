@@ -600,7 +600,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Current DingTalk application metadata; never includes credentials.",
+            "description": "Current DingTalk application metadata for an organization with one DingTalk application. Credentials are excluded.",
             "content": {
               "application/json": {
                 "schema": {
@@ -616,7 +616,7 @@
       },
       "put": {
         "operationId": "configureDingTalkApplication",
-        "description": "Verifies DingTalk authorization and configures or rotates organization application credentials with an expected revision. Does not enable interactive DingTalk login in this increment.",
+        "description": "Verifies DingTalk authorization and configures or rotates application credentials with an expected revision. An ambiguous organization returns 409.",
         "parameters": [
           {
             "name": "organizationId",
@@ -639,7 +639,7 @@
         },
         "responses": {
           "200": {
-            "description": "Current DingTalk application metadata; never includes credentials.",
+            "description": "Current DingTalk application metadata for an organization with one DingTalk application. Credentials are excluded.",
             "content": {
               "application/json": {
                 "schema": {
@@ -956,7 +956,8 @@
             "type": "string",
             "enum": [
               "phone",
-              "dingtalk"
+              "dingtalk",
+              "feishu"
             ]
           },
           "namespace": {
@@ -1012,7 +1013,8 @@
             "type": "string",
             "enum": [
               "phone",
-              "dingtalk"
+              "dingtalk",
+              "feishu"
             ]
           },
           "status": {
@@ -1161,7 +1163,8 @@
             "type": "string",
             "enum": [
               "phone",
-              "dingtalk"
+              "dingtalk",
+              "feishu"
             ]
           }
         },
@@ -1358,6 +1361,12 @@
           "namespace": {
             "type": "string"
           },
+          "displayName": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
           "corpId": {
             "type": "string",
             "pattern": "^[A-Za-z0-9_-]{1,256}$"
@@ -1399,6 +1408,8 @@
         "required": [
           "organizationId",
           "namespace",
+          "displayName",
+          "enabled",
           "corpId",
           "clientId",
           "revision",

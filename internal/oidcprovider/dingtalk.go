@@ -1,6 +1,7 @@
 package oidcprovider
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/url"
@@ -20,7 +21,7 @@ type dingTalkAttempt struct {
 }
 
 func (service *Service) startDingTalk(w http.ResponseWriter, r *http.Request, request *authorizationRequest, registered client) {
-	if service.dingtalk == nil || registered.registration.SubjectKind != "member" || request.Verification != nil || request.ChallengeID != "" || request.DingTalk != nil {
+	if service.dingtalk == nil || registered.registration.SubjectKind != "member" || request.Verification != nil || request.ChallengeID != "" || request.externalPending() {
 		http.Error(w, "Cancel the current verification before starting DingTalk login.", http.StatusBadRequest)
 		return
 	}
@@ -29,7 +30,7 @@ func (service *Service) startDingTalk(w http.ResponseWriter, r *http.Request, re
 		http.Error(w, "Invalid organization", http.StatusBadRequest)
 		return
 	}
-	app, err := service.dingtalk.Application(r.Context(), organizationID)
+	app, err := service.dingtalk.ApplicationSource(r.Context(), organizationID, r.PostForm.Get("provider"))
 	if err != nil {
 		service.renderLogin(w, r, request, registered, "DingTalk is not available for that organization.")
 		return
@@ -37,6 +38,7 @@ func (service *Service) startDingTalk(w http.ResponseWriter, r *http.Request, re
 	state := config.RandomSecret()
 	request.DingTalk = &dingTalkAttempt{StateHash: config.SecretHash(state), DingTalkLoginContext: app.LoginContext(), ExpiresAt: service.now().Add(5 * time.Minute)}
 	request.Fresh = true
+	request.ProviderOrganizationID = organizationID
 	if err := service.storage.saveRequest(r.Context(), request); err != nil {
 		http.Error(w, "Login transaction expired", http.StatusBadRequest)
 		return
@@ -98,17 +100,23 @@ func (service *Service) dingTalkCallback(w http.ResponseWriter, r *http.Request)
 		service.renderLogin(w, r, request, registered, "Unable to verify DingTalk membership. Cancel verification to try again.")
 		return
 	}
+	service.completeExternalLogin(w, r, request, attempt.ExpiresAt, "DingTalk", func(ctx context.Context, tx pgx.Tx) (identity.Verification, error) {
+		return service.dingtalk.Admit(ctx, tx, proof)
+	})
+}
+
+func (service *Service) completeExternalLogin(w http.ResponseWriter, r *http.Request, request *authorizationRequest, deadline time.Time, name string, admit func(context.Context, pgx.Tx) (identity.Verification, error)) {
 	id, secret := newID(), config.RandomSecret()
 	var expires time.Time
-	err = pgx.BeginFunc(r.Context(), service.store.Database(), func(tx pgx.Tx) error {
+	err := pgx.BeginFunc(r.Context(), service.store.Database(), func(tx pgx.Tx) error {
 		var revision int64
 		if err := tx.QueryRow(r.Context(), "SELECT revision FROM oidc_authorization_requests WHERE id=$1 AND code_hash IS NULL AND consumed_at IS NULL AND expires_at>$2 FOR UPDATE", request.ID, service.now()).Scan(&revision); err != nil || revision != request.Revision {
 			return oidc.ErrInvalidRequest()
 		}
-		if !attempt.ExpiresAt.After(service.now()) {
+		if !deadline.After(service.now()) {
 			return oidc.ErrInvalidRequest()
 		}
-		verified, err := service.dingtalk.Admit(r.Context(), tx, proof)
+		verified, err := admit(r.Context(), tx)
 		if err != nil {
 			return err
 		}
@@ -121,6 +129,7 @@ func (service *Service) dingTalkCallback(w http.ResponseWriter, r *http.Request)
 		if _, err := tx.Exec(r.Context(), "INSERT INTO oidc_sessions(id,secret_hash,verification,expires_at,absolute_expires_at) VALUES($1,$2,$3,$4,$5)", id, config.SecretHash(secret), session, expires, absolute); err != nil {
 			return err
 		}
+		request.DingTalk, request.Feishu = nil, nil
 		request.SessionID = id
 		setVerification(request, verified)
 		data, err := json.Marshal(request)
@@ -131,7 +140,7 @@ func (service *Service) dingTalkCallback(w http.ResponseWriter, r *http.Request)
 		return err
 	})
 	if err != nil {
-		http.Error(w, "DingTalk login expired or the identity is no longer eligible. Start a new login.", http.StatusForbidden)
+		http.Error(w, name+" login expired or the identity is no longer eligible. Start a new login.", http.StatusForbidden)
 		return
 	}
 	service.cookie(w, "session", secret, expires.Sub(service.now()))

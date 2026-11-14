@@ -35,13 +35,13 @@ type directorySnapshot struct {
 func readDirectorySnapshot(ctx context.Context, database queryer, organizationID, memberID string) (directorySnapshot, error) {
 	var value directorySnapshot
 	err := database.QueryRow(ctx, `SELECT o.lifecycle_revision,m.eligibility_revision,
- COALESCE(a.revision,0),COALESCE(a.authorization_revision,0),COALESCE(a.authorization_status,''),COALESCE(a.namespace,''),
+ COALESCE(a.revision,0),COALESCE(a.authorization_revision,0),COALESCE(CASE WHEN a.enabled THEN a.authorization_status ELSE 'disabled' END,''),COALESCE(a.namespace,''),
  COALESCE(b.id::text,''),COALESCE(f.id,''),COALESCE(f.namespace,''),COALESCE(f.status,''),COALESCE(i.union_id,''),COALESCE(i.external_member_id,''),m.manual_block,m.external_departure
  FROM members m JOIN organizations o ON o.id=m.organization_id
- LEFT JOIN dingtalk_applications a ON a.organization_id=o.id
  LEFT JOIN member_auth_factor_bindings b ON b.member_id=m.id AND b.factor_type='dingtalk' AND b.status='active'
  LEFT JOIN authentication_factors f ON f.id=b.authentication_factor_id
- LEFT JOIN dingtalk_identities i ON i.member_id=m.id AND i.organization_id=o.id
+ LEFT JOIN dingtalk_applications a ON a.organization_id=o.id AND a.namespace=f.namespace
+ LEFT JOIN dingtalk_identities i ON i.member_id=m.id AND i.organization_id=o.id AND i.namespace=a.namespace
  WHERE m.id=$1 AND o.id=$2 AND o.status='enabled'`, memberID, organizationID).Scan(
 		&value.organizationRevision, &value.memberRevision, &value.applicationRevision, &value.authorizationRevision, &value.authorizationStatus, &value.namespace,
 		&value.bindingID, &value.factorID, &value.factorNamespace, &value.factorStatus, &value.unionID, &value.employeeID, &value.manualBlocked, &value.externalDeparture)
@@ -75,7 +75,7 @@ func (directory *DingTalkDirectory) Observe(ctx context.Context, organizationID,
 		return nil, ErrIneligible
 	}
 	observation := &DingTalkDirectoryObservation{directory, organizationID, memberID, factorType, snapshot, directory.now()}
-	if snapshot.authorizationStatus == "revoked" {
+	if snapshot.authorizationStatus == "revoked" || snapshot.authorizationStatus == "disabled" {
 		if factorType == "dingtalk" {
 			return nil, ErrIneligible
 		}
@@ -90,7 +90,7 @@ func (directory *DingTalkDirectory) Observe(ctx context.Context, organizationID,
 	if snapshot.authorizationStatus != "active" || snapshot.namespace != snapshot.factorNamespace || snapshot.unionID == "" || snapshot.employeeID == "" {
 		return nil, ErrIneligible
 	}
-	app, err := directory.applications.Load(ctx, organizationID)
+	app, err := directory.applications.loadSource(ctx, organizationID, snapshot.namespace)
 	if errors.Is(err, ErrProviderConfiguration) && factorType == "phone" {
 		return observation, nil
 	}
@@ -147,7 +147,7 @@ func (observation *DingTalkDirectoryObservation) Validate(ctx context.Context, d
 	if current.manualBlocked || current.externalDeparture {
 		return ErrIneligible
 	}
-	if current.authorizationStatus == "revoked" && observation.factorType != "dingtalk" &&
+	if (current.authorizationStatus == "revoked" || current.authorizationStatus == "disabled") && observation.factorType != "dingtalk" &&
 		current.organizationRevision == observation.snapshot.organizationRevision &&
 		current.memberRevision == observation.snapshot.memberRevision {
 		return nil

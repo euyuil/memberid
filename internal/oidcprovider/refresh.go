@@ -104,6 +104,9 @@ func (s *storage) rotateRefresh(ctx context.Context, request *refreshRequest, se
 		if err := s.validateDirectory(ctx, tx, observation, observationErr); err != nil {
 			return err
 		}
+		if err := s.lockFeishuOrganization(ctx, tx, &request.grant); err != nil {
+			return err
+		}
 		if err := s.eligible(ctx, tx, &request.grant); err != nil {
 			return err
 		}

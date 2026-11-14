@@ -11,6 +11,8 @@ import (
 
 	"github.com/euyuil/memberid/internal/config"
 	"github.com/euyuil/memberid/internal/console"
+	"github.com/euyuil/memberid/internal/dingtalk"
+	"github.com/euyuil/memberid/internal/feishu"
 	"github.com/euyuil/memberid/internal/identity"
 	"github.com/euyuil/memberid/internal/server"
 )
@@ -49,7 +51,7 @@ func serveConsole(ctx context.Context, args []string, stdout, stderr io.Writer) 
 		return err
 	}
 	defer store.Close()
-	h, err := console.New(ctx, store, loaded, settings, strings.TrimSpace(string(data)))
+	h, err := console.New(ctx, store, loaded, settings, strings.TrimSpace(string(data)), dingtalk.New(), feishu.New())
 	if err != nil {
 		return err
 	}

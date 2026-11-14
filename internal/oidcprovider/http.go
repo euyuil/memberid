@@ -21,6 +21,7 @@ type Service struct {
 	store         *identity.Store
 	phone         *identity.PhoneVerifier
 	dingtalk      *identity.DingTalkVerifier
+	feishu        *identity.FeishuApplications
 	directory     *identity.DingTalkDirectory
 	protocol      *op.Provider
 	storage       *storage
@@ -29,8 +30,8 @@ type Service struct {
 
 type browserKey struct{}
 
-func New(configuration *config.Loaded, store *identity.Store, phone *identity.PhoneVerifier, dingtalk *identity.DingTalkVerifier, directory *identity.DingTalkDirectory) (*Service, error) {
-	if configuration == nil || store == nil || dingtalk != nil && directory == nil || phone == nil && dingtalk == nil || configuration.SigningKey == nil || len(configuration.PublicKeys) == 0 {
+func New(configuration *config.Loaded, store *identity.Store, phone *identity.PhoneVerifier, dingtalk *identity.DingTalkVerifier, directory *identity.DingTalkDirectory, feishu *identity.FeishuApplications) (*Service, error) {
+	if configuration == nil || store == nil || dingtalk != nil && directory == nil || phone == nil && dingtalk == nil && feishu == nil || configuration.SigningKey == nil || len(configuration.PublicKeys) == 0 {
 		return nil, errors.New("OIDC requires a configured store, signing key, and enabled authentication provider")
 	}
 	if err := configuration.Installation.Validate(); err != nil {
@@ -42,7 +43,7 @@ func New(configuration *config.Loaded, store *identity.Store, phone *identity.Ph
 	if err := config.ValidateClients(configuration.Clients, configuration.AllowLoopbackHTTP); err != nil {
 		return nil, err
 	}
-	service := &Service{configuration: configuration, store: store, phone: phone, dingtalk: dingtalk, directory: directory, now: time.Now}
+	service := &Service{configuration: configuration, store: store, phone: phone, dingtalk: dingtalk, feishu: feishu, directory: directory, now: time.Now}
 	service.storage = &storage{service: service}
 	var key [32]byte
 	decoded, _ := base64.StdEncoding.DecodeString(configuration.Secrets.ProtocolKey)
@@ -212,6 +213,9 @@ func (service *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	case "/account/dingtalk/callback":
 		service.accountDingTalkCallback(w, r)
+		return
+	case feishuCallbackPath:
+		service.feishuCallback(w, r)
 		return
 	case "/login/dingtalk/callback":
 		service.dingTalkCallback(w, r)

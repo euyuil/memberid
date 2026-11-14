@@ -175,7 +175,9 @@ func (store *Store) BindFactor(ctx context.Context, organizationID, memberID, fa
 		if factor.Status != "active" {
 			return ErrIneligible
 		}
-		if factor.Type == "dingtalk" {
+		var namespace *string
+		switch factor.Type {
+		case "dingtalk":
 			var configured bool
 			if err := transaction.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM dingtalk_applications WHERE organization_id=$1 AND namespace=$2)", organizationID, factor.Namespace).Scan(&configured); err != nil {
 				return err
@@ -183,16 +185,25 @@ func (store *Store) BindFactor(ctx context.Context, organizationID, memberID, fa
 			if !configured {
 				return ErrIneligible
 			}
+		case "feishu":
+			var configured bool
+			if err := transaction.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM feishu_applications WHERE organization_id=$1 AND namespace=$2)", organizationID, factor.Namespace).Scan(&configured); err != nil {
+				return err
+			}
+			if !configured || organizationID == SystemOrganizationID {
+				return ErrIneligible
+			}
+			namespace = &factor.Namespace
 		}
 		var existingMember string
 		if err := transaction.QueryRow(ctx, "SELECT id FROM members WHERE id=$1 AND organization_id=$2", memberID, organizationID).Scan(&existingMember); err != nil {
 			return storageError(err)
 		}
-		_, err = transaction.Exec(ctx, "INSERT INTO member_auth_factor_bindings(member_id,organization_id,authentication_factor_id,factor_type) VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING", memberID, organizationID, factorID, factor.Type)
+		_, err = transaction.Exec(ctx, "INSERT INTO member_auth_factor_bindings(member_id,organization_id,authentication_factor_id,factor_type,provider_namespace) VALUES($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING", memberID, organizationID, factorID, factor.Type, namespace)
 		if err != nil {
 			return storageError(err)
 		}
-		result, err = readBinding(transaction.QueryRow(ctx, "SELECT "+bindingColumns+" FROM member_auth_factor_bindings WHERE member_id=$1 AND factor_type=$2", memberID, factor.Type))
+		result, err = readBinding(transaction.QueryRow(ctx, "SELECT "+bindingColumns+" FROM member_auth_factor_bindings WHERE member_id=$1 AND factor_type=$2 AND provider_namespace IS NOT DISTINCT FROM $3", memberID, factor.Type, namespace))
 		if errors.Is(err, ErrNotFound) || err == nil && (result.FactorID != factorID || result.Status != "active") {
 			return ErrConflict
 		}

@@ -11,6 +11,10 @@ import (
 // SynchronizeAuthorization checks the stored credentials, never an unaccepted candidate.
 // Only a successful fresh token or an explicit authorization denial changes the observation.
 func (applications *DingTalkApplications) SynchronizeAuthorization(ctx context.Context, organizationID string) (DingTalkApplication, error) {
+	return applications.SynchronizeSource(ctx, organizationID, "")
+}
+
+func (applications *DingTalkApplications) SynchronizeSource(ctx context.Context, organizationID, namespace string) (DingTalkApplication, error) {
 	organization, err := applications.store.Organization(ctx, organizationID)
 	if err != nil {
 		return DingTalkApplication{}, err
@@ -18,7 +22,7 @@ func (applications *DingTalkApplications) SynchronizeAuthorization(ctx context.C
 	if organization.Status != "enabled" {
 		return DingTalkApplication{}, ErrIneligible
 	}
-	app, err := applications.Load(ctx, organizationID)
+	app, err := applications.loadSource(ctx, organizationID, namespace)
 	if err != nil {
 		return DingTalkApplication{}, err
 	}
@@ -44,14 +48,14 @@ func (applications *DingTalkApplications) recordAuthorization(ctx context.Contex
 		if organization.Status != "enabled" || organization.lifecycleRevision != lifecycle {
 			return ErrConflict
 		}
-		current, _, err := readApplication(tx.QueryRow(ctx, "SELECT "+applicationColumns+" FROM dingtalk_applications WHERE organization_id=$1 FOR UPDATE", observed.OrganizationID))
+		current, _, err := readApplication(tx.QueryRow(ctx, "SELECT "+applicationColumns+" FROM dingtalk_applications WHERE organization_id=$1 AND namespace=$2 FOR UPDATE", observed.OrganizationID, observed.Namespace))
 		if err != nil {
 			return err
 		}
 		if current.Revision != observed.Revision || current.AuthorizationRevision != observed.AuthorizationRevision || current.Namespace != observed.Namespace {
 			return ErrConflict
 		}
-		result, _, err = readApplication(tx.QueryRow(ctx, "UPDATE dingtalk_applications SET authorization_status=$2,authorization_revision=authorization_revision+1,authorization_verified_at=clock_timestamp(),updated_at=CASE WHEN authorization_status<>$2 THEN clock_timestamp() ELSE updated_at END WHERE organization_id=$1 RETURNING "+applicationColumns, observed.OrganizationID, status))
+		result, _, err = readApplication(tx.QueryRow(ctx, "UPDATE dingtalk_applications SET authorization_status=$3,authorization_revision=authorization_revision+1,authorization_verified_at=clock_timestamp(),updated_at=CASE WHEN authorization_status<>$3 THEN clock_timestamp() ELSE updated_at END WHERE organization_id=$1 AND namespace=$2 RETURNING "+applicationColumns, observed.OrganizationID, observed.Namespace, status))
 		return err
 	})
 	return result, err

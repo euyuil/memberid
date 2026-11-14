@@ -10,7 +10,7 @@ import (
 )
 
 func (s *storage) observeDirectory(ctx context.Context, g *grant) (*identity.DingTalkDirectoryObservation, error) {
-	if s.service.directory == nil || g.MemberID == "" {
+	if s.service.directory == nil || g.MemberID == "" || g.FactorType == "feishu" {
 		return nil, nil
 	}
 	return s.service.directory.Observe(ctx, g.OrganizationID, g.MemberID, g.FactorType)

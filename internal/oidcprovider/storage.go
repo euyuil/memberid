@@ -208,6 +208,9 @@ func (s *storage) createCodeTokens(ctx context.Context, request *authorizationRe
 		if err := s.validateDirectory(ctx, tx, observation, observationErr); err != nil {
 			return err
 		}
+		if err := s.lockFeishuOrganization(ctx, tx, &request.grant); err != nil {
+			return err
+		}
 		if err := s.eligible(ctx, tx, &request.grant); err != nil {
 			return err
 		}
@@ -356,4 +359,16 @@ func (s *storage) endSession(ctx context.Context, sessionID, secret string) erro
 		_, err = tx.Exec(ctx, "UPDATE oidc_grants SET revoked_at=$2 WHERE session_id=$1", sessionID, s.service.now())
 		return err
 	})
+}
+
+// Feishu source changes and token issuance take complementary organization locks.
+func (s *storage) lockFeishuOrganization(ctx context.Context, tx pgx.Tx, g *grant) error {
+	if g.FactorType != "feishu" {
+		return nil
+	}
+	var id string
+	if err := tx.QueryRow(ctx, "SELECT id FROM organizations WHERE id=$1 FOR SHARE", g.OrganizationID).Scan(&id); err != nil {
+		return oidc.ErrInvalidGrant()
+	}
+	return nil
 }

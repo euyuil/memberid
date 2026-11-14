@@ -1,6 +1,6 @@
 # Administrator identities and operator setup
 
-Fresh schema version **14** creates the enabled organization `org_system`, named `System organization`, with no Members or administrator assignments. The exact ID is reserved: ordinary creation and enrollment cannot claim it, and it cannot be disabled. There is no organization-kind field, default customer organization, organization-less Member, or global User.
+Fresh schema version **15** creates the enabled organization `org_system`, named `System organization`, with no Members or administrator assignments. The exact ID is reserved: ordinary creation and enrollment cannot claim it, and it cannot be disabled. There is no organization-kind field, default customer organization, organization-less Member, or global User.
 
 An administrator is an explicitly assigned Member with at least one currently eligible authentication binding. Membership in `org_system` alone grants no privileges. A system administrator can manage all organizations; an ordinary organization administrator is limited to their own organization. The identity store rechecks a Member administrator's current grant, SSO session, assignment, and eligibility when authorizing mutations. These roles belong to MemberID management and are not added to consuming applications' identity claims.
 

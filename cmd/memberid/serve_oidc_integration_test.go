@@ -21,6 +21,7 @@ func TestOIDCStartsWithDingTalkWithoutPhoneCredentials(t *testing.T) {
 	t.Setenv("MEMBERID_DATABASE_URL", databaseURL)
 	t.Setenv("MEMBERID_PHONE_ENABLED", "false")
 	t.Setenv("MEMBERID_DINGTALK_ENABLED", "true")
+	t.Setenv("MEMBERID_FEISHU_ENABLED", "false")
 	for _, key := range []string{"MEMBERID_SMS_ACCESS_KEY_ID", "MEMBERID_SMS_ACCESS_KEY_SECRET", "MEMBERID_SMS_SIGN_NAME", "MEMBERID_SMS_TEMPLATE_CODE"} {
 		t.Setenv(key, "")
 	}
@@ -52,4 +53,21 @@ func TestOIDCStartsWithDingTalkWithoutPhoneCredentials(t *testing.T) {
 		closeStore()
 		t.Fatal("OIDC started with no authentication providers")
 	}
+	t.Setenv("MEMBERID_FEISHU_ENABLED", "invalid")
+	if _, closeStore, err := authenticationHandler(t.Context(), directory); err == nil {
+		closeStore()
+		t.Fatal("invalid Feishu switch accepted")
+	}
+	t.Setenv("MEMBERID_FEISHU_ENABLED", "true")
+	handler, stopFeishu, err := authenticationHandler(t.Context(), directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stopFeishu()
+	response = httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != 200 {
+		t.Fatal("Feishu-only provider did not serve discovery")
+	}
+
 }

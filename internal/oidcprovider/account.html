@@ -5,7 +5,7 @@
 <title>Link DingTalk · MemberID</title>
 <style nonce="{{.Nonce}}">
 :root{font-family:system-ui,sans-serif;color:#172a34;background:#f3f6f7;color-scheme:light}
-*{box-sizing:border-box}body{margin:0;padding:2rem 1rem}main{max-width:30rem;margin:auto;background:white;border:1px solid #d8e2e6;border-radius:1rem;padding:1.5rem}h1{margin:0 0 .5rem;font-size:1.6rem}p{line-height:1.5}label{display:block;margin:.7rem 0 .3rem}input,button{font:inherit;min-height:2.75rem;border:1px solid #9aadb7;border-radius:.4rem;padding:.5rem .7rem;width:100%}input{background:#f1f4f5}button{background:#17566b;color:white;border-color:#17566b;cursor:pointer;margin:.6rem 0}button:disabled{background:#dce5e9;border-color:#dce5e9;color:#586b75;cursor:default}.secondary{background:white;color:#17566b}.feedback{min-height:10rem;overflow-wrap:anywhere;color:#304d5c;font-size:.95rem;margin:.6rem 0}small{display:block;color:#4c626d;overflow-wrap:anywhere;margin:.4rem 0}a{color:#17566b}.return{min-height:3rem;display:flex;align-items:center}
+*{box-sizing:border-box}body{margin:0;padding:2rem 1rem}main{max-width:30rem;margin:auto;background:white;border:1px solid #d8e2e6;border-radius:1rem;padding:1.5rem}h1{margin:0 0 .5rem;font-size:1.6rem}p{line-height:1.5}label{display:block;margin:.7rem 0 .3rem}input,select,button{font:inherit;min-height:2.75rem;border:1px solid #9aadb7;border-radius:.4rem;padding:.5rem .7rem;width:100%}input{background:#f1f4f5}button{background:#17566b;color:white;border-color:#17566b;cursor:pointer;margin:.6rem 0}button:disabled{background:#dce5e9;border-color:#dce5e9;color:#586b75;cursor:default}.secondary{background:white;color:#17566b}.feedback{min-height:10rem;overflow-wrap:anywhere;color:#304d5c;font-size:.95rem;margin:.6rem 0}small{display:block;color:#4c626d;overflow-wrap:anywhere;margin:.4rem 0}a{color:#17566b}.return{min-height:3rem;display:flex;align-items:center}
 </style>
 </head>
 <body><main>
@@ -15,6 +15,10 @@
 <label for="member">Member</label><input id="member" value="{{.Member}}" readonly><small>{{.Request.MemberID}}</small>
 <form method="post" action="/account/link/dingtalk">
 <input type="hidden" name="request" value="{{.Request.ID}}"><input type="hidden" name="csrf" value="{{.Request.CSRF}}">
+{{if gt (len .Providers) 1}}
+<label for="dingtalk-provider">DingTalk application</label>
+<select id="dingtalk-provider" name="provider" {{if not .CanLink}}disabled{{end}}>{{range .Providers}}<option value="{{.ID}}">{{.DisplayName}}</option>{{end}}</select>
+{{else}}{{range .Providers}}<input type="hidden" name="provider" value="{{.ID}}">{{end}}{{end}}
 <button name="action" value="link" {{if not .CanLink}}disabled{{end}}>Verify and link DingTalk</button>
 <button name="action" value="cancel" class="secondary" {{if not .CanCancel}}disabled{{end}}>Cancel verification</button>
 </form>

@@ -43,7 +43,7 @@ func (directory *DingTalkDirectory) superviseStreams(ctx context.Context, timing
 		} else {
 			wanted := make(map[string]DingTalkApplication, len(applications))
 			for _, app := range applications {
-				wanted[app.OrganizationID] = app
+				wanted[app.Namespace] = app
 			}
 			for id, stream := range running {
 				app, exists := wanted[id]
@@ -79,7 +79,7 @@ func (directory *DingTalkDirectory) superviseStreams(ctx context.Context, timing
 func (directory *DingTalkDirectory) streamApplications(ctx context.Context) ([]DingTalkApplication, error) {
 	rows, err := directory.applications.store.pool.Query(ctx, `SELECT a.organization_id,a.namespace,a.corp_id,a.client_id,a.revision,o.lifecycle_revision
   FROM dingtalk_applications a JOIN organizations o ON o.id=a.organization_id
-  WHERE o.status='enabled' AND a.authorization_status='active' ORDER BY a.organization_id`)
+  WHERE o.status='enabled' AND a.enabled AND a.authorization_status='active' ORDER BY a.organization_id`)
 	if err != nil {
 		return nil, err
 	}
@@ -109,8 +109,8 @@ func (directory *DingTalkDirectory) runApplicationStream(ctx context.Context, pr
 	go func() {
 		defer close(finished)
 		for work.Err() == nil {
-			credentials, err := directory.applications.Load(work, app.OrganizationID)
-			if err == nil && (credentials.Revision != app.Revision || credentials.Namespace != app.Namespace || credentials.AuthorizationStatus != "active") {
+			credentials, err := directory.applications.loadSource(work, app.OrganizationID, app.Namespace)
+			if err == nil && (credentials.Revision != app.Revision || credentials.Namespace != app.Namespace || !credentials.Enabled || credentials.AuthorizationStatus != "active") {
 				return
 			}
 			if err == nil {
@@ -145,7 +145,7 @@ func (directory *DingTalkDirectory) runApplicationStream(ctx context.Context, pr
 		case <-refresh:
 			// Coalesce notifications. Fresh reads, not event profiles, can restore access.
 			// A restart or lost notification is covered by the regular complete pass.
-			if _, err := directory.Reconcile(work, app.OrganizationID); err != nil && work.Err() == nil && report != nil {
+			if _, err := directory.ReconcileSource(work, app.OrganizationID, app.Namespace); err != nil && work.Err() == nil && report != nil {
 				report()
 			}
 			if !waitSynchronization(work, retry) {

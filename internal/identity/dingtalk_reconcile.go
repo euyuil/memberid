@@ -24,16 +24,20 @@ type DingTalkReconciliation struct {
 // Reconcile refreshes existing admitted identities; it never discovers or provisions Members.
 // Unknown directory failures preserve stored evidence and are reported as incomplete work.
 func (directory *DingTalkDirectory) Reconcile(ctx context.Context, organizationID string) (DingTalkReconciliation, error) {
+	return directory.ReconcileSource(ctx, organizationID, "")
+}
+
+func (directory *DingTalkDirectory) ReconcileSource(ctx context.Context, organizationID, namespace string) (DingTalkReconciliation, error) {
 	var result DingTalkReconciliation
-	app, err := directory.applications.SynchronizeAuthorization(ctx, organizationID)
+	app, err := directory.applications.SynchronizeSource(ctx, organizationID, namespace)
 	if err != nil {
 		return result, err
 	}
 	result.Application = app
-	if app.AuthorizationStatus == "revoked" {
+	if !app.Enabled || app.AuthorizationStatus == "revoked" {
 		return result, nil
 	}
-	credentials, err := directory.applications.Load(ctx, organizationID)
+	credentials, err := directory.applications.loadSource(ctx, organizationID, app.Namespace)
 	if err != nil {
 		return result, err
 	}
@@ -44,7 +48,7 @@ func (directory *DingTalkDirectory) Reconcile(ctx context.Context, organizationI
 	for {
 		rows, err := directory.applications.store.pool.Query(ctx, `SELECT i.member_id FROM dingtalk_identities i
  JOIN member_auth_factor_bindings b ON b.member_id=i.member_id AND b.factor_type='dingtalk' AND b.status='active'
- WHERE i.organization_id=$1 AND i.member_id>$2 ORDER BY i.member_id LIMIT 100`, organizationID, after)
+ WHERE i.namespace=$1 AND i.member_id>$2 ORDER BY i.member_id LIMIT 100`, app.Namespace, after)
 		if err != nil {
 			return result, err
 		}
@@ -62,7 +66,7 @@ func (directory *DingTalkDirectory) Reconcile(ctx context.Context, organizationI
 			case ctx.Err() != nil:
 				return result, ctx.Err()
 			case errors.Is(err, dingtalk.ErrAuthorizationDenied):
-				current, inspectErr := directory.applications.Inspect(ctx, organizationID)
+				current, inspectErr := directory.applications.InspectSource(ctx, organizationID, app.Namespace)
 				if inspectErr != nil {
 					return result, inspectErr
 				}
@@ -123,7 +127,7 @@ func (directory *DingTalkDirectory) reconcileMember(ctx context.Context, app Din
 		// Keep the admission lock order. Provider I/O has already completed.
 		for _, lock := range []struct{ query, id string }{
 			{"SELECT id FROM organizations WHERE id=$1 FOR UPDATE", app.OrganizationID},
-			{"SELECT organization_id FROM dingtalk_applications WHERE organization_id=$1 FOR UPDATE", app.OrganizationID},
+			{"SELECT namespace FROM dingtalk_applications WHERE namespace=$1 FOR UPDATE", app.Namespace},
 			{"SELECT member_id FROM dingtalk_identities WHERE member_id=$1 FOR UPDATE", memberID},
 			{"SELECT id FROM authentication_factors WHERE id=$1 FOR UPDATE", snapshot.factorID},
 			{"SELECT id::text FROM member_auth_factor_bindings WHERE id=$1 FOR UPDATE", snapshot.bindingID},

@@ -27,12 +27,24 @@ h1{margin:0 0 .5rem;font-size:1.6rem}p{line-height:1.5}label{display:block;margi
 
 </form>
 {{end}}
-{{if .DingTalkEnabled}}
-<form method="post" action="/login" class="section">
+{{if .ProviderEnabled}}
+<div class="section">
+{{if not .OrganizationRestricted}}
+<form method="post" action="/login">
 <input type="hidden" name="request" value="{{.Request.ID}}"><input type="hidden" name="csrf" value="{{.Request.CSRF}}">
-<label for="organization">DingTalk organization</label><input id="organization" name="organization" autocomplete="off" placeholder="MemberID organization ID" pattern="org_[0-9bcdfghjkmnpqrstvwxz]{27}" value="{{.DingTalkOrganizationID}}" required {{if or .OrganizationRestricted .Pending .Verified}}readonly{{end}}>
-<button name="action" value="dingtalk" {{if or .Pending .Verified}}disabled{{end}}>Sign in with DingTalk</button>
+<label for="organization">MemberID organization</label><input id="organization" name="organization" autocomplete="off" placeholder="MemberID organization ID" pattern="org_([0-9bcdfghjkmnpqrstvwxz]{27}|system)" value="{{.ProviderOrganizationID}}" required {{if or .Pending .Verified}}readonly{{end}}>
+<button class="secondary" name="action" value="choose-organization" {{if or .Pending .Verified}}disabled{{end}}>Show organization sign-in options</button>
 </form>
+{{end}}
+{{range .Providers}}
+<form method="post" action="/login">
+<input type="hidden" name="request" value="{{$.Request.ID}}"><input type="hidden" name="csrf" value="{{$.Request.CSRF}}">
+<input type="hidden" name="organization" value="{{$.ProviderOrganizationID}}"><input type="hidden" name="provider" value="{{.ID}}">
+<button name="action" value="{{.Type}}" {{if or $.Pending $.Verified}}disabled{{end}}>Sign in with {{if eq .Type "dingtalk"}}DingTalk{{if ne .DisplayName "DingTalk"}} · {{.DisplayName}}{{end}}{{else}}Feishu{{if ne .DisplayName "Feishu"}} · {{.DisplayName}}{{end}}{{end}}</button>
+</form>
+{{else}}{{if .ProviderOrganizationID}}<small>No external sign-in option is available for {{.ProviderOrganizationName}}.</small>{{end}}
+{{end}}
+</div>
 {{end}}
 <form method="post" action="/login">
 <input type="hidden" name="request" value="{{.Request.ID}}"><input type="hidden" name="csrf" value="{{.Request.CSRF}}">

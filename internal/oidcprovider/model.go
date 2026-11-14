@@ -97,17 +97,21 @@ func (g *grant) SetCurrentScopes(scopes []string) { g.Scopes = scopes }
 type authorizationRequest struct {
 	Revision int64 `json:"-"`
 	grant
-	Input        oidc.AuthRequest       `json:"input"`
-	HintSubject  string                 `json:"hintSubject,omitempty"`
-	BrowserHash  string                 `json:"browserHash"`
-	CSRF         string                 `json:"csrf"`
-	PhoneNumber  string                 `json:"phoneNumber,omitempty"`
-	ChallengeID  string                 `json:"challengeId,omitempty"`
-	Verification *identity.Verification `json:"verification,omitempty"`
-	DingTalk     *dingTalkAttempt       `json:"dingtalk,omitempty"`
-	Fresh        bool                   `json:"fresh"`
-	Complete     bool                   `json:"complete"`
+	Input                  oidc.AuthRequest       `json:"input"`
+	HintSubject            string                 `json:"hintSubject,omitempty"`
+	BrowserHash            string                 `json:"browserHash"`
+	CSRF                   string                 `json:"csrf"`
+	PhoneNumber            string                 `json:"phoneNumber,omitempty"`
+	ChallengeID            string                 `json:"challengeId,omitempty"`
+	Verification           *identity.Verification `json:"verification,omitempty"`
+	DingTalk               *dingTalkAttempt       `json:"dingtalk,omitempty"`
+	Feishu                 *feishuAttempt         `json:"feishu,omitempty"`
+	ProviderOrganizationID string                 `json:"providerOrganizationId,omitempty"`
+	Fresh                  bool                   `json:"fresh"`
+	Complete               bool                   `json:"complete"`
 }
+
+func (r *authorizationRequest) externalPending() bool { return r.DingTalk != nil || r.Feishu != nil }
 
 func (r *authorizationRequest) GetID() string  { return r.ID }
 func (r *authorizationRequest) GetACR() string { return "" }
