@@ -53,7 +53,7 @@ Create a parent directory that only the operator can access, then initialize a n
 
 ```sh
 mkdir -p .local
-memberid config init --directory .local/memberid --issuer https://login.example.invalid
+memberid config init --directory .local/memberid --issuer https://auth.example.invalid
 memberid config check --directory .local/memberid
 ```
 
@@ -61,7 +61,7 @@ Initialization refuses an existing destination directory. It generates a 3072-bi
 
 On POSIX systems, the new directory uses mode `0700` and files use `0600`. On Windows, establish a restrictive directory ACL before running these commands; Go's mode argument does not configure Windows access-control lists. Protect backups and the `management-secret` file as credentials. Supply database credentials separately through `MEMBERID_DATABASE_URL`.
 
-For local development only, use `--issuer http://127.0.0.1:8080 --allow-loopback-http`. This exception permits HTTP only for the explicit loopback address. Production issuers must be exact HTTPS origins, without paths, query strings, fragments, or user information.
+For local development only, use `--issuer http://127.0.0.1:8080 --allow-loopback-http`. This exception permits HTTP only for the explicit loopback address. Production issuers must be exact HTTPS origins, without paths, query strings, fragments, or user information. Choose a stable issuer before registering relying parties. For a production installation with a browser console, use the [separate login and console hostnames](console.md#production-hostnames).
 
 Pass `--directory` to `serve` to load this installation and enable OIDC. Omitting it retains health-only mode.
 
