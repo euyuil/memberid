@@ -236,7 +236,7 @@ func (applications *DingTalkApplications) configure(ctx context.Context, princip
 	}
 	var result DingTalkApplication
 	err = pgx.BeginFunc(ctx, applications.store.pool, func(tx pgx.Tx) error {
-		before, err := lockProviderManagement(ctx, tx, principal, organization, exists && current.Enabled && !candidate.Enabled)
+		before, err := lockProviderManagement(ctx, tx, principal, organization, exists && current.Enabled && !candidate.Enabled, providerWriteRequirements(organizationID, "dingtalk", current.Namespace, input.Enabled != nil)...)
 		if err != nil {
 			return err
 		}

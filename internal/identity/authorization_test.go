@@ -74,3 +74,26 @@ func TestCompositeMemberReadRequiresEveryComponent(t *testing.T) {
 		t.Fatal("instance get implied collection listing", err)
 	}
 }
+
+func TestProviderActionsSeparateCreationConfigurationAndStatus(t *testing.T) {
+	org, _ := NewID(OrganizationKind)
+	base := "organizations/" + org + "/providers/dingtalk"
+	create := providerWriteRequirements(org, "dingtalk", "", true)
+	if err := checkManagementPermissions([]authorization.Permission{permission(base, "create")}, create...); err != nil {
+		t.Fatal("initial enabled is part of creation", err)
+	}
+	update := providerWriteRequirements(org, "dingtalk", "example-provider", true)
+	if err := checkManagementPermissions([]authorization.Permission{permission(base+"/*", "update")}, update...); !errors.Is(err, ErrForbidden) {
+		t.Fatal("submitted enabled did not require status authority", err)
+	}
+	if err := checkManagementPermissions(managementPermissions(ManagementActor{OrganizationID: org}), update...); err != nil {
+		t.Fatal(err)
+	}
+	credentials := providerWriteRequirements(org, "dingtalk", "example-provider", false)
+	if err := checkManagementPermissions([]authorization.Permission{permission(base+"/*", "update")}, credentials...); err != nil {
+		t.Fatal("credential-only update required status authority", err)
+	}
+	if err := checkManagementPermissions([]authorization.Permission{permission("**", "**")}, authorization.Requirement{Target: base + "/example-provider", Action: "delete"}); !errors.Is(err, ErrInvalid) {
+		t.Fatal("unsupported provider deletion", err)
+	}
+}

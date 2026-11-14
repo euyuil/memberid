@@ -27,6 +27,9 @@ func managementPermissions(actor ManagementActor) []authorization.Permission {
 		permission(organization+"/roleAssignments", "list", "create"),
 		permission(organization+"/roleAssignments/*", "delete"),
 		permission(organization+"/managementEvents", "list"),
+		permission(organization+"/providers", "list"),
+		permission(organization+"/providers/*", "create"),
+		permission(organization+"/providers/*/*", "update", "status.update"),
 	}
 }
 
@@ -89,6 +92,17 @@ func registeredManagementOperation(requirement authorization.Requirement) bool {
 			return requirement.Action == "list"
 		}
 		return len(parts) == 4 && (requirement.Action == "get" || requirement.Action == "update" || requirement.Action == "status.update")
+	case "providers":
+		if len(parts) == 3 {
+			return requirement.Action == "list"
+		}
+		if parts[3] != "dingtalk" && parts[3] != "feishu" {
+			return false
+		}
+		if len(parts) == 4 {
+			return requirement.Action == "create"
+		}
+		return len(parts) == 5 && validText(parts[4], 128) && (requirement.Action == "update" || requirement.Action == "status.update")
 	case "managementEvents":
 		return len(parts) == 3 && requirement.Action == "list"
 	case "roleAssignments":
@@ -151,4 +165,17 @@ func organizationUpdateRequirements(organizationID string, change OrganizationCh
 		requirements = append(requirements, authorization.Requirement{Target: target, Action: "status.update"})
 	}
 	return requirements, nil
+}
+
+func providerWriteRequirements(organizationID, kind, namespace string, statusSubmitted bool) []authorization.Requirement {
+	target := "organizations/" + organizationID + "/providers/" + kind
+	if namespace == "" {
+		return []authorization.Requirement{{Target: target, Action: "create"}}
+	}
+	target += "/" + namespace
+	requirements := []authorization.Requirement{{Target: target, Action: "update"}}
+	if statusSubmitted {
+		requirements = append(requirements, authorization.Requirement{Target: target, Action: "status.update"})
+	}
+	return requirements
 }
