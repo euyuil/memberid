@@ -4,9 +4,9 @@ This document records the agreed design for MemberID management scopes, CRUD
 actions, and wildcard matching. It complements the [Member role definitions](roles.md)
 and the [catalog of existing operations](management-operation-catalog.md).
 The scope/action parser and evaluator implement these rules. Core management
-reads, organization/Member/provider writes and administrator assignments use the shared
-check; the [catalog rollout status](management-operation-catalog.md#current-enforcement)
-identifies the remaining operation migrations. The [console access
+reads, organization/Member/provider writes, administrator assignments and account
+self-service use the shared check; the [catalog rollout status](management-operation-catalog.md#current-enforcement)
+identifies the enforced operations and separate installation/workflow contracts. The [console access
 matrix](console.md#first-version-access-model) and [private management API](management-api.md)
 continue to describe the available interfaces and their current access contracts.
 
@@ -262,7 +262,7 @@ automatically authorize browsing its parent collection. Creating a resource does
 not itself grant subsequent access; existing selectors determine coverage of the
 new resource.
 
-## Authorization boundaries and remaining work
+## Authorization boundaries and extension points
 
 An allowed operation must have applicable authority whose scope selector covers
 the target and whose actions allow the operation. Do not combine a matching
@@ -285,9 +285,15 @@ foreign Member. Wildcards do not bypass these restrictions or the existing
 [administrator-availability safeguards](administration.md#availability-and-audit).
 
 The [operation catalog](management-operation-catalog.md) supplies mappings for
-existing functionality and identifies operator-only contracts. Assignment IDs
-and API serialization, persistence schema, management API changes, additional
-capabilities, and the remaining enforcement migrations remain follow-up work.
+existing functionality and identifies operator-only contracts. A permission match
+does not bypass interface admission or workflow verification: console services
+require a management Member context, account services require the authenticated
+SSO context of the selected Member, and installation-only services require their
+explicit trusted principal. Account authority permits only the fixed self view
+and binding creation; it never inherits administrator permissions.
+
+Public assignment API serialization, permission persistence, management API
+changes, and additional capabilities remain separate design work.
 Built-in role permissions are defined in code, with current administrator
 assignments read from the existing store for each operation. This implementation
 does not introduce custom roles, exclusion or deny rules, an application-authorization

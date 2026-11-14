@@ -3,6 +3,7 @@ package identity
 import (
 	"context"
 
+	"github.com/euyuil/memberid/internal/authorization"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -15,9 +16,15 @@ type PhoneLinkTarget struct {
 // LinkPhone participates in VerifyAndApply's transaction. The caller separately
 // locks and validates its fresh session and single-use account request. This
 // operation cannot replace an occupied slot, restore revocation, or merge Members.
-func LinkPhone(ctx context.Context, tx pgx.Tx, verified Verification, target PhoneLinkTarget) error {
+func LinkPhone(ctx context.Context, tx pgx.Tx, principal Principal, verified Verification, target PhoneLinkTarget) error {
+	if principal.kind != accountPrincipal || target.SourceFactorID != principal.factorID || target.SourceBindingID != principal.bindingID {
+		return ErrForbidden
+	}
 	if !ValidID(target.OrganizationID, OrganizationKind) || !ValidID(target.MemberID, MemberKind) || !ValidID(target.SourceFactorID, FactorKind) || !ValidUUID(target.SourceBindingID) || !ValidID(verified.Factor.ID, FactorKind) || verified.Method != "sms" || verified.Factor.Type != "phone" || verified.Factor.Namespace != "phone:e164" {
 		return ErrInvalid
+	}
+	if err := authorizeAll(ctx, tx, principal, authorization.Requirement{Target: "organizations/" + target.OrganizationID + "/members/" + target.MemberID + "/bindings", Action: "create"}); err != nil {
+		return err
 	}
 	var id string
 	if err := tx.QueryRow(ctx, "SELECT id FROM organizations WHERE id=$1 AND status='enabled' FOR SHARE", target.OrganizationID).Scan(&id); err != nil {

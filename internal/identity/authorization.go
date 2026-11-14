@@ -37,6 +37,13 @@ func authorizeAll(ctx context.Context, db queryer, principal Principal, requirem
 	if principal.installation() {
 		return checkManagementPermissions([]authorization.Permission{permission("**", "**")}, requirements...)
 	}
+	if principal.kind == accountPrincipal {
+		organizationID, err := accountOrganization(ctx, db, principal)
+		if err != nil {
+			return err
+		}
+		return checkManagementPermissions(accountPermissions(organizationID, principal.memberID), requirements...)
+	}
 	if principal.kind != memberPrincipal {
 		return ErrForbidden
 	}
@@ -64,8 +71,8 @@ func checkManagementPermissions(permissions []authorization.Permission, requirem
 	return nil
 }
 
-// Registered operations constrain even a platform-wide wildcard. Further
-// resource families are registered when their service boundaries are migrated.
+// Registered operations constrain even a platform-wide wildcard. Adding a
+// permission does not introduce an endpoint or bypass its entry contract.
 func registeredManagementOperation(requirement authorization.Requirement) bool {
 	parts := strings.Split(requirement.Target, "/")
 	if requirement.Target == "organizations" {
@@ -88,8 +95,11 @@ func registeredManagementOperation(requirement authorization.Requirement) bool {
 		if !ValidID(parts[3], MemberKind) {
 			return false
 		}
-		if len(parts) == 5 && parts[4] == "bindings" {
-			return requirement.Action == "list"
+		if len(parts) >= 5 && parts[4] == "bindings" {
+			if len(parts) == 5 {
+				return requirement.Action == "list" || requirement.Action == "create"
+			}
+			return len(parts) == 6 && ValidUUID(parts[5]) && requirement.Action == "delete"
 		}
 		return len(parts) == 4 && (requirement.Action == "get" || requirement.Action == "update" || requirement.Action == "status.update")
 	case "providers":

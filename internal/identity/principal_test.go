@@ -13,13 +13,18 @@ func TestUntrustedPrincipalsCannotUseInstallationMutations(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	factorID, err := NewID(FactorKind)
+	if err != nil {
+		t.Fatal(err)
+	}
 	var decoded Principal
 	if err := json.Unmarshal([]byte(`{"kind":"operator","memberId":"","platform":true}`), &decoded); err != nil {
 		t.Fatal(err)
 	}
 	principals := map[string]Principal{
 		"empty": {}, "HTTP fields": decoded,
-		"Member": (ManagementActor{MemberID: memberID, GrantID: "synthetic-grant", Platform: true}).Principal(),
+		"Account Member": AccountPrincipal("synthetic-session", memberID, factorID, "00000000-0000-4000-8000-000000000001"),
+		"Member":         (ManagementActor{MemberID: memberID, GrantID: "synthetic-grant", Platform: true}).Principal(),
 	}
 	// No database is needed: installation-only entry points must reject these
 	// identities before performing any persistence or provider work.

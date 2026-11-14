@@ -89,7 +89,14 @@ func (service *Service) accountMember(r *http.Request, session accountSession, m
 	for _, member := range members {
 		if member.ID == memberID {
 			binding, err := identity.MemberEvidence(r.Context(), service.store.Database(), session.verified.Factor.ID, member.ID, member.OrganizationID)
-			return member, binding, err
+			if err != nil {
+				return identity.Member{}, "", err
+			}
+			principal := identity.AccountPrincipal(session.id, member.ID, session.verified.Factor.ID, binding)
+			if err := service.store.AuthorizeAccountView(r.Context(), principal, member.OrganizationID); err != nil {
+				return identity.Member{}, "", err
+			}
+			return member, binding, nil
 		}
 	}
 	return identity.Member{}, "", identity.ErrIneligible
@@ -310,7 +317,8 @@ func (service *Service) accountDingTalkCallback(w http.ResponseWriter, r *http.R
 		if !service.accountClient(request.accountDetails) {
 			return identity.ErrIneligible
 		}
-		if _, err := service.dingtalk.Link(r.Context(), tx, proof, request.MemberID, request.FactorID, request.BindingID); err != nil {
+		principal := identity.AccountPrincipal(current.id, request.MemberID, current.verified.Factor.ID, request.BindingID)
+		if _, err := service.dingtalk.Link(r.Context(), tx, principal, proof, request.MemberID); err != nil {
 			return err
 		}
 		_, err = tx.Exec(r.Context(), "UPDATE account_link_requests SET state='completed' WHERE id=$1", request.ID)

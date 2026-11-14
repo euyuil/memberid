@@ -185,6 +185,9 @@ func (store *Store) BindFactor(ctx context.Context, principal Principal, organiz
 	if !ValidID(organizationID, OrganizationKind) || !ValidID(memberID, MemberKind) || !ValidID(factorID, FactorKind) {
 		return Binding{}, ErrInvalid
 	}
+	if err := authorizeAll(ctx, store.pool, principal, authorization.Requirement{Target: "organizations/" + organizationID + "/members/" + memberID + "/bindings", Action: "create"}); err != nil {
+		return Binding{}, err
+	}
 	var result Binding
 	err := pgx.BeginFunc(ctx, store.pool, func(transaction pgx.Tx) error {
 		factor, err := readFactor(transaction.QueryRow(ctx, "SELECT "+factorColumns+" FROM authentication_factors WHERE id=$1 FOR UPDATE", factorID))
@@ -240,6 +243,13 @@ func (store *Store) RevokeBinding(ctx context.Context, principal Principal, orga
 	}
 	return pgx.BeginFunc(ctx, store.pool, func(tx pgx.Tx) error {
 		if err := managementLock(ctx, tx); err != nil {
+			return err
+		}
+		var bindingID string
+		if err := tx.QueryRow(ctx, "SELECT id::text FROM member_auth_factor_bindings WHERE member_id=$1 AND organization_id=$2 AND authentication_factor_id=$3", memberID, organizationID, factorID).Scan(&bindingID); err != nil {
+			return storageError(err)
+		}
+		if err := authorizeAll(ctx, tx, principal, authorization.Requirement{Target: "organizations/" + organizationID + "/members/" + memberID + "/bindings/" + bindingID, Action: "delete"}); err != nil {
 			return err
 		}
 		before, err := availableAdministrators(ctx, tx, organizationID)
