@@ -1,6 +1,6 @@
 # Member roles
 
-This document records the agreed Member role definitions. The [management scopes and actions](management-permissions.md) design defines resource selection, CRUD predicates, and wildcard matching. The complete action catalog and per-role operation mappings remain further design work. The [administration console](console.md#first-version-access-model) documents the operations available in the current implementation.
+This document records the agreed Member role definitions. The [management scopes and actions](management-permissions.md) design defines resource selection, CRUD predicates, qualified actions, and wildcard matching. The [operation catalog](management-operation-catalog.md) maps existing functionality to resources and roles. The [administration console](console.md#first-version-access-model) documents the operations available in the current implementation.
 
 ## Members and administrator assignments
 
@@ -18,7 +18,7 @@ Ordinary membership is the baseline. An administrator remains a Member and recei
 | Organization administrator | Ordinary organizations only | Administers MemberID identity management for the Member's own organization and its Members. |
 | Ordinary member | System or ordinary organization | Has no administrative authority. Account self-service depends on the supported functionality and its own authentication requirements. |
 
-These responsibilities establish the distinction between the roles. The [scope levels](management-permissions.md#ownership-and-scope-levels) define their ownership boundaries; exact per-role operation mappings remain to be specified. A role description does not make an unimplemented operation available or exempt an administrator from identity and lifecycle constraints.
+These responsibilities establish the distinction between the roles. The [scope levels](management-permissions.md#ownership-and-scope-levels) define their ownership boundaries; the [role matrix](management-operation-catalog.md#member-role-permissions) records the existing operation mappings. A role description does not make an unimplemented operation available or exempt an administrator from identity and lifecycle constraints.
 
 Platform and organization administrator roles belong to MemberID management. They do not grant administrator status, business roles, or resource permissions in consuming applications. Those applications retain their own authorization decisions, and MemberID does not add its management roles to their identity claims.
 
@@ -55,9 +55,10 @@ The current implementation stores administrator assignments separately from Memb
 
 The [console access matrix](console.md#first-version-access-model) describes current behavior. It is not the complete action catalog or an implementation of the agreed scope and action design. Trusted CLI operations and the installation-wide credential of the [private management API](management-api.md) retain their existing, separate access contracts; they are not additional Member roles.
 
-The [scope, CRUD, and wildcard rules](management-permissions.md) are documented separately. The remaining design work is to:
-
-1. Define the complete resource and operation catalog, including the role-to-action mapping.
-2. Define the implementation contracts and authorization checks for those operations.
+The [scope, CRUD, and wildcard rules](management-permissions.md) and
+[operation catalog](management-operation-catalog.md) are documented separately.
+Implementation contracts, assignment persistence and API representation, and
+the shared authorization evaluator remain follow-up work. New capabilities
+require explicit catalog entries rather than implied access from a role name.
 
 These design documents introduce no runtime permission evaluator, generic role API, custom-role mechanism, new credential type, or application-authorization service. They do not change the existing OIDC profile, database schema, or runtime behavior.

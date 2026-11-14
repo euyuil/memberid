@@ -37,6 +37,14 @@ The [Member role definitions](roles.md) and [management scopes and actions](mana
 
 Platform administrators can switch organizations from the management scope in the header while retaining their original operator identity. The sidebar has separate Organizations, Members, Identity providers, and Operation history entries. Switching between them keeps the selected organization. In the all-organization scope, platform administrators see members from every organization. Each row identifies its organization and opens the member detail in that organization. Organization administrators see their own organization in the header. These permissions belong exclusively to MemberID management and are not added to business application identity claims. There are no custom roles, invitations, deletion, bulk operations, credential resets or client-registration pages in this version. Explicit operator binding and first-administrator recovery use the operator tools.
 
+## Console navigation and directories
+
+The desktop sidebar can collapse to an icon rail. On narrow screens, the header opens a modal navigation drawer with keyboard focus handling. Both navigation modes preserve the selected organization, and the header continues to show that management scope. The account area identifies the current administrator separately from the selected scope.
+
+Organization, Member, identity-provider, and operation-history lists share a directory layout with a toolbar, consistent row spacing, status labels, and a record-count footer. Names are the primary label; opaque IDs remain available as secondary text. Status labels retain their text alongside color indicators. Counts describe the current page, not the total matching records. Existing cursor pagination and server-side Member search/filter semantics are unchanged.
+
+Member search and filters stay together above the table. Opening a Member from a filtered directory and returning preserves the original scope and filters. Page errors appear in a persistent, dismissible notification without moving the directory controls. Dialog validation continues to use its reserved feedback area.
+
 ## Organization identity providers
 
 Choose an organization, then open **身份提供商** (Identity providers). This directory lists the configured DingTalk and Feishu applications. Add multiple applications of either type with distinct application IDs and recognizable display names. Edit the display name, rotate the application secret, or enable and disable a source independently. The provider type, application ID, and tenant or corporation ID identify the binding namespace and stay fixed after creation. A replacement application gets its own row.
@@ -173,3 +181,5 @@ MEMBERID_CONSOLE_BROWSER_FILE=/private/new-console-status.json \
 ```
 
 Set `MEMBERID_TEST_DATABASE_URL` as documented in CONTRIBUTING. The private status file contains the temporary URL, synthetic phone number, and latest synthetic code. Create a sibling file with suffix `.stop` to end inspection and clean up that fixture's database/status files. The fixture times out after 20 minutes and is never compiled into the release executable. Do not expose its status file or test server publicly.
+
+For console layout changes, inspect the desktop and collapsed sidebar, the narrow-screen navigation drawer (including Escape and focus return), long names and IDs, filtered and empty Member directories, detail-to-directory return, and each directory's pagination. Keep synthetic fixture screenshots separate from real identity data.

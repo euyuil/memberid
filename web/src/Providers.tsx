@@ -1,7 +1,13 @@
 import { useState, type FormEvent } from "react"
-import { Plus } from "lucide-react"
+import { KeyRound, Plus } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Badge } from "@/components/ui/badge"
+import {
+  DirectoryToolbar,
+  DirectoryFooter,
+  RecordIdentity,
+  RecordTime,
+  StatusBadge,
+} from "@/components/directory"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -63,13 +69,12 @@ export function Providers({
   const [editing, setEditing] = useState<Provider | "new">()
   return (
     <section className="directory" aria-label="身份提供商列表">
-      <div className="section-heading">
-        <span className="muted">{directory.items.length} 个提供商</span>
+      <DirectoryToolbar title="已配置的应用">
         <Button disabled={!enabled} onClick={() => setEditing("new")}>
           <Plus data-icon="inline-start" />
           添加提供商
         </Button>
-      </div>
+      </DirectoryToolbar>
       <Table>
         <TableHeader>
           <TableRow>
@@ -78,23 +83,29 @@ export function Providers({
             <TableHead>应用 ID</TableHead>
             <TableHead>状态</TableHead>
             <TableHead>创建时间</TableHead>
-            <TableHead>操作</TableHead>
+            <TableHead className="row-actions">操作</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {directory.items.map((item) => (
             <TableRow key={item.id}>
-              <TableCell className="font-medium">{item.displayName}</TableCell>
+              <TableCell>
+                <RecordIdentity name={item.displayName} icon={<KeyRound />} />
+              </TableCell>
               <TableCell>{names[item.type]}</TableCell>
               <TableCell>
-                <code>{item.clientId}</code>
+                <code className="record-id" title={item.clientId}>
+                  {item.clientId}
+                </code>
               </TableCell>
               <TableCell>
-                <Badge
-                  variant={
-                    item.enabled && item.authorizationStatus === "active"
-                      ? "secondary"
-                      : "outline"
+                <StatusBadge
+                  tone={
+                    !item.enabled
+                      ? "neutral"
+                      : item.authorizationStatus === "revoked"
+                        ? "negative"
+                        : "positive"
                   }
                 >
                   {!item.enabled
@@ -102,14 +113,14 @@ export function Providers({
                     : item.authorizationStatus === "revoked"
                       ? "已撤权"
                       : "已启用"}
-                </Badge>
+                </StatusBadge>
               </TableCell>
               <TableCell>
-                {new Date(item.createdAt).toLocaleString("zh-CN")}
+                <RecordTime value={item.createdAt} />
               </TableCell>
-              <TableCell>
+              <TableCell className="row-actions">
                 <Button
-                  variant="outline"
+                  variant="ghost"
                   size="sm"
                   disabled={!enabled}
                   aria-label={`编辑 ${item.displayName}`}
@@ -122,13 +133,14 @@ export function Providers({
           ))}
           {directory.items.length === 0 && (
             <TableRow>
-              <TableCell colSpan={6} className="muted">
+              <TableCell colSpan={6} className="directory-empty">
                 本组织尚未配置提供商。
               </TableCell>
             </TableRow>
           )}
         </TableBody>
       </Table>
+      <DirectoryFooter count={directory.items.length} />
       {editing && (
         <ProviderDialog
           directory={directory}

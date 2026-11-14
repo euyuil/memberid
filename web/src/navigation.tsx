@@ -1,7 +1,7 @@
 import type { ComponentProps } from "react"
 import { routeURL, type Route } from "./routes"
 
-type NavigationState = { memberList?: string }
+export type NavigationState = { memberList?: string }
 
 export function currentLocation() {
   return window.location.pathname + window.location.search
