@@ -170,8 +170,15 @@ func (store *Store) UpdateMember(ctx context.Context, principal Principal, organ
 	if !principal.installation() {
 		return Member{}, ErrForbidden
 	}
+	requirements, err := memberUpdateRequirements(organizationID, memberID, change)
+	if err != nil {
+		return Member{}, err
+	}
 	var result Member
-	err := pgx.BeginFunc(ctx, store.pool, func(tx pgx.Tx) error {
+	err = pgx.BeginFunc(ctx, store.pool, func(tx pgx.Tx) error {
+		if err := authorizeAll(ctx, tx, principal, requirements...); err != nil {
+			return err
+		}
 		var err error
 		result, err = updateMember(ctx, tx, organizationID, memberID, change)
 		if err != nil {

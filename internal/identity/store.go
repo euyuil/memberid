@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/euyuil/memberid/internal/authorization"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -82,6 +83,9 @@ func (store *Store) CreateOrganization(ctx context.Context, principal Principal,
 	if !ValidID(id, OrganizationKind) {
 		return Organization{}, ErrInvalid
 	}
+	if err := authorizeAll(ctx, store.pool, principal, authorization.Requirement{Target: "organizations", Action: "create"}); err != nil {
+		return Organization{}, err
+	}
 	return readOrganization(store.pool.QueryRow(ctx, "INSERT INTO organizations(id,name) VALUES($1,$2) RETURNING "+organizationColumns, id, name))
 }
 
@@ -108,6 +112,9 @@ func (store *Store) CreateMember(ctx context.Context, principal Principal, organ
 	}
 	if !ValidID(id, MemberKind) {
 		return Member{}, ErrInvalid
+	}
+	if err := authorizeAll(ctx, store.pool, principal, authorization.Requirement{Target: "organizations/" + organizationID + "/members", Action: "create"}); err != nil {
+		return Member{}, err
 	}
 	return readMember(store.pool.QueryRow(ctx, "INSERT INTO members(id,organization_id,display_name) VALUES($1,$2,$3) RETURNING "+memberColumns, id, organizationID, name))
 }

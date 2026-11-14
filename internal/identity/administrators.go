@@ -6,6 +6,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/euyuil/memberid/internal/authorization"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -104,6 +105,9 @@ func managementEvent(ctx context.Context, tx pgx.Tx, principal Principal, organi
 }
 
 func (store *Store) SetAdministrator(ctx context.Context, principal Principal, organizationID, memberID string, enabled bool) error {
+	if principal.kind != memberPrincipal && principal.kind != operatorPrincipal {
+		return ErrForbidden
+	}
 	if !ValidID(organizationID, OrganizationKind) || !ValidID(memberID, MemberKind) {
 		return ErrInvalid
 	}
@@ -111,7 +115,12 @@ func (store *Store) SetAdministrator(ctx context.Context, principal Principal, o
 		if err := managementLock(ctx, tx); err != nil {
 			return err
 		}
-		if err := authorizeManagement(ctx, tx, principal, organizationID, organizationID == SystemOrganizationID); err != nil {
+		requirement := authorization.Requirement{Target: "organizations/" + organizationID + "/roleAssignments", Action: "create"}
+		if !enabled {
+			requirement.Target += "/" + memberID
+			requirement.Action = "delete"
+		}
+		if err := authorizeAll(ctx, tx, principal, requirement); err != nil {
 			return err
 		}
 		if _, err := readMember(tx.QueryRow(ctx, "SELECT "+memberColumns+" FROM members WHERE id=$1 AND organization_id=$2", memberID, organizationID)); err != nil {
@@ -199,18 +208,13 @@ func (store *Store) Manage(ctx context.Context, principal Principal, action, org
 		if err := managementLock(ctx, tx); err != nil {
 			return err
 		}
-		if action == "organization.update" {
-			requirements, err := organizationUpdateRequirements(organizationID, OrganizationChange{Name: change.Name, Status: change.Status})
-			if err != nil {
-				return err
-			}
-			if err := authorizeAll(ctx, tx, principal, requirements...); err != nil {
-				return err
-			}
-		} else if err := authorizeManagement(ctx, tx, principal, organizationID, action == "organization.create" || change.Status != nil); err != nil {
+		requirements, err := managementWriteRequirements(action, organizationID, memberID, change)
+		if err != nil {
 			return err
 		}
-		var err error
+		if err := authorizeAll(ctx, tx, principal, requirements...); err != nil {
+			return err
+		}
 		switch action {
 		case "organization.create":
 			if change.Name == nil || !validText(*change.Name, 128) {
