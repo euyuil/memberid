@@ -79,7 +79,7 @@ func TestDirectoryDistinguishesOutageFromContradiction(t *testing.T) {
 
 func TestDirectoryPhoneWithoutVerifiedExternalIdentity(t *testing.T) {
 	store, apps, organization, _ := applicationFixture(t)
-	member, err := store.CreateMember(t.Context(), organization.ID, "", "Example Member")
+	member, err := store.CreateMember(t.Context(), OperatorPrincipal(), organization.ID, "", "Example Member")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -93,7 +93,7 @@ func TestDirectoryPhoneWithoutVerifiedExternalIdentity(t *testing.T) {
 	for _, state := range []string{"unconfigured", "explicit prebinding", "revoked prebinding"} {
 		t.Run(state, func(t *testing.T) {
 			if state == "explicit prebinding" {
-				app, err := apps.Configure(t.Context(), organization.ID, DingTalkApplicationInput{CorpID: "example-corp", ClientID: "example-client", ClientSecret: "synthetic-secret"})
+				app, err := apps.Configure(t.Context(), OperatorPrincipal(), organization.ID, DingTalkApplicationInput{CorpID: "example-corp", ClientID: "example-client", ClientSecret: "synthetic-secret"})
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -101,7 +101,7 @@ func TestDirectoryPhoneWithoutVerifiedExternalIdentity(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if _, err := store.BindFactor(t.Context(), organization.ID, member.ID, factor.ID); err != nil {
+				if _, err := store.BindFactor(t.Context(), OperatorPrincipal(), organization.ID, member.ID, factor.ID); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -110,7 +110,7 @@ func TestDirectoryPhoneWithoutVerifiedExternalIdentity(t *testing.T) {
 				if err != nil || len(bindings) != 1 {
 					t.Fatal(err)
 				}
-				if err := store.RevokeBinding(t.Context(), organization.ID, member.ID, bindings[0].FactorID); err != nil {
+				if err := store.RevokeBinding(t.Context(), OperatorPrincipal(), organization.ID, member.ID, bindings[0].FactorID); err != nil {
 					t.Fatal(err)
 				}
 			}

@@ -3,6 +3,7 @@
 package oidcprovider
 
 import (
+	"github.com/euyuil/memberid/internal/identity"
 	"net/url"
 	"testing"
 )
@@ -33,7 +34,7 @@ func TestAuthorizationHintBindsSubject(t *testing.T) {
 		t.Fatal("matching hint changed the subject")
 	}
 
-	member, err := f.store.CreateMember(t.Context(), f.member.OrganizationID, "", "Another person")
+	member, err := f.store.CreateMember(t.Context(), identity.OperatorPrincipal(), f.member.OrganizationID, "", "Another person")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,7 +42,7 @@ func TestAuthorizationHintBindsSubject(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.store.BindFactor(t.Context(), member.OrganizationID, member.ID, factor.ID); err != nil {
+	if _, err := f.store.BindFactor(t.Context(), identity.OperatorPrincipal(), member.OrganizationID, member.ID, factor.ID); err != nil {
 		t.Fatal(err)
 	}
 	f.browser = browserClient()

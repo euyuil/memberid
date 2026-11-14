@@ -14,11 +14,11 @@ import (
 func TestDingTalkAuthorizationEvidenceAndPhoneEligibility(t *testing.T) {
 	store, apps, organization, _ := applicationFixture(t)
 	input := DingTalkApplicationInput{CorpID: "example-corp", ClientID: "example-client", ClientSecret: rand.Text()}
-	initial, err := apps.Configure(t.Context(), organization.ID, input)
+	initial, err := apps.Configure(t.Context(), OperatorPrincipal(), organization.ID, input)
 	if err != nil {
 		t.Fatal(err)
 	}
-	member, err := store.CreateMember(t.Context(), organization.ID, "", "Example member")
+	member, err := store.CreateMember(t.Context(), OperatorPrincipal(), organization.ID, "", "Example member")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -26,18 +26,18 @@ func TestDingTalkAuthorizationEvidenceAndPhoneEligibility(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = store.BindFactor(t.Context(), organization.ID, member.ID, factor.ID); err != nil {
+	if _, err = store.BindFactor(t.Context(), OperatorPrincipal(), organization.ID, member.ID, factor.ID); err != nil {
 		t.Fatal(err)
 	}
 	dingTalkFactor, err := store.EnsureFactor(t.Context(), "dingtalk", initial.Namespace, "example-union")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = store.BindFactor(t.Context(), organization.ID, member.ID, dingTalkFactor.ID); err != nil {
+	if _, err = store.BindFactor(t.Context(), OperatorPrincipal(), organization.ID, member.ID, dingTalkFactor.ID); err != nil {
 		t.Fatal(err)
 	}
 	other, otherMember := organizationAndMember(t, store)
-	if _, err = store.BindFactor(t.Context(), other.ID, otherMember.ID, factor.ID); err != nil {
+	if _, err = store.BindFactor(t.Context(), OperatorPrincipal(), other.ID, otherMember.ID, factor.ID); err != nil {
 		t.Fatal(err)
 	}
 	apps.checker = checkDingTalkFunc(func(context.Context, string, string, string) error { return dingtalk.ErrUnavailable })
@@ -72,14 +72,14 @@ func TestDingTalkAuthorizationEvidenceAndPhoneEligibility(t *testing.T) {
 	// An invalid replacement credential is not evidence about the stored credential.
 	input.ExpectedRevision = initial.Revision
 	input.ClientSecret = rand.Text()
-	if _, err := apps.Configure(t.Context(), organization.ID, input); !errors.Is(err, ErrProviderUnavailable) {
+	if _, err := apps.Configure(t.Context(), OperatorPrincipal(), organization.ID, input); !errors.Is(err, ErrProviderUnavailable) {
 		t.Fatal(err)
 	}
 	current, err := apps.Inspect(t.Context(), organization.ID)
 	if err != nil || current != revoked {
 		t.Fatal("failed candidate modified authorization", err)
 	}
-	if _, err = store.SetManualBlock(t.Context(), organization.ID, member.ID, true); err != nil {
+	if _, err = store.SetManualBlock(t.Context(), OperatorPrincipal(), organization.ID, member.ID, true); err != nil {
 		t.Fatal(err)
 	}
 	apps.checker = checkDingTalkFunc(func(context.Context, string, string, string) error { return nil })
@@ -90,7 +90,7 @@ func TestDingTalkAuthorizationEvidenceAndPhoneEligibility(t *testing.T) {
 	if value, err := store.Eligibility(t.Context(), organization.ID, member.ID, factor.ID, "phone"); err != nil || value.Eligible {
 		t.Fatal("authorization recovery removed manual block", err)
 	}
-	if _, err = store.SetManualBlock(t.Context(), organization.ID, member.ID, false); err != nil {
+	if _, err = store.SetManualBlock(t.Context(), OperatorPrincipal(), organization.ID, member.ID, false); err != nil {
 		t.Fatal(err)
 	}
 	if value, err := store.Eligibility(t.Context(), organization.ID, member.ID, factor.ID, "phone"); err != nil || !value.Eligible {
@@ -103,7 +103,7 @@ func TestDingTalkAuthorizationRejectsSupersededObservations(t *testing.T) {
 		t.Run(kind, func(t *testing.T) {
 			store, apps, organization, key := applicationFixture(t)
 			input := DingTalkApplicationInput{CorpID: "example-corp", ClientID: "example-client", ClientSecret: rand.Text()}
-			app, err := apps.Configure(t.Context(), organization.ID, input)
+			app, err := apps.Configure(t.Context(), OperatorPrincipal(), organization.ID, input)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -126,10 +126,10 @@ func TestDingTalkAuthorizationRejectsSupersededObservations(t *testing.T) {
 			case "rotation":
 				input.ExpectedRevision = app.Revision
 				input.ClientSecret = rand.Text()
-				_, err = apps.Configure(t.Context(), organization.ID, input)
+				_, err = apps.Configure(t.Context(), OperatorPrincipal(), organization.ID, input)
 			case "lifecycle":
 				for _, status := range []string{"disabled", "enabled"} {
-					if _, err = store.UpdateOrganization(t.Context(), organization.ID, OrganizationChange{Status: &status}); err != nil {
+					if _, err = store.UpdateOrganization(t.Context(), OperatorPrincipal(), organization.ID, OrganizationChange{Status: &status}); err != nil {
 						break
 					}
 				}
@@ -195,7 +195,7 @@ func TestDingTalkLoginProofDoesNotSurviveOrganizationDisablement(t *testing.T) {
 	store, _, verifier, app := verifierFixture(t)
 	proof := verifiedLogin(t, verifier, app)
 	for _, status := range []string{"disabled", "enabled"} {
-		if _, err := store.UpdateOrganization(t.Context(), app.OrganizationID, OrganizationChange{Status: &status}); err != nil {
+		if _, err := store.UpdateOrganization(t.Context(), OperatorPrincipal(), app.OrganizationID, OrganizationChange{Status: &status}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -217,7 +217,7 @@ func TestDingTalkLoginProofDoesNotSurviveOrganizationDisablement(t *testing.T) {
 func TestDingTalkConfigurationRecoveryAndObservationConflict(t *testing.T) {
 	store, apps, organization, key := applicationFixture(t)
 	input := DingTalkApplicationInput{CorpID: "example-corp", ClientID: "example-client", ClientSecret: rand.Text()}
-	first, err := apps.Configure(t.Context(), organization.ID, input)
+	first, err := apps.Configure(t.Context(), OperatorPrincipal(), organization.ID, input)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -228,7 +228,7 @@ func TestDingTalkConfigurationRecoveryAndObservationConflict(t *testing.T) {
 	}
 	input.ExpectedRevision = first.Revision
 	apps.checker = checkDingTalkFunc(func(context.Context, string, string, string) error { return nil })
-	recovered, err := apps.Configure(t.Context(), organization.ID, input)
+	recovered, err := apps.Configure(t.Context(), OperatorPrincipal(), organization.ID, input)
 	if err != nil || recovered.AuthorizationStatus != "active" || recovered.Revision != first.Revision || recovered.AuthorizationRevision != revoked.AuthorizationRevision+1 || recovered.Namespace != first.Namespace {
 		t.Fatal("recovery changed credentials or stable binding", err)
 	}
@@ -240,7 +240,10 @@ func TestDingTalkConfigurationRecoveryAndObservationConflict(t *testing.T) {
 	}
 	input.ClientSecret = rand.Text()
 	result := make(chan error, 1)
-	go func() { _, err := slow.Configure(t.Context(), organization.ID, input); result <- err }()
+	go func() {
+		_, err := slow.Configure(t.Context(), OperatorPrincipal(), organization.ID, input)
+		result <- err
+	}()
 	<-started
 	apps.checker = checkDingTalkFunc(func(context.Context, string, string, string) error { return dingtalk.ErrAuthorizationDenied })
 	_, syncErr := apps.SynchronizeAuthorization(t.Context(), organization.ID)

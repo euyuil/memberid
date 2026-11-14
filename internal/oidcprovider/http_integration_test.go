@@ -89,19 +89,19 @@ func newConfiguredFixture(t *testing.T, refreshEnabled bool) *fixture {
 		t.Fatal(err)
 	}
 	secret := config.RandomSecret()
-	organization, err := store.CreateOrganization(t.Context(), "", "Example Team")
+	organization, err := store.CreateOrganization(t.Context(), identity.OperatorPrincipal(), "", "Example Team")
 	if err != nil {
 		t.Fatal(err)
 	}
-	member, err := store.CreateMember(t.Context(), organization.ID, "", "Example Member")
+	member, err := store.CreateMember(t.Context(), identity.OperatorPrincipal(), organization.ID, "", "Example Member")
 	if err != nil {
 		t.Fatal(err)
 	}
-	other, err := store.CreateOrganization(t.Context(), "", "Second Team")
+	other, err := store.CreateOrganization(t.Context(), identity.OperatorPrincipal(), "", "Second Team")
 	if err != nil {
 		t.Fatal(err)
 	}
-	otherMember, err := store.CreateMember(t.Context(), other.ID, "", "Example Member")
+	otherMember, err := store.CreateMember(t.Context(), identity.OperatorPrincipal(), other.ID, "", "Example Member")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -110,7 +110,7 @@ func newConfiguredFixture(t *testing.T, refreshEnabled bool) *fixture {
 		t.Fatal(err)
 	}
 	for _, m := range []identity.Member{member, otherMember} {
-		if _, err := store.BindFactor(t.Context(), m.OrganizationID, m.ID, factor.ID); err != nil {
+		if _, err := store.BindFactor(t.Context(), identity.OperatorPrincipal(), m.OrganizationID, m.ID, factor.ID); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -415,7 +415,7 @@ func TestEligibilityRevocationAndLogout(t *testing.T) {
 			f.status(f.userinfo(token), 200)
 			switch operation {
 			case "block":
-				if _, err := f.store.SetManualBlock(t.Context(), f.member.OrganizationID, f.member.ID, true); err != nil {
+				if _, err := f.store.SetManualBlock(t.Context(), identity.OperatorPrincipal(), f.member.OrganizationID, f.member.ID, true); err != nil {
 					t.Fatal(err)
 				}
 			case "revoke":

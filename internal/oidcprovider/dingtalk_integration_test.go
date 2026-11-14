@@ -66,7 +66,7 @@ func enableDingTalk(t *testing.T, f *fixture, phone bool) (*testDingTalk, *ident
 		if index == 1 {
 			client = "second-client"
 		}
-		if _, err := apps.Configure(t.Context(), organization, identity.DingTalkApplicationInput{CorpID: "example-corp", ClientID: client, ClientSecret: config.RandomSecret()}); err != nil {
+		if _, err := apps.Configure(t.Context(), identity.OperatorPrincipal(), organization, identity.DingTalkApplicationInput{CorpID: "example-corp", ClientID: client, ClientSecret: config.RandomSecret()}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -186,7 +186,7 @@ func TestDingTalkOnlyOIDCLoginRefreshAndIndependentSubjects(t *testing.T) {
 		t.Fatal("factor client offered DingTalk login")
 	}
 	f.status(f.submit(page.body, "continue", url.Values{"consent": {"yes"}}), 200)
-	if _, err := f.store.SetManualBlock(t.Context(), f.member.OrganizationID, memberID, true); err != nil {
+	if _, err := f.store.SetManualBlock(t.Context(), identity.OperatorPrincipal(), f.member.OrganizationID, memberID, true); err != nil {
 		t.Fatal(err)
 	}
 	f.invalidRefresh("example-web", next["refresh_token"].(string))
@@ -292,7 +292,7 @@ func TestDingTalkCallbackRejectsInvalidationDuringProviderIO(t *testing.T) {
 			case "cancel":
 				f.status(f.submit(page.body, "cancel", nil), 200)
 			case "rotate":
-				_, err := apps.Configure(t.Context(), f.member.OrganizationID, identity.DingTalkApplicationInput{CorpID: "example-corp", ClientID: "example-client", ClientSecret: config.RandomSecret(), ExpectedRevision: 1})
+				_, err := apps.Configure(t.Context(), identity.OperatorPrincipal(), f.member.OrganizationID, identity.DingTalkApplicationInput{CorpID: "example-corp", ClientID: "example-client", ClientSecret: config.RandomSecret(), ExpectedRevision: 1})
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -302,12 +302,12 @@ func TestDingTalkCallbackRejectsInvalidationDuringProviderIO(t *testing.T) {
 				}
 			case "disable", "reenable":
 				status := "disabled"
-				if _, err := f.store.UpdateOrganization(t.Context(), f.member.OrganizationID, identity.OrganizationChange{Status: &status}); err != nil {
+				if _, err := f.store.UpdateOrganization(t.Context(), identity.OperatorPrincipal(), f.member.OrganizationID, identity.OrganizationChange{Status: &status}); err != nil {
 					t.Fatal(err)
 				}
 				if kind == "reenable" {
 					status = "enabled"
-					if _, err := f.store.UpdateOrganization(t.Context(), f.member.OrganizationID, identity.OrganizationChange{Status: &status}); err != nil {
+					if _, err := f.store.UpdateOrganization(t.Context(), identity.OperatorPrincipal(), f.member.OrganizationID, identity.OrganizationChange{Status: &status}); err != nil {
 						t.Fatal(err)
 					}
 				}

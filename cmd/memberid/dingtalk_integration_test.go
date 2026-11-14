@@ -35,7 +35,7 @@ func TestDingTalkOperatorCommands(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer store.Close()
-	organization, err := store.CreateOrganization(t.Context(), "", "Example organization")
+	organization, err := store.CreateOrganization(t.Context(), identity.OperatorPrincipal(), "", "Example organization")
 	if err != nil {
 		t.Fatal(err)
 	}

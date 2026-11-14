@@ -21,7 +21,7 @@ func TestMemberEligibilityManagementContract(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, pair := range []struct{ organizationID, memberID string }{{organization.ID, member.ID}, {other.ID, outside.ID}} {
-		if _, err := f.store.BindFactor(t.Context(), pair.organizationID, pair.memberID, factor.ID); err != nil {
+		if _, err := f.store.BindFactor(t.Context(), identity.OperatorPrincipal(), pair.organizationID, pair.memberID, factor.ID); err != nil {
 			t.Fatal(err)
 		}
 	}

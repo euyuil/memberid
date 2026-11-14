@@ -30,7 +30,7 @@ func manageAdministrator(ctx context.Context, args []string, stdout, stderr io.W
 		return err
 	}
 	defer store.Close()
-	if err = store.SetAdministrator(ctx, identity.ManagementActor{}, *org, *member, args[0] == "grant"); err != nil {
+	if err = store.SetAdministrator(ctx, identity.OperatorPrincipal(), *org, *member, args[0] == "grant"); err != nil {
 		return err
 	}
 	return json.NewEncoder(stdout).Encode(map[string]any{"organizationId": *org, "memberId": *member, "administrator": args[0] == "grant"})
@@ -56,7 +56,7 @@ func prepareSystemDingTalk(ctx context.Context, args []string, stdout, stderr io
 		return err
 	}
 	defer store.Close()
-	if err = store.PrepareSystemDingTalkAdmissionForSource(ctx, *member, union, providerID); err != nil {
+	if err = store.PrepareSystemDingTalkAdmissionForSource(ctx, identity.OperatorPrincipal(), *member, union, providerID); err != nil {
 		return err
 	}
 	return json.NewEncoder(stdout).Encode(map[string]any{"memberId": *member, "admissionPrepared": union != ""})

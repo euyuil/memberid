@@ -66,7 +66,7 @@ func TestOrganizationProviderManagementAndFeishuOIDC(t *testing.T) {
 		t.Fatal(err)
 	}
 	f.service.feishu = apps
-	if err := f.store.SetAdministrator(t.Context(), identity.ManagementActor{}, f.member.OrganizationID, f.member.ID, true); err != nil {
+	if err := f.store.SetAdministrator(t.Context(), identity.OperatorPrincipal(), f.member.OrganizationID, f.member.ID, true); err != nil {
 		t.Fatal(err)
 	}
 	server := consoleProviderFixture(t, f, dingTalk, provider)

@@ -36,7 +36,7 @@ func applicationFixture(t *testing.T) (*Store, *DingTalkApplications, Organizati
 func TestDingTalkConfigurationEncryptionAndRotation(t *testing.T) {
 	store, apps, organization, key := applicationFixture(t)
 	input := DingTalkApplicationInput{CorpID: "example-corp", ClientID: "example-client", ClientSecret: rand.Text()}
-	first, err := apps.Configure(t.Context(), organization.ID, input)
+	first, err := apps.Configure(t.Context(), OperatorPrincipal(), organization.ID, input)
 	if err != nil || first.Revision != 1 || first.Namespace == "" {
 		t.Fatal("initial configuration failed", err)
 	}
@@ -68,19 +68,19 @@ func TestDingTalkConfigurationEncryptionAndRotation(t *testing.T) {
 		t.Fatal("metadata unexpectedly needs decryption", err)
 	}
 	input.ExpectedRevision = 1
-	same, err := apps.Configure(t.Context(), organization.ID, input)
+	same, err := apps.Configure(t.Context(), OperatorPrincipal(), organization.ID, input)
 	if err != nil || same != first {
 		t.Fatal("unchanged credentials changed identity", err)
 	}
 	for _, change := range []func(*DingTalkApplicationInput){func(v *DingTalkApplicationInput) { v.CorpID = "different-corp" }, func(v *DingTalkApplicationInput) { v.ClientID = "different-client" }, func(v *DingTalkApplicationInput) { v.ExpectedRevision = 0 }} {
 		different := input
 		change(&different)
-		if _, err := apps.Configure(t.Context(), organization.ID, different); !errors.Is(err, ErrConflict) {
+		if _, err := apps.Configure(t.Context(), OperatorPrincipal(), organization.ID, different); !errors.Is(err, ErrConflict) {
 			t.Fatal("binding or stale revision accepted", err)
 		}
 	}
 	input.ClientSecret = rand.Text()
-	second, err := apps.Configure(t.Context(), organization.ID, input)
+	second, err := apps.Configure(t.Context(), OperatorPrincipal(), organization.ID, input)
 	if err != nil || second.Revision != 2 || second.Namespace != first.Namespace || second.CreatedAt != first.CreatedAt {
 		t.Fatal("rotation changed identity", err)
 	}
@@ -105,21 +105,21 @@ func TestDingTalkConfigurationRejectionPreservesStoredApplication(t *testing.T) 
 	store, apps, organization, _ := applicationFixture(t)
 	input := DingTalkApplicationInput{CorpID: "example-corp", ClientID: "example-client", ClientSecret: rand.Text()}
 	apps.checker = checkDingTalkFunc(func(context.Context, string, string, string) error { return errors.New("private provider failure") })
-	if _, err := apps.Configure(t.Context(), organization.ID, input); err != ErrProviderUnavailable {
+	if _, err := apps.Configure(t.Context(), OperatorPrincipal(), organization.ID, input); err != ErrProviderUnavailable {
 		t.Fatal("provider failure disclosed", err)
 	}
 	if _, err := apps.Inspect(t.Context(), organization.ID); !errors.Is(err, ErrNotFound) {
 		t.Fatal("failed authorization stored configuration", err)
 	}
 	apps.checker = checkDingTalkFunc(func(context.Context, string, string, string) error { return nil })
-	first, err := apps.Configure(t.Context(), organization.ID, input)
+	first, err := apps.Configure(t.Context(), OperatorPrincipal(), organization.ID, input)
 	if err != nil {
 		t.Fatal(err)
 	}
 	apps.checker = checkDingTalkFunc(func(context.Context, string, string, string) error { return errors.New("denied candidate credentials") })
 	input.ExpectedRevision = 1
 	input.ClientSecret = rand.Text()
-	if _, err := apps.Configure(t.Context(), organization.ID, input); err != ErrProviderUnavailable {
+	if _, err := apps.Configure(t.Context(), OperatorPrincipal(), organization.ID, input); err != ErrProviderUnavailable {
 		t.Fatal(err)
 	}
 	retained, err := apps.Inspect(t.Context(), organization.ID)
@@ -127,17 +127,17 @@ func TestDingTalkConfigurationRejectionPreservesStoredApplication(t *testing.T) 
 		t.Fatal("failed candidate changed current configuration", err)
 	}
 	disabled := "disabled"
-	if _, err := store.UpdateOrganization(t.Context(), organization.ID, OrganizationChange{Status: &disabled}); err != nil {
+	if _, err := store.UpdateOrganization(t.Context(), OperatorPrincipal(), organization.ID, OrganizationChange{Status: &disabled}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := apps.Configure(t.Context(), organization.ID, input); !errors.Is(err, ErrIneligible) {
+	if _, err := apps.Configure(t.Context(), OperatorPrincipal(), organization.ID, input); !errors.Is(err, ErrIneligible) {
 		t.Fatal("disabled organization changed", err)
 	}
-	if _, err := apps.Configure(t.Context(), "invalid", input); !errors.Is(err, ErrInvalid) {
+	if _, err := apps.Configure(t.Context(), OperatorPrincipal(), "invalid", input); !errors.Is(err, ErrInvalid) {
 		t.Fatal(err)
 	}
 	input.ExpectedRevision = -1
-	if _, err := apps.Configure(t.Context(), organization.ID, input); !errors.Is(err, ErrInvalid) {
+	if _, err := apps.Configure(t.Context(), OperatorPrincipal(), organization.ID, input); !errors.Is(err, ErrInvalid) {
 		t.Fatal(err)
 	}
 }
@@ -146,15 +146,15 @@ func TestDingTalkCiphertextCannotCrossOrganizations(t *testing.T) {
 	store, apps, firstOrganization, _ := applicationFixture(t)
 	secondOrganization, _ := organizationAndMember(t, store)
 	input := DingTalkApplicationInput{CorpID: "example-corp", ClientID: "first-client", ClientSecret: rand.Text()}
-	first, err := apps.Configure(t.Context(), firstOrganization.ID, input)
+	first, err := apps.Configure(t.Context(), OperatorPrincipal(), firstOrganization.ID, input)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := apps.Configure(t.Context(), secondOrganization.ID, input); !errors.Is(err, ErrConflict) {
+	if _, err := apps.Configure(t.Context(), OperatorPrincipal(), secondOrganization.ID, input); !errors.Is(err, ErrConflict) {
 		t.Fatal("application registration reused across organizations", err)
 	}
 	input.ClientID = "second-client"
-	second, err := apps.Configure(t.Context(), secondOrganization.ID, input)
+	second, err := apps.Configure(t.Context(), OperatorPrincipal(), secondOrganization.ID, input)
 	if err != nil || second.Namespace == first.Namespace {
 		t.Fatal("organizations share a provider namespace", err)
 	}
@@ -172,7 +172,7 @@ func TestDingTalkConcurrentConfigurationChecksRevisionAfterProviderIO(t *testing
 			store, apps, organization, _ := applicationFixture(t)
 			input := DingTalkApplicationInput{CorpID: "example-corp", ClientID: "example-client", ClientSecret: rand.Text()}
 			if !initial {
-				if _, err := apps.Configure(t.Context(), organization.ID, input); err != nil {
+				if _, err := apps.Configure(t.Context(), OperatorPrincipal(), organization.ID, input); err != nil {
 					t.Fatal(err)
 				}
 				input.ExpectedRevision = 1
@@ -184,7 +184,10 @@ func TestDingTalkConcurrentConfigurationChecksRevisionAfterProviderIO(t *testing
 			for range 2 {
 				candidate := input
 				candidate.ClientSecret = rand.Text()
-				go func() { _, err := apps.Configure(t.Context(), organization.ID, candidate); results <- err }()
+				go func() {
+					_, err := apps.Configure(t.Context(), OperatorPrincipal(), organization.ID, candidate)
+					results <- err
+				}()
 			}
 			<-started
 			<-started
@@ -215,10 +218,10 @@ func TestDingTalkConfigurationRechecksOrganizationAfterProviderIO(t *testing.T) 
 	store, apps, organization, _ := applicationFixture(t)
 	apps.checker = checkDingTalkFunc(func(ctx context.Context, _, _, _ string) error {
 		disabled := "disabled"
-		_, err := store.UpdateOrganization(ctx, organization.ID, OrganizationChange{Status: &disabled})
+		_, err := store.UpdateOrganization(ctx, OperatorPrincipal(), organization.ID, OrganizationChange{Status: &disabled})
 		return err
 	})
-	if _, err := apps.Configure(t.Context(), organization.ID, DingTalkApplicationInput{CorpID: "example-corp", ClientID: "example-client", ClientSecret: strings.Repeat("x", 32)}); !errors.Is(err, ErrIneligible) {
+	if _, err := apps.Configure(t.Context(), OperatorPrincipal(), organization.ID, DingTalkApplicationInput{CorpID: "example-corp", ClientID: "example-client", ClientSecret: strings.Repeat("x", 32)}); !errors.Is(err, ErrIneligible) {
 		t.Fatal("disabled organization accepted slow authorization", err)
 	}
 	if _, err := apps.Inspect(t.Context(), organization.ID); !errors.Is(err, ErrNotFound) {

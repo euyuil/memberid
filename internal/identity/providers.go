@@ -29,16 +29,32 @@ type ProviderInput struct {
 	ExpectedRevision int64  `json:"expectedRevision"`
 }
 
-func ConfigureProvider(ctx context.Context, actor ManagementActor, organizationID, kind, id string, input ProviderInput, dingTalk *DingTalkApplications, feishu *FeishuApplications) (Provider, error) {
-	if actor.MemberID == "" || !actor.Platform && actor.OrganizationID != organizationID {
+func ConfigureProvider(ctx context.Context, principal Principal, organizationID, kind, id string, input ProviderInput, dingTalk *DingTalkApplications, feishu *FeishuApplications) (Provider, error) {
+	if principal.kind != memberPrincipal {
+		return Provider{}, ErrForbidden
+	}
+	var store *Store
+	switch kind {
+	case "dingtalk":
+		store = dingTalk.store
+	case "feishu":
+		store = feishu.store
+	default:
+		return Provider{}, ErrInvalid
+	}
+	current, err := managementActor(ctx, store.pool, principal.memberID, principal.grantID)
+	if err != nil {
+		return Provider{}, err
+	}
+	if !current.Platform && current.OrganizationID != organizationID {
 		return Provider{}, ErrForbidden
 	}
 	switch kind {
 	case "dingtalk":
-		app, err := dingTalk.configure(ctx, actor, organizationID, id, input)
+		app, err := dingTalk.configure(ctx, principal, organizationID, id, input)
 		return app.Provider(), err
 	case "feishu":
-		return feishu.configure(ctx, actor, organizationID, id, input)
+		return feishu.configure(ctx, principal, organizationID, id, input)
 	default:
 		return Provider{}, ErrInvalid
 	}
@@ -81,12 +97,15 @@ func (store *Store) Providers(ctx context.Context, organizationID string) ([]Pro
 	return items, rows.Err()
 }
 
-func lockProviderManagement(ctx context.Context, tx pgx.Tx, actor ManagementActor, observed Organization, disabling bool) (int, error) {
-	if actor.MemberID != "" {
+func lockProviderManagement(ctx context.Context, tx pgx.Tx, principal Principal, observed Organization, disabling bool) (int, error) {
+	if principal.kind != memberPrincipal && !principal.installation() {
+		return 0, ErrForbidden
+	}
+	if principal.kind == memberPrincipal {
 		if err := managementLock(ctx, tx); err != nil {
 			return 0, err
 		}
-		if err := authorizeManagement(ctx, tx, actor, observed.ID, false); err != nil {
+		if err := authorizeManagement(ctx, tx, principal, observed.ID, false); err != nil {
 			return 0, err
 		}
 	}
@@ -103,14 +122,14 @@ func lockProviderManagement(ctx context.Context, tx pgx.Tx, actor ManagementActo
 	return 0, nil
 }
 
-func finishProviderManagement(ctx context.Context, tx pgx.Tx, actor ManagementActor, kind, organizationID, namespace, name string, enabled bool, before int) error {
-	if actor.MemberID == "" {
+func finishProviderManagement(ctx context.Context, tx pgx.Tx, principal Principal, kind, organizationID, namespace, name string, enabled bool, before int) error {
+	if principal.kind != memberPrincipal {
 		return nil
 	}
 	if err := preserveAdministrators(ctx, tx, organizationID, before); err != nil {
 		return err
 	}
-	return managementEvent(ctx, tx, actor, organizationID, "", "provider.configure", map[string]any{
+	return managementEvent(ctx, tx, principal, organizationID, "", "provider.configure", map[string]any{
 		"providerId": namespace, "type": kind, "displayName": name, "enabled": enabled,
 	})
 }

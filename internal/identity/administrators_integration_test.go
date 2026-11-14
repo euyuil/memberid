@@ -13,7 +13,7 @@ import (
 
 func TestAdministratorActorScopeAndRevocation(t *testing.T) {
 	s := testStore(t)
-	org, err := s.CreateOrganization(t.Context(), "", "Administrator scope")
+	org, err := s.CreateOrganization(t.Context(), OperatorPrincipal(), "", "Administrator scope")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -47,21 +47,21 @@ func TestAdministratorActorScopeAndRevocation(t *testing.T) {
 	}
 	name := "Renamed organization"
 	change := ManagementChange{Name: &name}
-	if _, err = s.Manage(t.Context(), localActor, "organization.update", org.ID, "", change); err != nil {
+	if _, err = s.Manage(t.Context(), localActor.Principal(), "organization.update", org.ID, "", change); err != nil {
 		t.Fatal("own organization update", err)
 	}
 	localActor.Platform = true
 	localActor.OrganizationID = SystemOrganizationID
-	if _, err = s.Manage(t.Context(), localActor, "organization.update", SystemOrganizationID, "", change); !errors.Is(err, ErrForbidden) {
+	if _, err = s.Manage(t.Context(), localActor.Principal(), "organization.update", SystemOrganizationID, "", change); !errors.Is(err, ErrForbidden) {
 		t.Fatal("actor fields bypassed stored scope", err)
 	}
-	if _, err = s.Manage(t.Context(), localActor, "organization.create", "", "", change); !errors.Is(err, ErrForbidden) {
+	if _, err = s.Manage(t.Context(), localActor.Principal(), "organization.create", "", "", change); !errors.Is(err, ErrForbidden) {
 		t.Fatal("organization administrator created an organization", err)
 	}
-	if err = s.SetAdministrator(t.Context(), localActor, SystemOrganizationID, platform.ID, false); !errors.Is(err, ErrForbidden) {
+	if err = s.SetAdministrator(t.Context(), localActor.Principal(), SystemOrganizationID, platform.ID, false); !errors.Is(err, ErrForbidden) {
 		t.Fatal("organization administrator changed platform access", err)
 	}
-	if _, err = s.Manage(t.Context(), platformActor, "organization.update", org.ID, "", change); err != nil {
+	if _, err = s.Manage(t.Context(), platformActor.Principal(), "organization.update", org.ID, "", change); err != nil {
 		t.Fatal("platform organization update", err)
 	}
 	events, err := s.ManagementEvents(t.Context(), org.ID, "", 0)
@@ -71,7 +71,7 @@ func TestAdministratorActorScopeAndRevocation(t *testing.T) {
 	if _, err = s.pool.Exec(t.Context(), "UPDATE oidc_grants SET revoked_at=clock_timestamp() WHERE id=$1", local.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = s.Manage(t.Context(), localActor, "organization.update", org.ID, "", change); !errors.Is(err, ErrForbidden) {
+	if _, err = s.Manage(t.Context(), localActor.Principal(), "organization.update", org.ID, "", change); !errors.Is(err, ErrForbidden) {
 		t.Fatal("revoked grant retained access", err)
 	}
 }
@@ -90,14 +90,14 @@ func TestMemberAuditDoesNotInvertProviderLockOrder(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
 	defer cancel()
 	name := "Renamed administrator"
-	if _, err = s.UpdateMember(ctx, SystemOrganizationID, m.ID, MemberChange{DisplayName: &name}); err != nil {
+	if _, err = s.UpdateMember(ctx, OperatorPrincipal(), SystemOrganizationID, m.ID, MemberChange{DisplayName: &name}); err != nil {
 		t.Fatal("Member audit waited on provider's organization lock", err)
 	}
 }
 
 func administratorMember(t *testing.T, s *Store, org string, n int) (Member, Factor) {
 	t.Helper()
-	m, e := s.CreateMember(t.Context(), org, "", fmt.Sprintf("Administrator %d", n))
+	m, e := s.CreateMember(t.Context(), OperatorPrincipal(), org, "", fmt.Sprintf("Administrator %d", n))
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -105,10 +105,10 @@ func administratorMember(t *testing.T, s *Store, org string, n int) (Member, Fac
 	if e != nil {
 		t.Fatal(e)
 	}
-	if _, e = s.BindFactor(t.Context(), org, m.ID, f.ID); e != nil {
+	if _, e = s.BindFactor(t.Context(), OperatorPrincipal(), org, m.ID, f.ID); e != nil {
 		t.Fatal(e)
 	}
-	if e = s.SetAdministrator(t.Context(), ManagementActor{}, org, m.ID, true); e != nil {
+	if e = s.SetAdministrator(t.Context(), OperatorPrincipal(), org, m.ID, true); e != nil {
 		t.Fatal(e)
 	}
 	return m, f
@@ -122,25 +122,25 @@ func TestSystemOrganizationAndAdministratorGuards(t *testing.T) {
 	if _, e := s.Organization(t.Context(), SystemOrganizationID); e != nil {
 		t.Fatal(e)
 	}
-	if _, e := s.CreateOrganization(t.Context(), SystemOrganizationID, "Reserved"); !errors.Is(e, ErrInvalid) {
+	if _, e := s.CreateOrganization(t.Context(), OperatorPrincipal(), SystemOrganizationID, "Reserved"); !errors.Is(e, ErrInvalid) {
 		t.Fatal(e)
 	}
 	disabled := "disabled"
-	if _, e := s.UpdateOrganization(t.Context(), SystemOrganizationID, OrganizationChange{Status: &disabled}); !errors.Is(e, ErrForbidden) {
+	if _, e := s.UpdateOrganization(t.Context(), OperatorPrincipal(), SystemOrganizationID, OrganizationChange{Status: &disabled}); !errors.Is(e, ErrForbidden) {
 		t.Fatal(e)
 	}
 	m, f := administratorMember(t, s, SystemOrganizationID, 1)
-	if e := s.SetAdministrator(t.Context(), ManagementActor{}, SystemOrganizationID, m.ID, false); !errors.Is(e, ErrLastAdministrator) {
+	if e := s.SetAdministrator(t.Context(), OperatorPrincipal(), SystemOrganizationID, m.ID, false); !errors.Is(e, ErrLastAdministrator) {
 		t.Fatal(e)
 	}
-	if _, e := s.SetManualBlock(t.Context(), SystemOrganizationID, m.ID, true); !errors.Is(e, ErrLastAdministrator) {
+	if _, e := s.SetManualBlock(t.Context(), OperatorPrincipal(), SystemOrganizationID, m.ID, true); !errors.Is(e, ErrLastAdministrator) {
 		t.Fatal(e)
 	}
-	if e := s.RevokeBinding(t.Context(), SystemOrganizationID, m.ID, f.ID); !errors.Is(e, ErrLastAdministrator) {
+	if e := s.RevokeBinding(t.Context(), OperatorPrincipal(), SystemOrganizationID, m.ID, f.ID); !errors.Is(e, ErrLastAdministrator) {
 		t.Fatal(e)
 	}
 	blocked := true
-	if _, _, e := s.UpdateMemberOnce(t.Context(), SystemOrganizationID, m.ID, "00000000-0000-4000-8000-000000000001", MemberChange{ManualBlocked: &blocked}); !errors.Is(e, ErrLastAdministrator) {
+	if _, _, e := s.UpdateMemberOnce(t.Context(), OperatorPrincipal(), SystemOrganizationID, m.ID, "00000000-0000-4000-8000-000000000001", MemberChange{ManualBlocked: &blocked}); !errors.Is(e, ErrLastAdministrator) {
 		t.Fatal(e)
 	}
 	if _, e := s.SetExternalDeparture(t.Context(), SystemOrganizationID, m.ID, true); e != nil {
@@ -152,7 +152,9 @@ func TestSystemOrganizationAndAdministratorGuards(t *testing.T) {
 	other, _ := administratorMember(t, s, SystemOrganizationID, 2)
 	results := make(chan error, 2)
 	for _, id := range []string{m.ID, other.ID} {
-		go func() { results <- s.SetAdministrator(t.Context(), ManagementActor{}, SystemOrganizationID, id, false) }()
+		go func() {
+			results <- s.SetAdministrator(t.Context(), OperatorPrincipal(), SystemOrganizationID, id, false)
+		}()
 	}
 	accepted, rejected := 0, 0
 	for range 2 {
@@ -176,7 +178,7 @@ func TestSystemOrganizationAndAdministratorGuards(t *testing.T) {
 
 func TestSystemOrganizationRejectsAutomaticDingTalkAdmission(t *testing.T) {
 	s, apps, verifier, _ := verifierFixture(t)
-	app, e := apps.Configure(t.Context(), SystemOrganizationID, DingTalkApplicationInput{CorpID: "example-corp", ClientID: "system-client", ClientSecret: "synthetic-system-secret"})
+	app, e := apps.Configure(t.Context(), OperatorPrincipal(), SystemOrganizationID, DingTalkApplicationInput{CorpID: "example-corp", ClientID: "system-client", ClientSecret: "synthetic-system-secret"})
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -191,23 +193,23 @@ func TestSystemOrganizationRejectsAutomaticDingTalkAdmission(t *testing.T) {
 	if e != nil || len(members.Items) != 0 {
 		t.Fatal("automatic admission created a system member", e)
 	}
-	m, e := s.CreateMember(t.Context(), SystemOrganizationID, "", "Explicit system member")
+	m, e := s.CreateMember(t.Context(), OperatorPrincipal(), SystemOrganizationID, "", "Explicit system member")
 	if e != nil {
 		t.Fatal(e)
 	}
-	if e = s.PrepareSystemDingTalkAdmission(t.Context(), m.ID, proof.member.UnionID); e != nil {
+	if e = s.PrepareSystemDingTalkAdmission(t.Context(), OperatorPrincipal(), m.ID, proof.member.UnionID); e != nil {
 		t.Fatal(e)
 	}
-	if e = s.SetAdministrator(t.Context(), ManagementActor{}, SystemOrganizationID, m.ID, true); !errors.Is(e, ErrIneligible) {
+	if e = s.SetAdministrator(t.Context(), OperatorPrincipal(), SystemOrganizationID, m.ID, true); !errors.Is(e, ErrIneligible) {
 		t.Fatal("approval was treated as authentication", e)
 	}
-	if _, e = s.SetManualBlock(t.Context(), SystemOrganizationID, m.ID, true); e != nil {
+	if _, e = s.SetManualBlock(t.Context(), OperatorPrincipal(), SystemOrganizationID, m.ID, true); e != nil {
 		t.Fatal(e)
 	}
 	if _, e = admitLogin(t.Context(), verifier, proof); !errors.Is(e, ErrIneligible) {
 		t.Fatal("approval bypassed block", e)
 	}
-	if _, e = s.SetManualBlock(t.Context(), SystemOrganizationID, m.ID, false); e != nil {
+	if _, e = s.SetManualBlock(t.Context(), OperatorPrincipal(), SystemOrganizationID, m.ID, false); e != nil {
 		t.Fatal(e)
 	}
 	if _, e = admitLogin(t.Context(), verifier, proof); e != nil {
@@ -221,10 +223,10 @@ func TestSystemOrganizationRejectsAutomaticDingTalkAdmission(t *testing.T) {
 	if e != nil || len(ids) != 0 {
 		t.Fatal("verified admission granted management", e)
 	}
-	if e = s.RevokeBinding(t.Context(), SystemOrganizationID, m.ID, bound[0].FactorID); e != nil {
+	if e = s.RevokeBinding(t.Context(), OperatorPrincipal(), SystemOrganizationID, m.ID, bound[0].FactorID); e != nil {
 		t.Fatal(e)
 	}
-	if e = s.PrepareSystemDingTalkAdmission(t.Context(), m.ID, proof.member.UnionID); !errors.Is(e, ErrConflict) {
+	if e = s.PrepareSystemDingTalkAdmission(t.Context(), OperatorPrincipal(), m.ID, proof.member.UnionID); !errors.Is(e, ErrConflict) {
 		t.Fatal("approval reused revoked slot", e)
 	}
 	if _, e = admitLogin(t.Context(), verifier, proof); !errors.Is(e, ErrConflict) {

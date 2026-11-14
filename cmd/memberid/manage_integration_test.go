@@ -63,11 +63,11 @@ func TestExplicitPhoneBindingCommands(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer store.Close()
-	organization, err := store.CreateOrganization(t.Context(), "", "Example Team")
+	organization, err := store.CreateOrganization(t.Context(), identity.OperatorPrincipal(), "", "Example Team")
 	if err != nil {
 		t.Fatal(err)
 	}
-	member, err := store.CreateMember(t.Context(), organization.ID, "", "Example Member")
+	member, err := store.CreateMember(t.Context(), identity.OperatorPrincipal(), organization.ID, "", "Example Member")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -209,7 +209,7 @@ func TestAccountRejectsChangesDuringProviderVerification(t *testing.T) {
 				case "session revoked":
 					_, err = f.store.Database().Exec(t.Context(), "UPDATE oidc_sessions SET revoked_at=clock_timestamp()")
 				case "member blocked":
-					_, err = f.store.SetManualBlock(t.Context(), f.member.OrganizationID, f.member.ID, true)
+					_, err = f.store.SetManualBlock(t.Context(), identity.OperatorPrincipal(), f.member.OrganizationID, f.member.ID, true)
 				case "departure":
 					_, err = f.store.SetExternalDeparture(t.Context(), f.member.OrganizationID, f.member.ID, true)
 				case "source binding revoked":
@@ -217,7 +217,7 @@ func TestAccountRejectsChangesDuringProviderVerification(t *testing.T) {
 					if e != nil {
 						t.Fatal(e)
 					}
-					err = f.store.RevokeBinding(t.Context(), f.member.OrganizationID, f.member.ID, factor.ID)
+					err = f.store.RevokeBinding(t.Context(), identity.OperatorPrincipal(), f.member.OrganizationID, f.member.ID, factor.ID)
 				case "source factor disabled":
 					_, err = f.store.Database().Exec(t.Context(), "UPDATE authentication_factors SET status='disabled' WHERE type='phone'")
 				case "rotation":
@@ -225,10 +225,10 @@ func TestAccountRejectsChangesDuringProviderVerification(t *testing.T) {
 					if e != nil {
 						t.Fatal(e)
 					}
-					_, err = apps.Configure(t.Context(), app.OrganizationID, identity.DingTalkApplicationInput{CorpID: app.CorpID, ClientID: app.ClientID, ClientSecret: config.RandomSecret(), ExpectedRevision: app.Revision})
+					_, err = apps.Configure(t.Context(), identity.OperatorPrincipal(), app.OrganizationID, identity.DingTalkApplicationInput{CorpID: app.CorpID, ClientID: app.ClientID, ClientSecret: config.RandomSecret(), ExpectedRevision: app.Revision})
 				case "organization disabled":
 					disabled := "disabled"
-					_, err = f.store.UpdateOrganization(t.Context(), f.member.OrganizationID, identity.OrganizationChange{Status: &disabled})
+					_, err = f.store.UpdateOrganization(t.Context(), identity.OperatorPrincipal(), f.member.OrganizationID, identity.OrganizationChange{Status: &disabled})
 				case "request canceled":
 					_, err = f.store.Database().Exec(t.Context(), "UPDATE account_link_requests SET state='canceled'")
 				case "return removed":
@@ -305,7 +305,7 @@ func TestAccountLinkDoesNotTransferOrReplaceBindings(t *testing.T) {
 			target := f.member
 			if kind == "bound elsewhere" {
 				union = "example-union"
-				target, err = f.store.CreateMember(t.Context(), f.member.OrganizationID, "", "Another Member")
+				target, err = f.store.CreateMember(t.Context(), identity.OperatorPrincipal(), f.member.OrganizationID, "", "Another Member")
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -314,12 +314,12 @@ func TestAccountLinkDoesNotTransferOrReplaceBindings(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			binding, err := f.store.BindFactor(t.Context(), target.OrganizationID, target.ID, factor.ID)
+			binding, err := f.store.BindFactor(t.Context(), identity.OperatorPrincipal(), target.OrganizationID, target.ID, factor.ID)
 			if err != nil {
 				t.Fatal(err)
 			}
 			if kind == "target revoked" {
-				if err := f.store.RevokeBinding(t.Context(), target.OrganizationID, target.ID, factor.ID); err != nil {
+				if err := f.store.RevokeBinding(t.Context(), identity.OperatorPrincipal(), target.OrganizationID, target.ID, factor.ID); err != nil {
 					t.Fatal(err)
 				}
 			}

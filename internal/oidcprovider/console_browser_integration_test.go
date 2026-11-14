@@ -23,7 +23,7 @@ func TestConsoleBrowserFixture(t *testing.T) {
 		t.Fatal("status file must not exist")
 	}
 	f := newFixture(t)
-	m, err := f.store.CreateMember(t.Context(), identity.SystemOrganizationID, "", "演示平台管理员")
+	m, err := f.store.CreateMember(t.Context(), identity.OperatorPrincipal(), identity.SystemOrganizationID, "", "演示平台管理员")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -31,11 +31,11 @@ func TestConsoleBrowserFixture(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = f.store.BindFactor(t.Context(), m.OrganizationID, m.ID, factor.ID); err != nil {
+	if _, err = f.store.BindFactor(t.Context(), identity.OperatorPrincipal(), m.OrganizationID, m.ID, factor.ID); err != nil {
 		t.Fatal(err)
 	}
 	for _, member := range []identity.Member{m, f.member} {
-		if err = f.store.SetAdministrator(t.Context(), identity.ManagementActor{}, member.OrganizationID, member.ID, true); err != nil {
+		if err = f.store.SetAdministrator(t.Context(), identity.OperatorPrincipal(), member.OrganizationID, member.ID, true); err != nil {
 			t.Fatal(err)
 		}
 	}

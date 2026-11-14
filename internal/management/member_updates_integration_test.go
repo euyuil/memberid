@@ -39,6 +39,10 @@ func TestMemberUpdateManagementContract(t *testing.T) {
 	if !reflect.DeepEqual(first, repeated) {
 		t.Fatal("HTTP replay changed the receipt")
 	}
+	events, err := f.store.ManagementEvents(t.Context(), organization.ID, member.ID, 0)
+	if err != nil || len(events) != 1 || events[0].Actor != "installation-manager" {
+		t.Fatal("private mutation/replay lost its installation identity", events, err)
+	}
 	f.call(t, "GET", path, "", 200, &repeated)
 	if !reflect.DeepEqual(first, repeated) {
 		t.Fatal("HTTP receipt lookup changed")

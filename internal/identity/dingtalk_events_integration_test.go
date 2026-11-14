@@ -18,7 +18,7 @@ func directoryEvent(app DingTalkApplication, id, kind string, born int64) dingta
 
 func TestDirectoryEventsPersistBeforeSuccessAndPreserveBlocks(t *testing.T) {
 	store, apps, directory, _, app, member := reconciliationFixture(t)
-	if _, err := store.SetManualBlock(t.Context(), app.OrganizationID, member.ID, true); err != nil {
+	if _, err := store.SetManualBlock(t.Context(), OperatorPrincipal(), app.OrganizationID, member.ID, true); err != nil {
 		t.Fatal(err)
 	}
 	event := directoryEvent(app, "leave", "user_leave_org", time.Now().UnixMilli())
@@ -123,17 +123,17 @@ func TestDirectoryEventInvalidInputAndStaleConnectionRollback(t *testing.T) {
 			case "unsupported type":
 				event.Type = "org_remove"
 			case "rotation":
-				if _, err := apps.Configure(t.Context(), app.OrganizationID, DingTalkApplicationInput{CorpID: app.CorpID, ClientID: app.ClientID, ClientSecret: "new-synthetic-secret", ExpectedRevision: app.Revision}); err != nil {
+				if _, err := apps.Configure(t.Context(), OperatorPrincipal(), app.OrganizationID, DingTalkApplicationInput{CorpID: app.CorpID, ClientID: app.ClientID, ClientSecret: "new-synthetic-secret", ExpectedRevision: app.Revision}); err != nil {
 					t.Fatal(err)
 				}
 			case "disabled", "lifecycle cycle":
 				disabled := "disabled"
-				if _, err := store.UpdateOrganization(t.Context(), app.OrganizationID, OrganizationChange{Status: &disabled}); err != nil {
+				if _, err := store.UpdateOrganization(t.Context(), OperatorPrincipal(), app.OrganizationID, OrganizationChange{Status: &disabled}); err != nil {
 					t.Fatal(err)
 				}
 				if kind == "lifecycle cycle" {
 					enabled := "enabled"
-					if _, err := store.UpdateOrganization(t.Context(), app.OrganizationID, OrganizationChange{Status: &enabled}); err != nil {
+					if _, err := store.UpdateOrganization(t.Context(), OperatorPrincipal(), app.OrganizationID, OrganizationChange{Status: &enabled}); err != nil {
 						t.Fatal(err)
 					}
 				}
@@ -210,11 +210,11 @@ func TestDirectoryEventsFenceInFlightChecksAndAdmissions(t *testing.T) {
 func TestDirectoryEventsDoNotProvisionOrCrossBindings(t *testing.T) {
 	store, apps, directory, verifier, app, member := reconciliationFixture(t)
 	secondID, _ := NewID(OrganizationKind)
-	second, err := store.CreateOrganization(t.Context(), secondID, "Another organization")
+	second, err := store.CreateOrganization(t.Context(), OperatorPrincipal(), secondID, "Another organization")
 	if err != nil {
 		t.Fatal(err)
 	}
-	secondApp, err := apps.Configure(t.Context(), second.ID, DingTalkApplicationInput{CorpID: "another-corp", ClientID: "another-client", ClientSecret: "synthetic-secret"})
+	secondApp, err := apps.Configure(t.Context(), OperatorPrincipal(), second.ID, DingTalkApplicationInput{CorpID: "another-corp", ClientID: "another-client", ClientSecret: "synthetic-secret"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -232,7 +232,7 @@ func TestDirectoryEventsDoNotProvisionOrCrossBindings(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := store.RevokeBinding(t.Context(), app.OrganizationID, member.ID, verified.Factor.ID); err != nil {
+	if err := store.RevokeBinding(t.Context(), OperatorPrincipal(), app.OrganizationID, member.ID, verified.Factor.ID); err != nil {
 		t.Fatal(err)
 	}
 	if err := directory.acceptDirectoryEvent(t.Context(), app, directoryEvent(app, "revoked-binding", "user_leave_org", time.Now().UnixMilli())); err != nil {

@@ -62,7 +62,10 @@ func readBinding(row pgx.Row) (Binding, error) {
 	return binding, storageError(err)
 }
 
-func (store *Store) CreateOrganization(ctx context.Context, id, name string) (Organization, error) {
+func (store *Store) CreateOrganization(ctx context.Context, principal Principal, id, name string) (Organization, error) {
+	if !principal.installation() {
+		return Organization{}, ErrForbidden
+	}
 	if id == SystemOrganizationID {
 		return Organization{}, ErrInvalid
 	}
@@ -89,7 +92,10 @@ func (store *Store) Organization(ctx context.Context, id string) (Organization, 
 	return readOrganization(store.pool.QueryRow(ctx, "SELECT "+organizationColumns+" FROM organizations WHERE id=$1", id))
 }
 
-func (store *Store) CreateMember(ctx context.Context, organizationID, id, name string) (Member, error) {
+func (store *Store) CreateMember(ctx context.Context, principal Principal, organizationID, id, name string) (Member, error) {
+	if !principal.installation() {
+		return Member{}, ErrForbidden
+	}
 	if !ValidID(organizationID, OrganizationKind) || !validText(name, 128) {
 		return Member{}, ErrInvalid
 	}
@@ -114,8 +120,11 @@ func (store *Store) Member(ctx context.Context, organizationID, memberID string)
 }
 
 // Manual blocking and provider departure are independent evidence sources.
-func (store *Store) SetManualBlock(ctx context.Context, organizationID, memberID string, blocked bool) (Member, error) {
-	return store.UpdateMember(ctx, organizationID, memberID, MemberChange{ManualBlocked: &blocked})
+func (store *Store) SetManualBlock(ctx context.Context, principal Principal, organizationID, memberID string, blocked bool) (Member, error) {
+	if !principal.installation() {
+		return Member{}, ErrForbidden
+	}
+	return store.UpdateMember(ctx, principal, organizationID, memberID, MemberChange{ManualBlocked: &blocked})
 }
 
 func (store *Store) SetExternalDeparture(ctx context.Context, organizationID, memberID string, departed bool) (Member, error) {
@@ -162,7 +171,10 @@ func (store *Store) Factor(ctx context.Context, id string) (Factor, error) {
 
 // BindFactor is an explicit trusted operation, not proof of successful authentication.
 // Revoked relationships still occupy their slots and are never silently replaced.
-func (store *Store) BindFactor(ctx context.Context, organizationID, memberID, factorID string) (Binding, error) {
+func (store *Store) BindFactor(ctx context.Context, principal Principal, organizationID, memberID, factorID string) (Binding, error) {
+	if !principal.installation() {
+		return Binding{}, ErrForbidden
+	}
 	if !ValidID(organizationID, OrganizationKind) || !ValidID(memberID, MemberKind) || !ValidID(factorID, FactorKind) {
 		return Binding{}, ErrInvalid
 	}
@@ -212,7 +224,10 @@ func (store *Store) BindFactor(ctx context.Context, organizationID, memberID, fa
 	return result, err
 }
 
-func (store *Store) RevokeBinding(ctx context.Context, organizationID, memberID, factorID string) error {
+func (store *Store) RevokeBinding(ctx context.Context, principal Principal, organizationID, memberID, factorID string) error {
+	if !principal.installation() {
+		return ErrForbidden
+	}
 	if !ValidID(organizationID, OrganizationKind) || !ValidID(memberID, MemberKind) || !ValidID(factorID, FactorKind) {
 		return ErrInvalid
 	}
@@ -234,6 +249,6 @@ func (store *Store) RevokeBinding(ctx context.Context, organizationID, memberID,
 		if err = preserveAdministrators(ctx, tx, organizationID, before); err != nil {
 			return err
 		}
-		return managementEvent(ctx, tx, ManagementActor{}, organizationID, memberID, "binding.revoke", map[string]string{"authenticationFactorId": factorID})
+		return managementEvent(ctx, tx, principal, organizationID, memberID, "binding.revoke", map[string]string{"authenticationFactorId": factorID})
 	})
 }
