@@ -7,8 +7,10 @@ import {
   Fingerprint,
   History,
   KeyRound,
-  LogOut,
   Plus,
+  RefreshCw,
+  ShieldCheck,
+  X,
   Search,
   Users,
 } from "lucide-react"
@@ -46,7 +48,14 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Separator } from "@/components/ui/separator"
+import { ConsoleLayout } from "@/components/console-layout"
+import {
+  DirectoryToolbar,
+  DirectoryFooter,
+  RecordIdentity,
+  RecordTime,
+  StatusBadge,
+} from "@/components/directory"
 import { Providers, type ProviderDirectory } from "@/Providers"
 
 type Actor = {
@@ -70,6 +79,11 @@ type DirectoryMember = Member & {
 }
 type MemberPage = Page<DirectoryMember> & { administratorIds?: string[] }
 type Binding = { id: string; factorType: string; status: string }
+const factorLabels: Partial<Record<string, string>> = {
+  phone: "手机号",
+  dingtalk: "钉钉",
+  feishu: "飞书",
+}
 type Event = {
   id: number
   actor: string
@@ -120,7 +134,8 @@ const messages: Record<string, string> = {
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, { credentials: "same-origin", ...init })
   const body = await response.json()
-  if (response.status === 401) window.dispatchEvent(new Event("memberid-sign-in-required"))
+  if (response.status === 401)
+    window.dispatchEvent(new Event("memberid-sign-in-required"))
   if (!response.ok)
     throw new Error(messages[body.error] ?? "请求未完成，请稍后重试。")
   return body as T
@@ -133,9 +148,9 @@ function navigate(values: Record<string, string>) {
 }
 function Status({ active, text }: { active: boolean; text?: string }) {
   return (
-    <Badge variant={active ? "secondary" : "destructive"}>
+    <StatusBadge tone={active ? "positive" : "negative"}>
       {text ?? (active ? "正常" : "已停用")}
-    </Badge>
+    </StatusBadge>
   )
 }
 function MemberStatus({ member }: { member: Member }) {
@@ -193,17 +208,28 @@ function operationSummary({ action, changes }: Event) {
   ) {
     details.push(`成员名称设为「${changes.displayName}」`)
   }
-  if (action === "member.update" && typeof changes.manualBlocked === "boolean") {
+  if (
+    action === "member.update" &&
+    typeof changes.manualBlocked === "boolean"
+  ) {
     details.push(changes.manualBlocked ? "人工封禁" : "解除人工封禁")
   }
-  if (action === "administrator.update" && typeof changes.enabled === "boolean") {
+  if (
+    action === "administrator.update" &&
+    typeof changes.enabled === "boolean"
+  ) {
     details.push(changes.enabled ? "授予管理员权限" : "撤销管理员权限")
   }
   if (action === "dingtalk.admission" && typeof changes.enabled === "boolean") {
     details.push(changes.enabled ? "设置钉钉准入" : "取消钉钉准入")
   }
-  if (action === "provider.configure" && typeof changes.displayName === "string") {
-    details.push(`「${changes.displayName}」${changes.enabled ? "已启用" : "已停用"}`)
+  if (
+    action === "provider.configure" &&
+    typeof changes.displayName === "string"
+  ) {
+    details.push(
+      `「${changes.displayName}」${changes.enabled ? "已启用" : "已停用"}`
+    )
   }
   return details
 }
@@ -358,7 +384,10 @@ export default function App() {
           }
         } else if (membersView) {
           result = {
-            members: await request<MemberPage>(`/api/members?${memberQuery}`, options),
+            members: await request<MemberPage>(
+              `/api/members?${memberQuery}`,
+              options
+            ),
           }
         } else
           result = {
@@ -464,88 +493,52 @@ export default function App() {
     })
 
   return (
-    <div className="console-shell">
-      <aside className="sidebar">
-        <a className="brand" href="#">
-          <Fingerprint />
-          <span>
-            MemberID<small>管理控制台</small>
-          </span>
-        </a>
-        <nav aria-label="主导航">
-          <div className="nav-group" role="group" aria-labelledby="nav-identity">
-            <span id="nav-identity">身份管理</span>
-            <Button
-              variant={!membersView && !events && !providers ? "secondary" : "ghost"}
-              render={<a href={routeHash({ view: "organization", ...scopeRoute })} />}
-              nativeButton={false}
-              aria-current={!membersView && !events && !providers ? "page" : undefined}
-            >
-              <Building2 data-icon="inline-start" />
-              组织
-            </Button>
-            <Button
-              variant={membersView ? "secondary" : "ghost"}
-              render={<a href={routeHash(memberDirectoryRoute)} />}
-              nativeButton={false}
-              aria-current={membersView ? "page" : undefined}
-            >
-              <Users data-icon="inline-start" />
-              成员
-            </Button>
-            <Button
-              variant={providers ? "secondary" : "ghost"}
-              render={<a href={routeHash({ view: "providers", ...scopeRoute })} />}
-              nativeButton={false}
-              aria-current={providers ? "page" : undefined}
-            >
-              <KeyRound data-icon="inline-start" />
-              身份提供商
-            </Button>
-          </div>
-          <div className="nav-group" role="group" aria-labelledby="nav-audit">
-            <span id="nav-audit">审计</span>
-            <Button
-              variant={events ? "secondary" : "ghost"}
-              render={<a href={routeHash({ view: "events", ...scopeRoute })} />}
-              nativeButton={false}
-              aria-current={events ? "page" : undefined}
-            >
-              <History data-icon="inline-start" />
-              操作记录
-            </Button>
-          </div>
-        </nav>
-        <div className="actor-panel">
-          <Separator />
-          <p className="eyebrow">当前操作者</p>
-          <strong>{actor.displayName}</strong>
-          <Badge variant="outline">
-            {actor.platform ? "平台管理员" : "组织管理员"}
-          </Badge>
-          <code>{actor.memberId}</code>
-          <Button
-            variant="ghost"
-            onClick={async () => {
-              try {
-                await request("/api/logout", {
-                  method: "POST",
-                  headers: { "X-CSRF-Token": session.csrf },
-                })
-                setSession(null)
-                window.history.replaceState(null, "", "/")
-              } catch (e) {
-                setError((e as Error).message)
-              }
-            }}
-          >
-            <LogOut data-icon="inline-start" />
-            退出后台
-          </Button>
-        </div>
-      </aside>
-      <main className="workspace">
-        <header className="scope-bar">
+    <ConsoleLayout
+      actor={actor}
+      navigation={[
+        {
+          label: "组织",
+          href: routeHash({ view: "organization", ...scopeRoute }),
+          icon: Building2,
+          active: activeView === "organization",
+          group: "身份管理",
+        },
+        {
+          label: "成员",
+          href: routeHash(memberDirectoryRoute),
+          icon: Users,
+          active: membersView,
+          group: "身份管理",
+        },
+        {
+          label: "身份提供商",
+          href: routeHash({ view: "providers", ...scopeRoute }),
+          icon: KeyRound,
+          active: providers,
+          group: "身份管理",
+        },
+        {
+          label: "操作记录",
+          href: routeHash({ view: "events", ...scopeRoute }),
+          icon: History,
+          active: events,
+          group: "活动",
+        },
+      ]}
+      onSignOut={async () => {
+        try {
+          await request("/api/logout", {
+            method: "POST",
+            headers: { "X-CSRF-Token": session.csrf },
+          })
+          setSession(null)
+          window.history.replaceState(null, "", "/")
+        } catch (e) {
+          setError((e as Error).message)
+        }
+      }}
+      scope={
+        <>
           <span>管理范围</span>
           {actor.platform ? (
             <OrganizationSwitcher
@@ -565,558 +558,655 @@ export default function App() {
           <span className="scope-note">
             {actor.platform ? "切换组织不会改变操作者身份" : "仅限本组织"}
           </span>
-        </header>
-        <div className="page-content">
-          <div className="page-heading">
-            <div>
-              <h1>
-                {events
-                  ? "操作记录"
-                  : providers
-                    ? "身份提供商"
-                    : membersView
-                      ? (member ? selected?.displayName ?? "成员详情" : "成员")
-                      : (data.organization?.name ?? "组织")}
-              </h1>
-              {events && (
-                <p className="muted">
-                  {historyTarget
-                    ? `仅查看成员 ${data.historyMember?.displayName ?? historyTarget} 的操作记录。`
-                    : "查看已完成的管理操作及其变更内容。"}
-                </p>
-              )}
-              {providers && !org && (
-                <p className="muted">选择组织后管理登录提供商。</p>
-              )}
-            </div>
-            <div className="actions">
-              {events && org && historyTarget && (
-                <>
-                  {data.historyMember && (
-                    <Button
-                      variant="outline"
-                      onClick={() => navigate({ ...memberListRoute, member: historyTarget })}
-                    >
-                      返回成员详情
-                    </Button>
-                  )}
-                  <Button
-                    variant="outline"
-                    onClick={() => navigate({ view: "events", org })}
-                  >
-                    查看本组织记录
-                  </Button>
-                </>
-              )}
-              {actor.platform && !events && !membersView && !providers && !org && (
-                <Button onClick={() => create(true)}>
-                  <Plus data-icon="inline-start" />
-                  新建组织
-                </Button>
-              )}
-              {member && (
-                <Button variant="outline" onClick={() => navigate(memberReturnRoute)}>
-                  {fromAllOrganizations ? "返回所有组织的成员" : "返回成员列表"}
-                </Button>
-              )}
-              {membersView && !member && data.organization && (
-                <Button onClick={() => create(false)}>
-                  <Plus data-icon="inline-start" />
-                  新增成员
-                </Button>
-              )}
-              {!membersView && !events && !providers && org && (
-                <>
-                  {actor.platform && (
-                    <Button variant="outline" onClick={() => navigate({})}>
-                      所有组织
-                    </Button>
-                  )}
-                  {data.organization && (
-                    <Button onClick={() => navigate(memberDirectoryRoute)}>
-                      查看成员
-                    </Button>
-                  )}
-                </>
-              )}
-            </div>
-          </div>
-          <div className="feedback" role="status" aria-live="polite">
-            {error && (
-              <Alert variant="destructive">
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
-          </div>
-          {membersView && !member && (actor.platform || org === actor.organizationId) && (
-            <MemberSearch
-              key={`${org}:${JSON.stringify(memberFilters)}`}
-              filters={memberFilters}
-              onSubmit={(filters) => navigate({ ...memberDirectoryRoute, ...filters })}
-              onClear={() => navigate(memberDirectoryRoute)}
-            />
+        </>
+      }
+    >
+      <div className="page-heading">
+        <div>
+          <h1>
+            {events
+              ? "操作记录"
+              : providers
+                ? "身份提供商"
+                : membersView
+                  ? member
+                    ? (selected?.displayName ?? "成员详情")
+                    : "成员"
+                  : (data.organization?.name ?? "组织")}
+          </h1>
+          {!events && (
+            <p className="muted">
+              {providers
+                ? org
+                  ? "管理本组织用于登录的外部应用。"
+                  : "选择组织后管理登录提供商。"
+                : membersView
+                  ? member
+                    ? "查看成员身份、登录方式与管理权限。"
+                    : "管理成员身份、状态与管理员权限。"
+                  : org
+                    ? "管理组织资料与成员访问状态。"
+                    : "管理独立的组织及其成员身份。"}
+            </p>
           )}
-          {loading ? (
-            <div className="flex flex-col gap-4">
-              <Skeleton className="h-12 w-full" />
-              <Skeleton className="h-64 w-full" />
-            </div>
-          ) : (
+          {events && (
+            <p className="muted">
+              {historyTarget
+                ? `仅查看成员 ${data.historyMember?.displayName ?? historyTarget} 的操作记录。`
+                : "查看已完成的管理操作及其变更内容。"}
+            </p>
+          )}
+        </div>
+        <div className="actions">
+          <Button
+            variant="outline"
+            size="icon"
+            aria-label="刷新页面"
+            title="刷新"
+            disabled={loading}
+            onClick={refresh}
+          >
+            <RefreshCw className={loading ? "animate-spin" : undefined} />
+          </Button>
+          {events && org && historyTarget && (
             <>
-              {data.organizations && (
-                <section className="directory">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>组织</TableHead>
-                        <TableHead>状态</TableHead>
-                        <TableHead>组织 ID</TableHead>
-                        <TableHead>
-                          <span className="sr-only">操作</span>
-                        </TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {data.organizations.items.map((o) => (
-                        <TableRow key={o.id}>
-                          <TableCell>
-                            <Button
-                              variant="link"
-                              onClick={() =>
-                                navigate({ view: activeView, org: o.id })
-                              }
-                            >
-                              {o.name}
-                            </Button>
+              {data.historyMember && (
+                <Button
+                  variant="outline"
+                  onClick={() =>
+                    navigate({ ...memberListRoute, member: historyTarget })
+                  }
+                >
+                  返回成员详情
+                </Button>
+              )}
+              <Button
+                variant="outline"
+                onClick={() => navigate({ view: "events", org })}
+              >
+                查看本组织记录
+              </Button>
+            </>
+          )}
+          {actor.platform && !events && !membersView && !providers && !org && (
+            <Button onClick={() => create(true)}>
+              <Plus data-icon="inline-start" />
+              新建组织
+            </Button>
+          )}
+          {member && (
+            <Button
+              variant="outline"
+              onClick={() => navigate(memberReturnRoute)}
+            >
+              {fromAllOrganizations ? "返回所有组织的成员" : "返回成员列表"}
+            </Button>
+          )}
+          {membersView && !member && org && (
+            <Button disabled={loading} onClick={() => create(false)}>
+              <Plus data-icon="inline-start" />
+              新增成员
+            </Button>
+          )}
+          {!membersView && !events && !providers && org && (
+            <>
+              {actor.platform && (
+                <Button variant="outline" onClick={() => navigate({})}>
+                  所有组织
+                </Button>
+              )}
+              {data.organization && (
+                <Button onClick={() => navigate(memberDirectoryRoute)}>
+                  查看成员
+                </Button>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+      <div className="console-feedback" aria-live="polite">
+        {error && (
+          <Alert variant="destructive">
+            <AlertDescription>{error}</AlertDescription>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="关闭提示"
+              onClick={() => setError("")}
+            >
+              <X />
+            </Button>
+          </Alert>
+        )}
+      </div>
+      <div
+        className={
+          membersView && !member ? "directory member-directory" : undefined
+        }
+      >
+        {membersView &&
+          !member &&
+          (actor.platform || org === actor.organizationId) && (
+            <>
+              <DirectoryToolbar title="成员目录" />
+              <MemberSearch
+                key={`${org}:${JSON.stringify(memberFilters)}`}
+                filters={memberFilters}
+                onSubmit={(filters) =>
+                  navigate({ ...memberDirectoryRoute, ...filters })
+                }
+                onClear={() => navigate(memberDirectoryRoute)}
+              />
+            </>
+          )}
+        {loading ? (
+          <div
+            className="directory-loading"
+            role="status"
+            aria-label="正在加载列表"
+          >
+            <Skeleton className="h-12 w-full" />
+            <Skeleton className="h-64 w-full" />
+          </div>
+        ) : (
+          <>
+            {data.organizations && (
+              <section className="directory" aria-label="组织列表">
+                <DirectoryToolbar title={providers ? "选择组织" : "组织目录"} />
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>组织</TableHead>
+                      <TableHead>状态</TableHead>
+                      <TableHead>
+                        <span className="sr-only">操作</span>
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {data.organizations.items.map((o) => (
+                      <TableRow key={o.id}>
+                        <TableCell>
+                          <RecordIdentity
+                            name={o.name}
+                            id={o.id}
+                            icon={<Building2 />}
+                            href={routeHash({ view: activeView, org: o.id })}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <div className="cell-status">
+                            <Status active={o.status === "enabled"} />
                             {o.id === "org_system" && (
                               <Badge variant="outline">系统</Badge>
                             )}
-                          </TableCell>
-                          <TableCell>
-                            <Status active={o.status === "enabled"} />
-                          </TableCell>
-                          <TableCell>
-                            <code>{o.id}</code>
-                          </TableCell>
-                          <TableCell>
-                            <Button
-                              variant="ghost"
-                              aria-label={providers ? `管理 ${o.name} 的身份提供商` : `管理 ${o.name}`}
-                              onClick={() =>
-                                navigate({ view: activeView, org: o.id })
-                              }
-                            >
-                              <ChevronRight />
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                  <Pager
-                    after={after}
-                    next={data.organizations.nextAfter}
-                    route={providers ? { view: "providers" } : {}}
-                  />
-                </section>
-              )}
-              {data.providers && data.organization && (
-                <Providers
-                  key={org}
-                  directory={data.providers}
-                  enabled={data.organization.status === "enabled"}
-                  system={org === "org_system"}
-                  base={base}
-                  csrf={session.csrf}
-                  save={request}
-                  onComplete={refresh}
+                          </div>
+                        </TableCell>
+                        <TableCell className="row-actions">
+                          <Button
+                            variant="ghost"
+                            aria-label={
+                              providers
+                                ? `管理 ${o.name} 的身份提供商`
+                                : `管理 ${o.name}`
+                            }
+                            onClick={() =>
+                              navigate({ view: activeView, org: o.id })
+                            }
+                          >
+                            <ChevronRight />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+                <Pager
+                  count={data.organizations.items.length}
+                  after={after}
+                  next={data.organizations.nextAfter}
+                  route={providers ? { view: "providers" } : {}}
                 />
-              )}
-              {data.organization && !events && !membersView && !providers && (
-                <section className="organization-summary">
-                  <div>
-                    <Status active={data.organization.status === "enabled"} />
-                    <code>{org}</code>
-                  </div>
+              </section>
+            )}
+            {data.providers && data.organization && (
+              <Providers
+                key={org}
+                directory={data.providers}
+                enabled={data.organization.status === "enabled"}
+                system={org === "org_system"}
+                base={base}
+                csrf={session.csrf}
+                save={request}
+                onComplete={refresh}
+              />
+            )}
+            {data.organization && !events && !membersView && !providers && (
+              <section className="organization-summary">
+                <div>
+                  <Status active={data.organization.status === "enabled"} />
+                  <code>{org}</code>
+                </div>
+                <div className="actions">
+                  <Button
+                    variant="outline"
+                    onClick={() =>
+                      rename(
+                        "name",
+                        data.organization!.name,
+                        base,
+                        "修改组织名称"
+                      )
+                    }
+                  >
+                    修改名称
+                  </Button>
+                  {actor.platform && org !== "org_system" && (
+                    <Button
+                      variant={
+                        data.organization.status === "enabled"
+                          ? "destructive"
+                          : "outline"
+                      }
+                      onClick={() =>
+                        setAction({
+                          title:
+                            data.organization!.status === "enabled"
+                              ? "停用组织"
+                              : "恢复组织",
+                          description:
+                            "停用后，该组织成员无法通过后续登录和身份有效性检查。已有业务系统会话由各应用管理。",
+                          path: base,
+                          method: "PATCH",
+                          body: {
+                            status:
+                              data.organization!.status === "enabled"
+                                ? "disabled"
+                                : "enabled",
+                          },
+                          destructive: data.organization!.status === "enabled",
+                        })
+                      }
+                    >
+                      {data.organization.status === "enabled"
+                        ? "停用组织"
+                        : "恢复组织"}
+                    </Button>
+                  )}
+                </div>
+              </section>
+            )}
+            {data.members && (
+              <section aria-label="成员列表">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>成员</TableHead>
+                      {!org && <TableHead>所属组织</TableHead>}
+                      <TableHead>身份状态</TableHead>
+                      <TableHead>管理权限</TableHead>
+                      <TableHead className="row-actions">
+                        <span className="sr-only">操作</span>
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {data.members.items.map((m) => (
+                      <TableRow key={m.id}>
+                        <TableCell>
+                          <RecordIdentity
+                            name={m.displayName}
+                            id={m.id}
+                            icon={Array.from(m.displayName)[0] || <Users />}
+                            href={routeHash({
+                              ...memberListRoute,
+                              org: m.organizationId,
+                              member: m.id,
+                              ...(!org ? { from: "all" } : {}),
+                            })}
+                          />
+                        </TableCell>
+                        {!org && (
+                          <TableCell>
+                            <RecordIdentity
+                              name={m.organizationName ?? m.organizationId}
+                              id={m.organizationId}
+                            />
+                          </TableCell>
+                        )}
+                        <TableCell>
+                          <MemberStatus member={m} />
+                        </TableCell>
+                        <TableCell>
+                          {(m.administrator ??
+                          data.members?.administratorIds?.includes(m.id)) ? (
+                            <Badge variant="secondary" className="role-badge">
+                              <ShieldCheck aria-hidden="true" />
+                              {m.organizationId === "org_system"
+                                ? "平台管理员"
+                                : "组织管理员"}
+                            </Badge>
+                          ) : (
+                            <span className="muted">普通成员</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="row-actions">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            nativeButton={false}
+                            render={
+                              <a
+                                href={routeHash({
+                                  ...memberListRoute,
+                                  org: m.organizationId,
+                                  member: m.id,
+                                  ...(!org ? { from: "all" } : {}),
+                                })}
+                              />
+                            }
+                            aria-label={`查看 ${m.displayName}`}
+                          >
+                            查看
+                            <ChevronRight data-icon="inline-end" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+                {data.members.items.length === 0 && (
+                  <NoRecords
+                    text={
+                      memberSearchActive ? "没有符合条件的成员" : "还没有成员"
+                    }
+                    description={
+                      memberSearchActive
+                        ? "修改搜索条件或清除筛选后再试。"
+                        : undefined
+                    }
+                  />
+                )}
+                <Pager
+                  count={data.members.items.length}
+                  after={after}
+                  next={data.members.nextAfter}
+                  route={{ ...memberDirectoryRoute, ...memberFilters }}
+                />
+              </section>
+            )}
+            {selected && data.detail && (
+              <div className="detail-grid">
+                <section className="detail-section">
+                  <h2>成员资料</h2>
+                  <dl>
+                    <dt>成员 ID</dt>
+                    <dd>
+                      <code>{selected.id}</code>
+                    </dd>
+                    <dt>身份状态</dt>
+                    <dd>
+                      <MemberStatus member={selected} />
+                    </dd>
+                    <dt>阻断原因</dt>
+                    <dd>
+                      {selected.blockSources
+                        .map((v) => (v === "manual" ? "人工封禁" : "外部离职"))
+                        .join("、") || "无"}
+                    </dd>
+                  </dl>
                   <div className="actions">
                     <Button
                       variant="outline"
                       onClick={() =>
                         rename(
-                          "name",
-                          data.organization!.name,
-                          base,
-                          "修改组织名称"
+                          "displayName",
+                          selected.displayName,
+                          `${base}/members/${member}`,
+                          "修改成员名称"
                         )
                       }
                     >
                       修改名称
                     </Button>
-                    {actor.platform && org !== "org_system" && (
-                      <Button
-                        variant={
-                          data.organization.status === "enabled"
-                            ? "destructive"
-                            : "outline"
-                        }
-                        onClick={() =>
-                          setAction({
-                            title:
-                              data.organization!.status === "enabled"
-                                ? "停用组织"
-                                : "恢复组织",
-                            description:
-                              "停用后，该组织成员无法通过后续登录和身份有效性检查。已有业务系统会话由各应用管理。",
-                            path: base,
-                            method: "PATCH",
-                            body: {
-                              status:
-                                data.organization!.status === "enabled"
-                                  ? "disabled"
-                                  : "enabled",
-                            },
-                            destructive:
-                              data.organization!.status === "enabled",
-                          })
-                        }
-                      >
-                        {data.organization.status === "enabled"
-                          ? "停用组织"
-                          : "恢复组织"}
-                      </Button>
-                    )}
+                    <Button
+                      variant={
+                        selected.blockSources.includes("manual")
+                          ? "outline"
+                          : "destructive"
+                      }
+                      onClick={() =>
+                        setAction({
+                          title: selected.blockSources.includes("manual")
+                            ? "解除人工封禁"
+                            : "封禁成员",
+                          description: "人工解封不会清除外部离职等阻断。",
+                          path: `${base}/members/${member}`,
+                          method: "PATCH",
+                          body: {
+                            manualBlocked:
+                              !selected.blockSources.includes("manual"),
+                          },
+                          destructive:
+                            !selected.blockSources.includes("manual"),
+                        })
+                      }
+                    >
+                      {selected.blockSources.includes("manual")
+                        ? "解除人工封禁"
+                        : "封禁成员"}
+                    </Button>
                   </div>
                 </section>
-              )}
-              {data.members && (
-                <section className="directory">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>成员</TableHead>
-                        {!org && <TableHead>所属组织</TableHead>}
-                        <TableHead>身份状态</TableHead>
-                        <TableHead>管理权限</TableHead>
-                        <TableHead>成员 ID</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {data.members.items.map((m) => (
-                        <TableRow key={m.id}>
+                <section className="detail-section">
+                  <h2>管理权限</h2>
+                  <p>
+                    {administrator
+                      ? `此成员是${adminTitle}。`
+                      : "此成员没有管理权限。"}
+                  </p>
+                  <p className="muted">
+                    {org === "org_system"
+                      ? "平台管理员可以管理整套实例的组织与成员。"
+                      : "组织管理员可以管理本组织成员，并任免本组织管理员。"}
+                  </p>
+                  <Button
+                    variant={administrator ? "destructive" : "outline"}
+                    onClick={() =>
+                      setAction({
+                        title: administrator
+                          ? `取消${adminTitle}`
+                          : `设为${adminTitle}`,
+                        description: administrator
+                          ? "撤销后，该成员后续的管理请求将被拒绝。"
+                          : "成员需具有可用的登录方式。此授权不会赋予业务应用中的角色。",
+                        path: `${base}/members/${member}/administrator`,
+                        method: "PUT",
+                        body: { enabled: !administrator },
+                        destructive: administrator,
+                      })
+                    }
+                  >
+                    {administrator ? "取消管理员" : "设为管理员"}
+                  </Button>
+                </section>
+                <section className="detail-section">
+                  <h2>登录方式</h2>
+                  {blockers.length > 0 && (
+                    <div className="grid gap-2">
+                      <Badge variant="destructive">当前无法登录</Badge>
+                      <ul className="list-disc space-y-1 pl-5 text-sm">
+                        {blockers.map((reason) => (
+                          <li key={reason}>{reason}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {data.detail.bindings.length > 0 &&
+                    data.detail.bindings.map((b) => (
+                      <div className="binding-row" key={b.id}>
+                        <strong>
+                          {factorLabels[b.factorType] ?? b.factorType}
+                        </strong>
+                        <Status
+                          active={b.status === "active"}
+                          text={b.status === "active" ? "已绑定" : "已撤销"}
+                        />
+                      </div>
+                    ))}
+                  <p className="footnote">
+                    {data.detail.bindings.length === 0
+                      ? "请按本组织的身份验证与绑定流程配置登录方式。"
+                      : "登录时还会检查验证因子及提供方当前状态。"}
+                  </p>
+                </section>
+                <section className="detail-section">
+                  <h2>管理记录</h2>
+                  <p className="muted">
+                    查看此成员的资料、状态和管理员权限变更。
+                  </p>
+                  <Button
+                    variant="outline"
+                    onClick={() =>
+                      navigate({
+                        ...memberListRoute,
+                        view: "events",
+                        target: member,
+                      })
+                    }
+                  >
+                    查看记录
+                    <ChevronRight data-icon="inline-end" />
+                  </Button>
+                </section>
+              </div>
+            )}
+            {data.events && (
+              <section
+                className="directory event-directory"
+                aria-label="操作记录列表"
+              >
+                <DirectoryToolbar title="管理操作" />
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>时间</TableHead>
+                      <TableHead>操作者</TableHead>
+                      <TableHead>操作</TableHead>
+                      <TableHead>对象</TableHead>
+                      <TableHead>变更</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {data.events.map((event) => {
+                      const summary = operationSummary(event)
+                      const targetName = event.memberId
+                        ? event.memberId === data.historyMember?.id
+                          ? data.historyMember.displayName
+                          : undefined
+                        : event.organizationId === data.organization?.id
+                          ? data.organization.name
+                          : undefined
+                      const installationActor =
+                        event.actor === "installation-operator"
+                          ? "安装运维"
+                          : event.actor === "installation-manager"
+                            ? "集成管理服务"
+                            : undefined
+                      const currentActor = event.actor === actor.memberId
+                      return (
+                        <TableRow key={event.id}>
                           <TableCell>
-                            <Button
-                              variant="link"
-                              onClick={() =>
-                                navigate({
-                                  ...memberListRoute,
-                                  org: m.organizationId,
-                                  member: m.id,
-                                  ...(!org ? { from: "all" } : {}),
-                                })
-                              }
-                            >
-                              {m.displayName}
-                            </Button>
+                            <RecordTime value={event.createdAt} />
                           </TableCell>
-                          {!org && (
-                            <TableCell>
-                              <div>{m.organizationName}</div>
-                              <code>{m.organizationId}</code>
-                            </TableCell>
-                          )}
                           <TableCell>
-                            <MemberStatus member={m} />
-                          </TableCell>
-                          <TableCell>
-                            {(m.administrator ?? data.members?.administratorIds?.includes(m.id)) ? (
-                              <Badge variant="secondary">
-                                {m.organizationId === "org_system" ? "平台管理员" : "组织管理员"}
-                              </Badge>
+                            {installationActor ? (
+                              installationActor
                             ) : (
-                              <span className="muted">普通成员</span>
+                              <>
+                                <RecordIdentity
+                                  name={
+                                    currentActor
+                                      ? `${actor.displayName}（我）`
+                                      : "成员"
+                                  }
+                                  id={event.actor}
+                                />
+                              </>
                             )}
                           </TableCell>
                           <TableCell>
-                            <code>{m.id}</code>
+                            {eventLabels[event.action] ?? event.action}
+                          </TableCell>
+                          <TableCell>
+                            <RecordIdentity
+                              name={
+                                targetName ?? (event.memberId ? "成员" : "组织")
+                              }
+                              id={event.memberId || event.organizationId}
+                            />
+                            {!org && event.memberId && (
+                              <div>
+                                <code>{event.organizationId}</code>
+                              </div>
+                            )}
+                          </TableCell>
+                          <TableCell className="min-w-40 whitespace-normal">
+                            {summary.map((line) => (
+                              <p key={line} className="wrap-anywhere">
+                                {line}
+                              </p>
+                            ))}
+                            <details>
+                              <summary>原始变更</summary>
+                              <pre>
+                                {JSON.stringify(event.changes, null, 2)}
+                              </pre>
+                            </details>
                           </TableCell>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                  {data.members.items.length === 0 && (
-                    <NoRecords
-                      text={memberSearchActive ? "没有符合条件的成员" : "还没有成员"}
-                      description={
-                        memberSearchActive
-                          ? "修改搜索条件或清除筛选后再试。"
-                          : undefined
-                      }
-                    />
-                  )}
-                  <Pager
-                    after={after}
-                    next={data.members.nextAfter}
-                    route={{ ...memberDirectoryRoute, ...memberFilters }}
-                  />
-                </section>
-              )}
-              {selected && data.detail && (
-                <div className="detail-grid">
-                  <section className="detail-section">
-                    <h2>成员资料</h2>
-                    <dl>
-                      <dt>成员 ID</dt>
-                      <dd>
-                        <code>{selected.id}</code>
-                      </dd>
-                      <dt>身份状态</dt>
-                      <dd>
-                        <MemberStatus member={selected} />
-                      </dd>
-                      <dt>阻断原因</dt>
-                      <dd>
-                        {selected.blockSources
-                          .map((v) =>
-                            v === "manual" ? "人工封禁" : "外部离职"
-                          )
-                          .join("、") || "无"}
-                      </dd>
-                    </dl>
-                    <div className="actions">
-                      <Button
-                        variant="outline"
-                        onClick={() =>
-                          rename(
-                            "displayName",
-                            selected.displayName,
-                            `${base}/members/${member}`,
-                            "修改成员名称"
-                          )
-                        }
-                      >
-                        修改名称
-                      </Button>
-                      <Button
-                        variant={
-                          selected.blockSources.includes("manual")
-                            ? "outline"
-                            : "destructive"
-                        }
-                        onClick={() =>
-                          setAction({
-                            title: selected.blockSources.includes("manual")
-                              ? "解除人工封禁"
-                              : "封禁成员",
-                            description: "人工解封不会清除外部离职等阻断。",
-                            path: `${base}/members/${member}`,
-                            method: "PATCH",
-                            body: {
-                              manualBlocked:
-                                !selected.blockSources.includes("manual"),
-                            },
-                            destructive:
-                              !selected.blockSources.includes("manual"),
-                          })
-                        }
-                      >
-                        {selected.blockSources.includes("manual")
-                          ? "解除人工封禁"
-                          : "封禁成员"}
-                      </Button>
-                    </div>
-                  </section>
-                  <section className="detail-section">
-                    <h2>管理权限</h2>
-                    <p>
-                      {administrator
-                        ? `此成员是${adminTitle}。`
-                        : "此成员没有管理权限。"}
-                    </p>
-                    <p className="muted">
-                      {org === "org_system"
-                        ? "平台管理员可以管理整套实例的组织与成员。"
-                        : "组织管理员可以管理本组织成员，并任免本组织管理员。"}
-                    </p>
-                    <Button
-                      variant={administrator ? "destructive" : "outline"}
-                      onClick={() =>
-                        setAction({
-                          title: administrator
-                            ? `取消${adminTitle}`
-                            : `设为${adminTitle}`,
-                          description: administrator
-                            ? "撤销后，该成员后续的管理请求将被拒绝。"
-                            : "成员需具有可用的登录方式。此授权不会赋予业务应用中的角色。",
-                          path: `${base}/members/${member}/administrator`,
-                          method: "PUT",
-                          body: { enabled: !administrator },
-                          destructive: administrator,
-                        })
-                      }
-                    >
-                      {administrator ? "取消管理员" : "设为管理员"}
-                    </Button>
-                  </section>
-                  <section className="detail-section">
-                    <h2>登录方式</h2>
-                    {blockers.length > 0 && (
-                      <div className="grid gap-2">
-                        <Badge variant="destructive">当前无法登录</Badge>
-                        <ul className="list-disc space-y-1 pl-5 text-sm">
-                          {blockers.map((reason) => <li key={reason}>{reason}</li>)}
-                        </ul>
-                      </div>
-                    )}
-                    {data.detail.bindings.length > 0 && (
-                      data.detail.bindings.map((b) => (
-                        <div className="binding-row" key={b.id}>
-                          <strong>
-                            {b.factorType === "phone" ? "手机号" : "钉钉"}
-                          </strong>
-                          <Status
-                            active={b.status === "active"}
-                            text={b.status === "active" ? "已绑定" : "已撤销"}
-                          />
-                        </div>
-                      ))
-                    )}
-                    <p className="footnote">
-                      {data.detail.bindings.length === 0
-                        ? "请按本组织的身份验证与绑定流程配置登录方式。"
-                        : "登录时还会检查验证因子及提供方当前状态。"}
-                    </p>
-                  </section>
-                  <section className="detail-section">
-                    <h2>管理记录</h2>
-                    <p className="muted">
-                      查看此成员的资料、状态和管理员权限变更。
-                    </p>
-                    <Button
-                      variant="outline"
-                      onClick={() =>
-                        navigate({ ...memberListRoute, view: "events", target: member })
-                      }
-                    >
-                      查看记录
-                      <ChevronRight data-icon="inline-end" />
-                    </Button>
-                  </section>
-                </div>
-              )}
-              {data.events && (
-                <section className="directory">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>时间</TableHead>
-                        <TableHead>操作者</TableHead>
-                        <TableHead>操作</TableHead>
-                        <TableHead>对象</TableHead>
-                        <TableHead>变更</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {data.events.map((event) => {
-                        const summary = operationSummary(event)
-                        const targetName = event.memberId
-                          ? event.memberId === data.historyMember?.id
-                            ? data.historyMember.displayName
-                            : undefined
-                          : event.organizationId === data.organization?.id
-                            ? data.organization.name
-                            : undefined
-                        const installationActor =
-                          event.actor === "installation-operator"
-                            ? "安装运维"
-                            : event.actor === "installation-manager"
-                              ? "集成管理服务"
-                              : undefined
-                        const currentActor = event.actor === actor.memberId
-                        return (
-                          <TableRow key={event.id}>
-                            <TableCell>
-                              {new Date(event.createdAt).toLocaleString("zh-CN")}
-                            </TableCell>
-                            <TableCell>
-                              {installationActor ? (
-                                installationActor
-                              ) : (
-                                <>
-                                  {currentActor && <div>{actor.displayName}（当前操作者）</div>}
-                                  <code>{event.actor}</code>
-                                </>
-                              )}
-                            </TableCell>
-                            <TableCell>
-                              {eventLabels[event.action] ?? event.action}
-                            </TableCell>
-                            <TableCell>
-                              {targetName && <div>{targetName}</div>}
-                              <code>{event.memberId || event.organizationId}</code>
-                              {!org && event.memberId && (
-                                <div>
-                                  <code>{event.organizationId}</code>
-                                </div>
-                              )}
-                            </TableCell>
-                            <TableCell className="min-w-40 whitespace-normal">
-                              {summary.map((line) => (
-                                <p key={line} className="wrap-anywhere">{line}</p>
-                              ))}
-                              <details>
-                                <summary>原始变更</summary>
-                                <pre>{JSON.stringify(event.changes, null, 2)}</pre>
-                              </details>
-                            </TableCell>
-                          </TableRow>
-                        )
-                      })}
-                    </TableBody>
-                  </Table>
-                  {data.events.length === 0 && (
-                    <NoRecords text="暂无管理操作记录" />
-                  )}
-                  <div className="pagination">
-                    <Button
-                      variant="outline"
-                      disabled={!params.get("before")}
-                      onClick={() =>
-                        navigate({
-                          ...memberListRoute,
-                          view: "events",
-                          target: historyTarget,
-                        })
-                      }
-                    >
-                      最新记录
-                    </Button>
-                    <Button
-                      variant="outline"
-                      disabled={data.events.length < 50}
-                      onClick={() =>
-                        navigate({
-                          ...memberListRoute,
-                          view: "events",
-                          target: historyTarget,
-                          before: String(data.events!.at(-1)!.id),
-                        })
-                      }
-                    >
-                      更早记录
-                    </Button>
-                  </div>
-                </section>
-              )}
-            </>
-          )}
-          <footer className="page-footer">
-            MemberID · 独立的组织成员身份
-            <Button variant="ghost" onClick={refresh}>
-              刷新
-            </Button>
-          </footer>
-        </div>
-      </main>
+                      )
+                    })}
+                  </TableBody>
+                </Table>
+                {data.events.length === 0 && (
+                  <NoRecords text="暂无管理操作记录" />
+                )}
+                <DirectoryFooter count={data.events.length}>
+                  <Button
+                    variant="outline"
+                    disabled={!params.get("before")}
+                    onClick={() =>
+                      navigate({
+                        ...memberListRoute,
+                        view: "events",
+                        target: historyTarget,
+                      })
+                    }
+                  >
+                    最新记录
+                  </Button>
+                  <Button
+                    variant="outline"
+                    disabled={data.events.length < 50}
+                    onClick={() =>
+                      navigate({
+                        ...memberListRoute,
+                        view: "events",
+                        target: historyTarget,
+                        before: String(data.events!.at(-1)!.id),
+                      })
+                    }
+                  >
+                    更早记录
+                  </Button>
+                </DirectoryFooter>
+              </section>
+            )}
+          </>
+        )}
+      </div>
+      <footer className="page-footer">MemberID · 独立的组织成员身份</footer>
       {action && (
         <ActionDialog
           key={`${action.path}:${action.title}`}
@@ -1137,7 +1227,7 @@ export default function App() {
           }}
         />
       )}
-    </div>
+    </ConsoleLayout>
   )
 }
 
@@ -1222,7 +1312,7 @@ function OrganizationChoices({
         所有组织
         {!organizationId && <Check aria-hidden="true" />}
       </Button>
-      <div className="grid min-h-20 max-h-[45dvh] content-start gap-1 overflow-y-auto border-y py-2">
+      <div className="grid max-h-[45dvh] min-h-20 content-start gap-1 overflow-y-auto border-y py-2">
         {page ? (
           page.items.map((organization) => (
             <Button
@@ -1235,13 +1325,15 @@ function OrganizationChoices({
               onClick={() => onSelect(organization.id)}
             >
               <span className="grid min-w-0 gap-1">
-                <span className="whitespace-normal wrap-anywhere">
+                <span className="wrap-anywhere whitespace-normal">
                   {organization.name}
                   {organization.status !== "enabled" && "（已停用）"}
                 </span>
                 <code>{organization.id}</code>
               </span>
-              {organizationId === organization.id && <Check aria-hidden="true" />}
+              {organizationId === organization.id && (
+                <Check aria-hidden="true" />
+              )}
             </Button>
           ))
         ) : error ? (
@@ -1304,17 +1396,17 @@ function MemberSearch({
   return (
     <form
       aria-label="查找成员"
-      className="mb-4 flex flex-wrap items-end gap-3 rounded-lg border p-4"
+      className="directory-filters"
       onSubmit={(event) => {
         event.preventDefault()
         onSubmit({ q: query.trim(), status, administrator })
       }}
     >
-      <label className="grid w-full max-w-72 gap-1 text-xs">
+      <label className="search-field">
         姓名或成员 ID
         <Input
           type="search"
-          placeholder="输入姓名或成员 ID"
+          placeholder="搜索姓名或成员 ID…"
           value={query}
           maxLength={128}
           onChange={(event) => setQuery(event.target.value)}
@@ -1323,7 +1415,7 @@ function MemberSearch({
       <label className="grid gap-1 text-xs">
         身份状态
         <select
-          className="h-8 rounded-lg border bg-background px-2 text-sm"
+          className="filter-select"
           value={status}
           onChange={(event) => setStatus(event.target.value)}
         >
@@ -1335,7 +1427,7 @@ function MemberSearch({
       <label className="grid gap-1 text-xs">
         管理权限
         <select
-          className="h-8 rounded-lg border bg-background px-2 text-sm"
+          className="filter-select"
           value={administrator}
           onChange={(event) => setAdministrator(event.target.value)}
         >
@@ -1348,35 +1440,43 @@ function MemberSearch({
         <Search data-icon="inline-start" />
         搜索
       </Button>
-      {(query || status || administrator || Object.values(filters).some(Boolean)) && (
-        <Button
-          type="button"
-          variant="ghost"
-          onClick={() => {
-            setQuery("")
-            setStatus("")
-            setAdministrator("")
-            onClear()
-          }}
-        >
-          清除筛选
-        </Button>
-      )}
+      <Button
+        type="button"
+        variant="ghost"
+        disabled={
+          !(
+            query ||
+            status ||
+            administrator ||
+            Object.values(filters).some(Boolean)
+          )
+        }
+        onClick={() => {
+          setQuery("")
+          setStatus("")
+          setAdministrator("")
+          onClear()
+        }}
+      >
+        清除筛选
+      </Button>
     </form>
   )
 }
 
 function Pager({
+  count,
   after,
   next,
   route,
 }: {
+  count: number
   after: string
   next?: string
   route: Record<string, string>
 }) {
   return (
-    <div className="pagination">
+    <DirectoryFooter count={count}>
       <Button
         variant="outline"
         disabled={!after}
@@ -1390,8 +1490,9 @@ function Pager({
         onClick={() => next && navigate({ ...route, after: next })}
       >
         下一页
+        <ChevronRight data-icon="inline-end" />
       </Button>
-    </div>
+    </DirectoryFooter>
   )
 }
 function ActionDialog({
