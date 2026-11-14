@@ -64,19 +64,19 @@ func manage(ctx context.Context, args []string, stdout, stderr io.Writer) error 
 		if *organizationID != "" || *memberID != "" {
 			return errors.New("organization create accepts only --name")
 		}
-		result, err = store.CreateOrganization(ctx, "", *name)
+		result, err = store.CreateOrganization(ctx, identity.OperatorPrincipal(), "", *name)
 	case "member":
 		switch args[1] {
 		case "create":
 			if *memberID != "" {
 				return errors.New("member create accepts --organization and --name")
 			}
-			result, err = store.CreateMember(ctx, *organizationID, "", *name)
+			result, err = store.CreateMember(ctx, identity.OperatorPrincipal(), *organizationID, "", *name)
 		case "block", "unblock":
 			if *name != "" {
 				return errors.New("member block/unblock accepts --organization and --member")
 			}
-			result, err = store.SetManualBlock(ctx, *organizationID, *memberID, args[1] == "block")
+			result, err = store.SetManualBlock(ctx, identity.OperatorPrincipal(), *organizationID, *memberID, args[1] == "block")
 		}
 	default:
 		return errors.New("unknown management command")

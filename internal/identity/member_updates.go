@@ -39,7 +39,10 @@ func (store *Store) MemberUpdate(ctx context.Context, organizationID, memberID, 
 // UpdateMemberOnce atomically records the result alongside the update. An exact
 // retry returns the saved result without applying the change again, even after
 // later updates or provider departure events.
-func (store *Store) UpdateMemberOnce(ctx context.Context, organizationID, memberID, updateID string, change MemberChange) (MemberUpdateReceipt, bool, error) {
+func (store *Store) UpdateMemberOnce(ctx context.Context, principal Principal, organizationID, memberID, updateID string, change MemberChange) (MemberUpdateReceipt, bool, error) {
+	if !principal.installation() {
+		return MemberUpdateReceipt{}, false, ErrForbidden
+	}
 	var receipt MemberUpdateReceipt
 	if !ValidID(organizationID, OrganizationKind) || !ValidID(memberID, MemberKind) || !ValidUUID(updateID) || !validMemberChange(change) {
 		return receipt, false, ErrInvalid
@@ -76,7 +79,7 @@ func (store *Store) UpdateMemberOnce(ctx context.Context, organizationID, member
 			return err
 		}
 		receipt = MemberUpdateReceipt{ID: updateID, OrganizationID: organizationID, MemberID: memberID, Member: member, CreatedAt: member.UpdatedAt}
-		if err := managementEvent(ctx, tx, ManagementActor{}, organizationID, memberID, "member.update", change); err != nil {
+		if err := managementEvent(ctx, tx, principal, organizationID, memberID, "member.update", change); err != nil {
 			return err
 		}
 		response, err = json.Marshal(receipt)

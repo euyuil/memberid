@@ -23,7 +23,7 @@ func TestConcurrentMemberUpdateAndHistoricalReplay(t *testing.T) {
 	results := make(chan outcome, 12)
 	for range 12 {
 		go func() {
-			receipt, created, err := store.UpdateMemberOnce(t.Context(), organization.ID, member.ID, updateID, change)
+			receipt, created, err := store.UpdateMemberOnce(t.Context(), OperatorPrincipal(), organization.ID, member.ID, updateID, change)
 			results <- outcome{receipt, created, err}
 		}()
 	}
@@ -47,7 +47,7 @@ func TestConcurrentMemberUpdateAndHistoricalReplay(t *testing.T) {
 		t.Fatal("update did not commit exactly once")
 	}
 	renamed, unblocked := "Later member name", false
-	if _, _, err := store.UpdateMemberOnce(t.Context(), organization.ID, member.ID, "00000000-0000-4000-8000-000000000002", MemberChange{DisplayName: &renamed, ManualBlocked: &unblocked}); err != nil {
+	if _, _, err := store.UpdateMemberOnce(t.Context(), OperatorPrincipal(), organization.ID, member.ID, "00000000-0000-4000-8000-000000000002", MemberChange{DisplayName: &renamed, ManualBlocked: &unblocked}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.SetExternalDeparture(t.Context(), organization.ID, member.ID, true); err != nil {
@@ -58,7 +58,7 @@ func TestConcurrentMemberUpdateAndHistoricalReplay(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer reopened.Close()
-	replayed, created, err := reopened.UpdateMemberOnce(t.Context(), organization.ID, member.ID, strings.ToUpper(updateID), change)
+	replayed, created, err := reopened.UpdateMemberOnce(t.Context(), OperatorPrincipal(), organization.ID, member.ID, strings.ToUpper(updateID), change)
 	if err != nil || created || !reflect.DeepEqual(first, replayed) {
 		t.Fatal("restarted retry lost historical receipt", err)
 	}
@@ -75,12 +75,12 @@ func TestConcurrentMemberUpdateAndHistoricalReplay(t *testing.T) {
 		if _, err := store.MemberUpdate(t.Context(), target[0], target[1], updateID); !errors.Is(err, ErrNotFound) {
 			t.Fatal("receipt crossed identity boundary", err)
 		}
-		if _, _, err := store.UpdateMemberOnce(t.Context(), target[0], target[1], updateID, change); !errors.Is(err, ErrConflict) {
+		if _, _, err := store.UpdateMemberOnce(t.Context(), OperatorPrincipal(), target[0], target[1], updateID, change); !errors.Is(err, ErrConflict) {
 			t.Fatal("update identifier was reused for another identity", err)
 		}
 	}
 	for _, different := range []MemberChange{{DisplayName: &renamed, ManualBlocked: &blocked}, {DisplayName: &name}, {ManualBlocked: &unblocked}} {
-		if _, _, err := store.UpdateMemberOnce(t.Context(), organization.ID, member.ID, updateID, different); !errors.Is(err, ErrConflict) {
+		if _, _, err := store.UpdateMemberOnce(t.Context(), OperatorPrincipal(), organization.ID, member.ID, updateID, different); !errors.Is(err, ErrConflict) {
 			t.Fatal("accepted operation was replaced", err)
 		}
 	}
@@ -97,7 +97,7 @@ func TestMemberUpdateRollsBackWhenReceiptCannotCommit(t *testing.T) {
 	}
 	name, blocked := "Must roll back", true
 	change := MemberChange{DisplayName: &name, ManualBlocked: &blocked}
-	if _, created, err := store.UpdateMemberOnce(t.Context(), organization.ID, member.ID, updateID, change); err == nil || created {
+	if _, created, err := store.UpdateMemberOnce(t.Context(), OperatorPrincipal(), organization.ID, member.ID, updateID, change); err == nil || created {
 		t.Fatal("failed receipt reported success")
 	}
 	current, err := store.Member(t.Context(), organization.ID, member.ID)
@@ -114,7 +114,7 @@ func TestMemberUpdateRollsBackWhenReceiptCannotCommit(t *testing.T) {
 	if _, err := store.pool.Exec(t.Context(), "ALTER TABLE member_updates DROP CONSTRAINT reject_test_receipt"); err != nil {
 		t.Fatal(err)
 	}
-	if _, created, err := store.UpdateMemberOnce(t.Context(), organization.ID, member.ID, updateID, change); err != nil || !created {
+	if _, created, err := store.UpdateMemberOnce(t.Context(), OperatorPrincipal(), organization.ID, member.ID, updateID, change); err != nil || !created {
 		t.Fatal("rolled-back operation could not retry", err)
 	}
 }
@@ -130,7 +130,7 @@ func TestConflictingConcurrentMemberUpdatesCannotShareIdentifier(t *testing.T) {
 	results := make(chan outcome, 2)
 	for _, name := range []string{"First candidate", "Second candidate"} {
 		go func() {
-			receipt, created, err := store.UpdateMemberOnce(t.Context(), organization.ID, member.ID, "00000000-0000-4000-8000-000000000004", MemberChange{DisplayName: &name})
+			receipt, created, err := store.UpdateMemberOnce(t.Context(), OperatorPrincipal(), organization.ID, member.ID, "00000000-0000-4000-8000-000000000004", MemberChange{DisplayName: &name})
 			results <- outcome{receipt, created, err}
 		}()
 	}

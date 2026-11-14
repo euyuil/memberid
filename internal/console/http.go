@@ -363,7 +363,7 @@ func (s *Service) mutate(w http.ResponseWriter, r *http.Request) {
 		change.Status = v.Status
 		action = "organization.update"
 	}
-	v, e := s.store.Manage(r.Context(), r.Context().Value(sessionKey{}).(session).actor, action, org, id, change)
+	v, e := s.store.Manage(r.Context(), r.Context().Value(sessionKey{}).(session).actor.Principal(), action, org, id, change)
 	respond(w, v, e)
 }
 func (s *Service) administrator(w http.ResponseWriter, r *http.Request) {
@@ -377,7 +377,7 @@ func (s *Service) administrator(w http.ResponseWriter, r *http.Request) {
 		problem(w, 400, "invalid_request")
 		return
 	}
-	e := s.store.SetAdministrator(r.Context(), r.Context().Value(sessionKey{}).(session).actor, r.PathValue("organizationId"), r.PathValue("memberId"), *v.Enabled)
+	e := s.store.SetAdministrator(r.Context(), r.Context().Value(sessionKey{}).(session).actor.Principal(), r.PathValue("organizationId"), r.PathValue("memberId"), *v.Enabled)
 	respond(w, map[string]bool{"enabled": *v.Enabled}, e)
 }
 func (s *Service) events(w http.ResponseWriter, r *http.Request) {

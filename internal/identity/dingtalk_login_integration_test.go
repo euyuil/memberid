@@ -24,7 +24,7 @@ func (fn loginDingTalkFunc) Login(ctx context.Context, corp, client, secret, cod
 func verifierFixture(t *testing.T) (*Store, *DingTalkApplications, *DingTalkVerifier, DingTalkApplication) {
 	t.Helper()
 	store, apps, organization, _ := applicationFixture(t)
-	app, err := apps.Configure(t.Context(), organization.ID, DingTalkApplicationInput{CorpID: "example-corp", ClientID: "example-client", ClientSecret: rand.Text()})
+	app, err := apps.Configure(t.Context(), OperatorPrincipal(), organization.ID, DingTalkApplicationInput{CorpID: "example-corp", ClientID: "example-client", ClientSecret: rand.Text()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,7 +69,7 @@ func TestDingTalkAdmissionPreservesIdentityAndIndependentBlocks(t *testing.T) {
 	if err != nil || second.Factor.ID != verified.Factor.ID {
 		t.Fatal("repeated login changed factor", err)
 	}
-	if _, err := store.SetManualBlock(t.Context(), app.OrganizationID, member.ID, true); err != nil {
+	if _, err := store.SetManualBlock(t.Context(), OperatorPrincipal(), app.OrganizationID, member.ID, true); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := admitLogin(t.Context(), verifier, verifiedLogin(t, verifier, app)); !errors.Is(err, ErrIneligible) {
@@ -78,7 +78,7 @@ func TestDingTalkAdmissionPreservesIdentityAndIndependentBlocks(t *testing.T) {
 	if _, err := store.SetExternalDeparture(t.Context(), app.OrganizationID, member.ID, true); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.SetManualBlock(t.Context(), app.OrganizationID, member.ID, false); err != nil {
+	if _, err := store.SetManualBlock(t.Context(), OperatorPrincipal(), app.OrganizationID, member.ID, false); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := admitLogin(t.Context(), verifier, verifiedLogin(t, verifier, app)); err != nil {
@@ -88,7 +88,7 @@ func TestDingTalkAdmissionPreservesIdentityAndIndependentBlocks(t *testing.T) {
 	if err != nil || current.Status != "active" {
 		t.Fatal("verified return lost identity", err)
 	}
-	if err := store.RevokeBinding(t.Context(), app.OrganizationID, member.ID, verified.Factor.ID); err != nil {
+	if err := store.RevokeBinding(t.Context(), OperatorPrincipal(), app.OrganizationID, member.ID, verified.Factor.ID); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := admitLogin(t.Context(), verifier, verifiedLogin(t, verifier, app)); !errors.Is(err, ErrConflict) {
@@ -150,11 +150,11 @@ func TestDingTalkAdmissionOrganizationIsolationAndExplicitProvisioning(t *testin
 		t.Fatal(err)
 	}
 	organization, member := organizationAndMember(t, store)
-	secondApp, err := apps.Configure(t.Context(), organization.ID, DingTalkApplicationInput{CorpID: "example-corp", ClientID: "second-client", ClientSecret: rand.Text()})
+	secondApp, err := apps.Configure(t.Context(), OperatorPrincipal(), organization.ID, DingTalkApplicationInput{CorpID: "example-corp", ClientID: "second-client", ClientSecret: rand.Text()})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.BindFactor(t.Context(), organization.ID, member.ID, first.Factor.ID); !errors.Is(err, ErrIneligible) {
+	if _, err := store.BindFactor(t.Context(), OperatorPrincipal(), organization.ID, member.ID, first.Factor.ID); !errors.Is(err, ErrIneligible) {
 		t.Fatal("foreign provider factor bound across organizations", err)
 	}
 	verifier.provider = loginDingTalkFunc(func(context.Context, string, string, string, string) (dingtalk.Member, error) {
@@ -165,7 +165,7 @@ func TestDingTalkAdmissionOrganizationIsolationAndExplicitProvisioning(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.BindFactor(t.Context(), organization.ID, member.ID, factor.ID); err != nil {
+	if _, err := store.BindFactor(t.Context(), OperatorPrincipal(), organization.ID, member.ID, factor.ID); err != nil {
 		t.Fatal(err)
 	}
 	second, err := admitLogin(t.Context(), verifier, verifiedLogin(t, verifier, secondApp))
@@ -214,7 +214,7 @@ func TestDingTalkAdmissionRollsBackWithAuthenticationTransaction(t *testing.T) {
 func TestDingTalkAdmissionRejectsStaleConfigurationAndExpiredProof(t *testing.T) {
 	store, apps, verifier, app := verifierFixture(t)
 	proof := verifiedLogin(t, verifier, app)
-	_, err := apps.Configure(t.Context(), app.OrganizationID, DingTalkApplicationInput{CorpID: app.CorpID, ClientID: app.ClientID, ClientSecret: rand.Text(), ExpectedRevision: app.Revision})
+	_, err := apps.Configure(t.Context(), OperatorPrincipal(), app.OrganizationID, DingTalkApplicationInput{CorpID: app.CorpID, ClientID: app.ClientID, ClientSecret: rand.Text(), ExpectedRevision: app.Revision})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -235,7 +235,7 @@ func TestDingTalkAdmissionRejectsStaleConfigurationAndExpiredProof(t *testing.T)
 	}
 	verifier.now = time.Now
 	disabled := "disabled"
-	if _, err := store.UpdateOrganization(t.Context(), app.OrganizationID, OrganizationChange{Status: &disabled}); err != nil {
+	if _, err := store.UpdateOrganization(t.Context(), OperatorPrincipal(), app.OrganizationID, OrganizationChange{Status: &disabled}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := admitLogin(t.Context(), verifier, proof); !errors.Is(err, ErrIneligible) {

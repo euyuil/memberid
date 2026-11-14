@@ -19,7 +19,7 @@ func boundPhone(t *testing.T, store *Store, organizationID, memberID, number str
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.BindFactor(t.Context(), organizationID, memberID, factor.ID); err != nil {
+	if _, err := store.BindFactor(t.Context(), OperatorPrincipal(), organizationID, memberID, factor.ID); err != nil {
 		t.Fatal(err)
 	}
 	return factor
@@ -30,10 +30,10 @@ func TestEligibleMemberIDsBoundedOrganizationSelection(t *testing.T) {
 	first, member := organizationAndMember(t, store)
 	second, other := organizationAndMember(t, store)
 	factor := boundPhone(t, store, first.ID, member.ID, "+12025550101")
-	if _, err := store.BindFactor(t.Context(), second.ID, other.ID, factor.ID); err != nil {
+	if _, err := store.BindFactor(t.Context(), OperatorPrincipal(), second.ID, other.ID, factor.ID); err != nil {
 		t.Fatal(err)
 	}
-	unbound, err := store.CreateMember(t.Context(), first.ID, "", "Unbound Member")
+	unbound, err := store.CreateMember(t.Context(), OperatorPrincipal(), first.ID, "", "Unbound Member")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,16 +105,16 @@ func TestEligibilityQueriesShareCurrentBindingGates(t *testing.T) {
 			var err error
 			switch change {
 			case "manual block":
-				_, err = store.SetManualBlock(t.Context(), organization.ID, member.ID, true)
+				_, err = store.SetManualBlock(t.Context(), OperatorPrincipal(), organization.ID, member.ID, true)
 			case "external departure":
 				_, err = store.SetExternalDeparture(t.Context(), organization.ID, member.ID, true)
 			case "disabled factor":
 				_, err = store.pool.Exec(t.Context(), "UPDATE authentication_factors SET status='disabled' WHERE id=$1", factor.ID)
 			case "revoked binding":
-				err = store.RevokeBinding(t.Context(), organization.ID, member.ID, factor.ID)
+				err = store.RevokeBinding(t.Context(), OperatorPrincipal(), organization.ID, member.ID, factor.ID)
 			case "disabled organization":
 				status := "disabled"
-				_, err = store.UpdateOrganization(t.Context(), organization.ID, OrganizationChange{Status: &status})
+				_, err = store.UpdateOrganization(t.Context(), OperatorPrincipal(), organization.ID, OrganizationChange{Status: &status})
 			}
 			if err != nil {
 				t.Fatal(err)
@@ -128,11 +128,11 @@ func TestMemberEligibilityUsesAnyBindingWithoutAuthenticatingOne(t *testing.T) {
 	for _, change := range []string{"factor unavailable", "wrong namespace", "missing application", "revoked application"} {
 		t.Run(change, func(t *testing.T) {
 			store, apps, organization, _ := applicationFixture(t)
-			app, err := apps.Configure(t.Context(), organization.ID, DingTalkApplicationInput{CorpID: "example-corp", ClientID: "example-client", ClientSecret: rand.Text()})
+			app, err := apps.Configure(t.Context(), OperatorPrincipal(), organization.ID, DingTalkApplicationInput{CorpID: "example-corp", ClientID: "example-client", ClientSecret: rand.Text()})
 			if err != nil {
 				t.Fatal(err)
 			}
-			member, err := store.CreateMember(t.Context(), organization.ID, "", "Example Member")
+			member, err := store.CreateMember(t.Context(), OperatorPrincipal(), organization.ID, "", "Example Member")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -141,7 +141,7 @@ func TestMemberEligibilityUsesAnyBindingWithoutAuthenticatingOne(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if _, err := store.BindFactor(t.Context(), organization.ID, member.ID, external.ID); err != nil {
+			if _, err := store.BindFactor(t.Context(), OperatorPrincipal(), organization.ID, member.ID, external.ID); err != nil {
 				t.Fatal(err)
 			}
 			check := func(want bool) {
@@ -152,7 +152,7 @@ func TestMemberEligibilityUsesAnyBindingWithoutAuthenticatingOne(t *testing.T) {
 				}
 			}
 			check(true)
-			if err := store.RevokeBinding(t.Context(), organization.ID, member.ID, phone.ID); err != nil {
+			if err := store.RevokeBinding(t.Context(), OperatorPrincipal(), organization.ID, member.ID, phone.ID); err != nil {
 				t.Fatal(err)
 			}
 			check(true)
@@ -181,14 +181,14 @@ func TestMemberEligibilityUsesAnyBindingWithoutAuthenticatingOne(t *testing.T) {
 func TestMemberEligibilityObservesOneStatementSnapshot(t *testing.T) {
 	store := testStore(t)
 	organization, first := organizationAndMember(t, store)
-	second, err := store.CreateMember(t.Context(), organization.ID, "", "Second Member")
+	second, err := store.CreateMember(t.Context(), OperatorPrincipal(), organization.ID, "", "Second Member")
 	if err != nil {
 		t.Fatal(err)
 	}
 	for i, member := range []Member{first, second} {
 		boundPhone(t, store, organization.ID, member.ID, fmt.Sprintf("+120255501%02d", i+10))
 	}
-	if _, err := store.SetManualBlock(t.Context(), organization.ID, second.ID, true); err != nil {
+	if _, err := store.SetManualBlock(t.Context(), OperatorPrincipal(), organization.ID, second.ID, true); err != nil {
 		t.Fatal(err)
 	}
 	members := []string{first.ID, second.ID}

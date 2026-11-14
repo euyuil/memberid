@@ -152,21 +152,30 @@ func (applications *DingTalkApplications) loadSource(ctx context.Context, organi
 	return DingTalkCredentials{app, string(secret)}, nil
 }
 
-func (applications *DingTalkApplications) Configure(ctx context.Context, organizationID string, input DingTalkApplicationInput) (DingTalkApplication, error) {
-	return applications.ConfigureSource(ctx, organizationID, "", input)
+func (applications *DingTalkApplications) Configure(ctx context.Context, principal Principal, organizationID string, input DingTalkApplicationInput) (DingTalkApplication, error) {
+	if !principal.installation() {
+		return DingTalkApplication{}, ErrForbidden
+	}
+	return applications.ConfigureSource(ctx, principal, organizationID, "", input)
 }
 
-func (applications *DingTalkApplications) ConfigureSource(ctx context.Context, organizationID, namespace string, input DingTalkApplicationInput) (DingTalkApplication, error) {
+func (applications *DingTalkApplications) ConfigureSource(ctx context.Context, principal Principal, organizationID, namespace string, input DingTalkApplicationInput) (DingTalkApplication, error) {
+	if !principal.installation() {
+		return DingTalkApplication{}, ErrForbidden
+	}
 	if !dingtalk.ValidCredentials(input.CorpID, input.ClientID, input.ClientSecret) {
 		return DingTalkApplication{}, ErrInvalid
 	}
-	return applications.configure(ctx, ManagementActor{}, organizationID, namespace, ProviderInput{
+	return applications.configure(ctx, principal, organizationID, namespace, ProviderInput{
 		TenantID: input.CorpID, ClientID: input.ClientID, ClientSecret: input.ClientSecret, ExpectedRevision: input.ExpectedRevision,
 	})
 }
 
-func (applications *DingTalkApplications) configure(ctx context.Context, actor ManagementActor, organizationID, namespace string, input ProviderInput) (DingTalkApplication, error) {
-	console := actor.MemberID != ""
+func (applications *DingTalkApplications) configure(ctx context.Context, principal Principal, organizationID, namespace string, input ProviderInput) (DingTalkApplication, error) {
+	if principal.kind != memberPrincipal && !principal.installation() {
+		return DingTalkApplication{}, ErrForbidden
+	}
+	console := principal.kind == memberPrincipal
 	if !validProviderInput(organizationID, namespace, input, console) || input.ClientSecret != "" && !dingtalk.ValidCredentials(input.TenantID, input.ClientID, input.ClientSecret) {
 		return DingTalkApplication{}, ErrInvalid
 	}
@@ -227,7 +236,7 @@ func (applications *DingTalkApplications) configure(ctx context.Context, actor M
 	}
 	var result DingTalkApplication
 	err = pgx.BeginFunc(ctx, applications.store.pool, func(tx pgx.Tx) error {
-		before, err := lockProviderManagement(ctx, tx, actor, organization, exists && current.Enabled && !candidate.Enabled)
+		before, err := lockProviderManagement(ctx, tx, principal, organization, exists && current.Enabled && !candidate.Enabled)
 		if err != nil {
 			return err
 		}
@@ -266,7 +275,7 @@ func (applications *DingTalkApplications) configure(ctx context.Context, actor M
 		if err != nil {
 			return err
 		}
-		return finishProviderManagement(ctx, tx, actor, "dingtalk", result.OrganizationID, result.Namespace, result.DisplayName, result.Enabled, before)
+		return finishProviderManagement(ctx, tx, principal, "dingtalk", result.OrganizationID, result.Namespace, result.DisplayName, result.Enabled, before)
 	})
 	return result, err
 }

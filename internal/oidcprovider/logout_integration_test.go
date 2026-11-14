@@ -3,6 +3,7 @@
 package oidcprovider
 
 import (
+	"github.com/euyuil/memberid/internal/identity"
 	"net/http"
 	"net/url"
 	"strings"
@@ -59,7 +60,7 @@ func TestLogoutConfirmationSessionBoundary(t *testing.T) {
 	oldPage := f.call(f.browser, "GET", "/oauth/logout", nil, nil)
 	f.status(oldPage, 200)
 	f.browser = browserClient()
-	member, err := f.store.CreateMember(t.Context(), f.member.OrganizationID, "", "Another person")
+	member, err := f.store.CreateMember(t.Context(), identity.OperatorPrincipal(), f.member.OrganizationID, "", "Another person")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -67,7 +68,7 @@ func TestLogoutConfirmationSessionBoundary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.store.BindFactor(t.Context(), member.OrganizationID, member.ID, factor.ID); err != nil {
+	if _, err := f.store.BindFactor(t.Context(), identity.OperatorPrincipal(), member.OrganizationID, member.ID, factor.ID); err != nil {
 		t.Fatal(err)
 	}
 	login, verifier := f.loginPage("example-web", "openid")

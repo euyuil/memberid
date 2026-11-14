@@ -28,11 +28,11 @@ func testStore(t *testing.T) *Store {
 
 func organizationAndMember(t *testing.T, store *Store) (Organization, Member) {
 	t.Helper()
-	organization, err := store.CreateOrganization(t.Context(), "", "Example organization")
+	organization, err := store.CreateOrganization(t.Context(), OperatorPrincipal(), "", "Example organization")
 	if err != nil {
 		t.Fatal(err)
 	}
-	member, err := store.CreateMember(t.Context(), organization.ID, "", "Example member")
+	member, err := store.CreateMember(t.Context(), OperatorPrincipal(), organization.ID, "", "Example member")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,7 +96,7 @@ func TestOrganizationIsolationAndExplicitBindings(t *testing.T) {
 		t.Fatalf("factor inferred a binding: %d, %v", bindings, err)
 	}
 	for _, pair := range [][2]string{{first.ID, firstMember.ID}, {second.ID, secondMember.ID}} {
-		if _, err := store.BindFactor(t.Context(), pair[0], pair[1], factor.ID); err != nil {
+		if _, err := store.BindFactor(t.Context(), OperatorPrincipal(), pair[0], pair[1], factor.ID); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -106,17 +106,17 @@ func TestOrganizationIsolationAndExplicitBindings(t *testing.T) {
 	if _, err := store.Member(t.Context(), second.ID, firstMember.ID); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("cross-organization member lookup: %v", err)
 	}
-	if _, err := store.BindFactor(t.Context(), second.ID, firstMember.ID, factor.ID); !errors.Is(err, ErrNotFound) {
+	if _, err := store.BindFactor(t.Context(), OperatorPrincipal(), second.ID, firstMember.ID, factor.ID); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("cross-organization binding: %v", err)
 	}
-	if _, err := store.SetManualBlock(t.Context(), second.ID, firstMember.ID, true); !errors.Is(err, ErrNotFound) {
+	if _, err := store.SetManualBlock(t.Context(), OperatorPrincipal(), second.ID, firstMember.ID, true); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("cross-organization mutation: %v", err)
 	}
-	other, err := store.CreateMember(t.Context(), first.ID, "", "Different member")
+	other, err := store.CreateMember(t.Context(), OperatorPrincipal(), first.ID, "", "Different member")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.BindFactor(t.Context(), first.ID, other.ID, factor.ID); !errors.Is(err, ErrConflict) {
+	if _, err := store.BindFactor(t.Context(), OperatorPrincipal(), first.ID, other.ID, factor.ID); !errors.Is(err, ErrConflict) {
 		t.Fatalf("same organization shared a factor: %v", err)
 	}
 	if _, err := store.pool.Exec(t.Context(), "INSERT INTO member_auth_factor_bindings(member_id,organization_id,authentication_factor_id,factor_type) VALUES($1,$2,$3,'dingtalk')", firstMember.ID, second.ID, factor.ID); err == nil {
@@ -127,7 +127,7 @@ func TestOrganizationIsolationAndExplicitBindings(t *testing.T) {
 func TestIndependentBlockSources(t *testing.T) {
 	store := testStore(t)
 	organization, member := organizationAndMember(t, store)
-	if _, err := store.SetManualBlock(t.Context(), organization.ID, member.ID, true); err != nil {
+	if _, err := store.SetManualBlock(t.Context(), OperatorPrincipal(), organization.ID, member.ID, true); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.SetExternalDeparture(t.Context(), organization.ID, member.ID, true); err != nil {
@@ -140,7 +140,7 @@ func TestIndependentBlockSources(t *testing.T) {
 	if _, err := store.SetExternalDeparture(t.Context(), organization.ID, member.ID, true); err != nil {
 		t.Fatal(err)
 	}
-	updated, err = store.SetManualBlock(t.Context(), organization.ID, member.ID, false)
+	updated, err = store.SetManualBlock(t.Context(), OperatorPrincipal(), organization.ID, member.ID, false)
 	if err != nil || updated.Status != "blocked" || len(updated.BlockSources) != 1 || updated.BlockSources[0] != "externalDeparture" {
 		t.Fatalf("manual update cleared departure: %+v, %v", updated, err)
 	}
@@ -157,25 +157,25 @@ func TestBindingReplayAndRevocation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	first, err := store.BindFactor(t.Context(), organization.ID, member.ID, factor.ID)
+	first, err := store.BindFactor(t.Context(), OperatorPrincipal(), organization.ID, member.ID, factor.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	repeated, err := store.BindFactor(t.Context(), organization.ID, member.ID, factor.ID)
+	repeated, err := store.BindFactor(t.Context(), OperatorPrincipal(), organization.ID, member.ID, factor.ID)
 	if err != nil || !repeated.CreatedAt.Equal(first.CreatedAt) {
 		t.Fatalf("binding replay changed the relationship: %+v, %v", repeated, err)
 	}
-	if err := store.RevokeBinding(t.Context(), organization.ID, member.ID, factor.ID); err != nil {
+	if err := store.RevokeBinding(t.Context(), OperatorPrincipal(), organization.ID, member.ID, factor.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.BindFactor(t.Context(), organization.ID, member.ID, factor.ID); !errors.Is(err, ErrConflict) {
+	if _, err := store.BindFactor(t.Context(), OperatorPrincipal(), organization.ID, member.ID, factor.ID); !errors.Is(err, ErrConflict) {
 		t.Fatalf("revoked binding reactivated: %v", err)
 	}
 	other, err := store.EnsureFactor(t.Context(), "phone", "example-sms", "second-contact")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.BindFactor(t.Context(), organization.ID, member.ID, other.ID); !errors.Is(err, ErrConflict) {
+	if _, err := store.BindFactor(t.Context(), OperatorPrincipal(), organization.ID, member.ID, other.ID); !errors.Is(err, ErrConflict) {
 		t.Fatalf("revoked slot replaced: %v", err)
 	}
 	retained, err := store.Member(t.Context(), organization.ID, member.ID)
@@ -187,7 +187,7 @@ func TestBindingReplayAndRevocation(t *testing.T) {
 func TestConcurrentFactorAndBindingCreation(t *testing.T) {
 	store := testStore(t)
 	organization, firstMember := organizationAndMember(t, store)
-	secondMember, err := store.CreateMember(t.Context(), organization.ID, "", "Second member")
+	secondMember, err := store.CreateMember(t.Context(), OperatorPrincipal(), organization.ID, "", "Second member")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -229,7 +229,7 @@ func TestConcurrentFactorAndBindingCreation(t *testing.T) {
 			memberID = secondMember.ID
 		}
 		group.Go(func() {
-			binding, err := store.BindFactor(t.Context(), organization.ID, memberID, factorID)
+			binding, err := store.BindFactor(t.Context(), OperatorPrincipal(), organization.ID, memberID, factorID)
 			results <- outcome{binding, err}
 		})
 	}

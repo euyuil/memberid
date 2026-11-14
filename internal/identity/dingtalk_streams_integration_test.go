@@ -94,7 +94,7 @@ func TestStreamSupervisorTracksConfigurationAndOrganizationLifecycle(t *testing.
 		t.Fatal("routine observation restarted stream")
 	case <-time.After(80 * time.Millisecond):
 	}
-	rotated, err := apps.Configure(t.Context(), app.OrganizationID, DingTalkApplicationInput{CorpID: app.CorpID, ClientID: app.ClientID, ClientSecret: "rotated-synthetic-secret", ExpectedRevision: app.Revision})
+	rotated, err := apps.Configure(t.Context(), OperatorPrincipal(), app.OrganizationID, DingTalkApplicationInput{CorpID: app.CorpID, ClientID: app.ClientID, ClientSecret: "rotated-synthetic-secret", ExpectedRevision: app.Revision})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,12 +108,12 @@ func TestStreamSupervisorTracksConfigurationAndOrganizationLifecycle(t *testing.
 		t.Fatal("old stream changed state", err)
 	}
 	disabled := "disabled"
-	if _, err := store.UpdateOrganization(t.Context(), app.OrganizationID, OrganizationChange{Status: &disabled}); err != nil {
+	if _, err := store.UpdateOrganization(t.Context(), OperatorPrincipal(), app.OrganizationID, OrganizationChange{Status: &disabled}); err != nil {
 		t.Fatal(err)
 	}
 	waitWorker(t, second.stopped)
 	enabled := "enabled"
-	if _, err := store.UpdateOrganization(t.Context(), app.OrganizationID, OrganizationChange{Status: &enabled}); err != nil {
+	if _, err := store.UpdateOrganization(t.Context(), OperatorPrincipal(), app.OrganizationID, OrganizationChange{Status: &enabled}); err != nil {
 		t.Fatal(err)
 	}
 	third := nextStream(t, provider.calls)
@@ -132,7 +132,7 @@ func TestStreamSupervisorTracksConfigurationAndOrganizationLifecycle(t *testing.
 		t.Fatal(err)
 	}
 	waitWorker(t, third.stopped)
-	if _, err := apps.Configure(t.Context(), app.OrganizationID, DingTalkApplicationInput{CorpID: app.CorpID, ClientID: app.ClientID, ClientSecret: "rotated-synthetic-secret", ExpectedRevision: rotated.Revision}); err != nil {
+	if _, err := apps.Configure(t.Context(), OperatorPrincipal(), app.OrganizationID, DingTalkApplicationInput{CorpID: app.CorpID, ClientID: app.ClientID, ClientSecret: "rotated-synthetic-secret", ExpectedRevision: rotated.Revision}); err != nil {
 		t.Fatal(err)
 	}
 	fourth := nextStream(t, provider.calls)

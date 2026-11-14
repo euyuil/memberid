@@ -272,7 +272,7 @@ func TestPhoneAccountDoesNotTransferOrRestoreBindings(t *testing.T) {
 			}
 			member := f.member
 			if mode == "other member" {
-				member, err = f.store.CreateMember(t.Context(), f.member.OrganizationID, "", "Another Member")
+				member, err = f.store.CreateMember(t.Context(), identity.OperatorPrincipal(), f.member.OrganizationID, "", "Another Member")
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -280,13 +280,13 @@ func TestPhoneAccountDoesNotTransferOrRestoreBindings(t *testing.T) {
 			if mode == "disabled factor" {
 				_, err = f.store.Database().Exec(t.Context(), "UPDATE authentication_factors SET status='disabled' WHERE id=$1", factor.ID)
 			} else {
-				_, err = f.store.BindFactor(t.Context(), member.OrganizationID, member.ID, factor.ID)
+				_, err = f.store.BindFactor(t.Context(), identity.OperatorPrincipal(), member.OrganizationID, member.ID, factor.ID)
 			}
 			if err != nil {
 				t.Fatal(err)
 			}
 			if mode == "revoked slot" {
-				if err := f.store.RevokeBinding(t.Context(), member.OrganizationID, member.ID, factor.ID); err != nil {
+				if err := f.store.RevokeBinding(t.Context(), identity.OperatorPrincipal(), member.OrganizationID, member.ID, factor.ID); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -309,7 +309,7 @@ func TestPhoneAccountDoesNotTransferOrRestoreBindings(t *testing.T) {
 
 func TestPhoneAccountAllowsIndependentOrganizations(t *testing.T) {
 	f, page := phoneAccountFixture(t)
-	other, err := f.store.CreateMember(t.Context(), f.otherMember.OrganizationID, "", "Separate Member")
+	other, err := f.store.CreateMember(t.Context(), identity.OperatorPrincipal(), f.otherMember.OrganizationID, "", "Separate Member")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -317,7 +317,7 @@ func TestPhoneAccountAllowsIndependentOrganizations(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.store.BindFactor(t.Context(), other.OrganizationID, other.ID, factor.ID); err != nil {
+	if _, err := f.store.BindFactor(t.Context(), identity.OperatorPrincipal(), other.OrganizationID, other.ID, factor.ID); err != nil {
 		t.Fatal(err)
 	}
 	sent := sendAccountPhone(f, page)

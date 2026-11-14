@@ -78,7 +78,7 @@ func TestLinkedPhoneDirectoryFallbackAndDefinitiveDenial(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.store.BindFactor(t.Context(), f.member.OrganizationID, f.member.ID, factor.ID); err != nil {
+	if _, err := f.store.BindFactor(t.Context(), identity.OperatorPrincipal(), f.member.OrganizationID, f.member.ID, factor.ID); err != nil {
 		t.Fatal(err)
 	}
 	proof, err := f.service.dingtalk.Verify(t.Context(), app.LoginContext(), "synthetic-code")
@@ -146,13 +146,13 @@ func TestDirectoryObservationRejectsConcurrentInvalidation(t *testing.T) {
 			switch kind {
 			case "organization lifecycle":
 				for _, status := range []string{"disabled", "enabled"} {
-					if _, err := f.store.UpdateOrganization(t.Context(), f.member.OrganizationID, identity.OrganizationChange{Status: &status}); err != nil {
+					if _, err := f.store.UpdateOrganization(t.Context(), identity.OperatorPrincipal(), f.member.OrganizationID, identity.OrganizationChange{Status: &status}); err != nil {
 						t.Fatal(err)
 					}
 				}
 			case "manual block cycle":
 				for _, blocked := range []bool{true, false} {
-					if _, err := f.store.UpdateMember(t.Context(), f.member.OrganizationID, memberID, identity.MemberChange{ManualBlocked: &blocked}); err != nil {
+					if _, err := f.store.UpdateMember(t.Context(), identity.OperatorPrincipal(), f.member.OrganizationID, memberID, identity.MemberChange{ManualBlocked: &blocked}); err != nil {
 						t.Fatal(err)
 					}
 				}
@@ -163,7 +163,7 @@ func TestDirectoryObservationRejectsConcurrentInvalidation(t *testing.T) {
 					}
 				}
 			case "credential rotation":
-				if _, err := apps.Configure(t.Context(), f.member.OrganizationID, identity.DingTalkApplicationInput{CorpID: "example-corp", ClientID: "example-client", ClientSecret: config.RandomSecret(), ExpectedRevision: 1}); err != nil {
+				if _, err := apps.Configure(t.Context(), identity.OperatorPrincipal(), f.member.OrganizationID, identity.DingTalkApplicationInput{CorpID: "example-corp", ClientID: "example-client", ClientSecret: config.RandomSecret(), ExpectedRevision: 1}); err != nil {
 					t.Fatal(err)
 				}
 			case "authorization observation":
@@ -175,7 +175,7 @@ func TestDirectoryObservationRejectsConcurrentInvalidation(t *testing.T) {
 				if err != nil || len(bindings) != 1 {
 					t.Fatal(err)
 				}
-				if err := f.store.RevokeBinding(t.Context(), f.member.OrganizationID, memberID, bindings[0].FactorID); err != nil {
+				if err := f.store.RevokeBinding(t.Context(), identity.OperatorPrincipal(), f.member.OrganizationID, memberID, bindings[0].FactorID); err != nil {
 					t.Fatal(err)
 				}
 			}

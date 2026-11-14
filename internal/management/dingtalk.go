@@ -25,7 +25,7 @@ func (h *Handler) dingTalkRoutes(applications *identity.DingTalkApplications) {
 			problem(w, http.StatusBadRequest, "invalid_request")
 			return
 		}
-		app, err := applications.Configure(r.Context(), r.PathValue("organizationId"), identity.DingTalkApplicationInput{CorpID: input.CorpID, ClientID: input.ClientID, ClientSecret: input.ClientSecret, ExpectedRevision: *input.ExpectedRevision})
+		app, err := applications.Configure(r.Context(), identity.InstallationManagerPrincipal(), r.PathValue("organizationId"), identity.DingTalkApplicationInput{CorpID: input.CorpID, ClientID: input.ClientID, ClientSecret: input.ClientSecret, ExpectedRevision: *input.ExpectedRevision})
 		respond(w, http.StatusOK, app, err)
 	})
 }

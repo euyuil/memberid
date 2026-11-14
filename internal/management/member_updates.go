@@ -18,7 +18,7 @@ func (h *Handler) putMemberUpdate(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &change) {
 		return
 	}
-	receipt, created, err := h.store.UpdateMemberOnce(r.Context(), r.PathValue("organizationId"), r.PathValue("memberId"), r.PathValue("updateId"), change)
+	receipt, created, err := h.store.UpdateMemberOnce(r.Context(), identity.InstallationManagerPrincipal(), r.PathValue("organizationId"), r.PathValue("memberId"), r.PathValue("updateId"), change)
 	status := http.StatusOK
 	if err == nil && created {
 		status = http.StatusCreated
