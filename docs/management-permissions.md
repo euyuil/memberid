@@ -205,6 +205,13 @@ scope from one permission with an unrelated action grant from another. Matching
 also remains subject to current authentication, identity eligibility, role
 eligibility, and operation-specific constraints.
 
+The [token and server-side authorization design](authorization-boundaries.md)
+defines when those facts are checked. MemberID keeps management authority on the
+server and authorizes each operation before execution. An already authorized
+short operation may finish after a concurrent revocation; subsequent independent
+operations need a new decision. A matching scope or token claim does not reserve
+authority for an entire future workflow.
+
 In particular, creating a role assignment requires checking the intended
 recipient, role, and scope of the authority being granted, not just the path
 where the assignment would be stored. An organization administrator cannot grant

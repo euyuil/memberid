@@ -90,6 +90,13 @@ Login state and nonce are browser-bound and single-use, with a five-minute callb
 
 Console sessions expire after 30 minutes of inactivity or eight hours after original authentication, whichever comes first. Every API request rechecks administrator assignment, Member/organization/factor/binding eligibility, and grant/SSO revocation and expiry. Mutations recheck authorization inside their transaction and require the exact configured Origin and a session-bound CSRF header. Revocation takes effect on subsequent requests; a completed earlier response is not recalled. Provider directory changes apply once verified and recorded by the existing reconciliation/stream machinery.
 
+The [authorization timing and revocation design](authorization-boundaries.md)
+defines the agreed operation boundary: an already authorized short operation
+may finish after a concurrent revocation, while subsequent independent operations
+need a fresh server-side decision. It does not require permission checks before
+every internal step. The transaction checks described above are current console
+behavior; the design document introduces no runtime changes.
+
 “Sign out of console” deletes only this console session; it does not log out of MemberID SSO or downstream applications. A subsequent login can reuse eligible SSO within the original authentication limit. Existing business application sessions remain owned by those applications.
 
 The browser uses `/api/session`, `/api/organizations`, `/api/members` (platform administrators only), `/api/organizations/{organizationId}/members`, the Member `administrator` subresource, `/api/organizations/{organizationId}/providers`, `/api/events`, and `/api/logout`. This same-origin UI API is distinct from the documented private `/v1` integration API; it does not accept management bearer credentials or actor impersonation fields. Direct foreign-organization requests are rejected regardless of visible navigation. Directory pages contain at most 50 records, ordered by opaque ID; event pages use descending numeric IDs. In the Member directory, search names or IDs and filter by identity status or administrator assignment. These conditions apply across the selected scope before pagination. A successful create opens the new organization workspace or Member detail. An interrupted create request is not automatically retried: refresh the directory before creating another record.
