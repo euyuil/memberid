@@ -7,6 +7,7 @@ From the repository root, use Node.js 26.13.1 LTS and npm 11.20.0:
 ```sh
 npm --prefix web ci
 npm --prefix web run lint
+npm --prefix web test
 npm --prefix web run build
 ```
 

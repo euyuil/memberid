@@ -105,7 +105,7 @@ func New(ctx context.Context, store *identity.Store, installation *config.Loaded
 		return nil, err
 	}
 	static, _ := fs.Sub(assets, "static")
-	s.routes.Handle("GET /", http.FileServer(http.FS(static)))
+	registerPages(s.routes, static)
 	return s, nil
 }
 
@@ -176,13 +176,22 @@ func (s *Service) session(r *http.Request) (session, error) {
 }
 
 func (s *Service) login(w http.ResponseWriter, r *http.Request) {
+	query, err := url.ParseQuery(r.URL.RawQuery)
+	returnTo := query.Get("returnTo")
+	if !query.Has("returnTo") {
+		returnTo = "/"
+	}
+	if err != nil || len(query["returnTo"]) > 1 || !validReturnTo(returnTo) {
+		problem(w, 400, "invalid_request")
+		return
+	}
 	state, browser, nonce, verifier := config.RandomSecret(), config.RandomSecret(), config.RandomSecret(), oauth2.GenerateVerifier()
-	_, err := s.store.Database().Exec(r.Context(), "DELETE FROM console_logins WHERE expires_at<clock_timestamp()")
+	_, err = s.store.Database().Exec(r.Context(), "DELETE FROM console_logins WHERE expires_at<clock_timestamp()")
 	if err == nil {
 		_, err = s.store.Database().Exec(r.Context(), "DELETE FROM console_sessions WHERE expires_at<clock_timestamp() OR absolute_expires_at<clock_timestamp()")
 	}
 	if err == nil {
-		_, err = s.store.Database().Exec(r.Context(), "INSERT INTO console_logins(state_hash,browser_hash,verifier,nonce,expires_at) VALUES($1,$2,$3,$4,clock_timestamp()+interval '5 minutes')", config.SecretHash(state), config.SecretHash(browser), verifier, nonce)
+		_, err = s.store.Database().Exec(r.Context(), "INSERT INTO console_logins(state_hash,browser_hash,verifier,nonce,return_to,expires_at) VALUES($1,$2,$3,$4,$5,clock_timestamp()+interval '5 minutes')", config.SecretHash(state), config.SecretHash(browser), verifier, nonce, returnTo)
 	}
 	if err != nil {
 		problem(w, 503, "login_unavailable")
@@ -205,20 +214,20 @@ func (s *Service) callback(w http.ResponseWriter, r *http.Request) {
 		problem(w, 400, "invalid_callback")
 		return
 	}
-	var verifier, nonce string
-	err := s.store.Database().QueryRow(r.Context(), "DELETE FROM console_logins WHERE state_hash=$1 AND browser_hash=$2 AND expires_at>clock_timestamp() RETURNING verifier,nonce", config.SecretHash(state), config.SecretHash(browser)).Scan(&verifier, &nonce)
+	var verifier, nonce, returnTo string
+	err := s.store.Database().QueryRow(r.Context(), "DELETE FROM console_logins WHERE state_hash=$1 AND browser_hash=$2 AND expires_at>clock_timestamp() RETURNING verifier,nonce,return_to", config.SecretHash(state), config.SecretHash(browser)).Scan(&verifier, &nonce, &returnTo)
 	if err != nil {
 		problem(w, 400, "invalid_callback")
 		return
 	}
 	s.cookie(w, "login", "", -1)
 	if q.Get("error") != "" || q.Get("code") == "" {
-		http.Redirect(w, r, "/?error=login_failed", 303)
+		loginFailure(w, r, returnTo, "login_failed")
 		return
 	}
 	tokens, err := rp.CodeExchange[*oidc.IDTokenClaims](context.WithValue(r.Context(), nonceKey{}, nonce), q.Get("code"), s.party, rp.WithCodeVerifier(verifier))
 	if err != nil {
-		http.Redirect(w, r, "/?error=login_failed", 303)
+		loginFailure(w, r, returnTo, "login_failed")
 		return
 	}
 	claims := tokens.IDTokenClaims
@@ -226,11 +235,11 @@ func (s *Service) callback(w http.ResponseWriter, r *http.Request) {
 	// binding before using the access token's identifier to select the exact grant.
 	var access oidc.AccessTokenClaims
 	if claims.AccessTokenHash == "" {
-		http.Redirect(w, r, "/?error=login_failed", 303)
+		loginFailure(w, r, returnTo, "login_failed")
 		return
 	}
 	if _, err = oidc.ParseToken(tokens.AccessToken, &access); err != nil {
-		http.Redirect(w, r, "/?error=login_failed", 303)
+		loginFailure(w, r, returnTo, "login_failed")
 		return
 	}
 	var grantID string
@@ -238,16 +247,16 @@ func (s *Service) callback(w http.ResponseWriter, r *http.Request) {
  WHERE a.id=$4 AND a.expires_at>clock_timestamp() AND g.session_id=$1 AND g.client_id=$2
  AND g.data->>'memberId'=$3 AND g.revoked_at IS NULL AND g.expires_at>clock_timestamp()`, claims.SessionID, s.clientID, claims.Subject, access.JWTID).Scan(&grantID)
 	if err != nil {
-		http.Redirect(w, r, "/?error=login_failed", 303)
+		loginFailure(w, r, returnTo, "login_failed")
 		return
 	}
 	if _, err = s.store.ManagementActor(r.Context(), claims.Subject, grantID); err != nil {
-		http.Redirect(w, r, "/?error=not_administrator", 303)
+		loginFailure(w, r, returnTo, "not_administrator")
 		return
 	}
 	absolute := claims.AuthTime.AsTime().Add(8 * time.Hour)
 	if !absolute.After(time.Now()) {
-		http.Redirect(w, r, "/?error=login_failed", 303)
+		loginFailure(w, r, returnTo, "login_failed")
 		return
 	}
 	secret, csrf := config.RandomSecret(), config.RandomSecret()
@@ -261,7 +270,7 @@ func (s *Service) callback(w http.ResponseWriter, r *http.Request) {
 		_, _ = s.store.Database().Exec(r.Context(), "DELETE FROM console_sessions WHERE secret_hash=$1", config.SecretHash(old))
 	}
 	s.cookie(w, "session", secret, int(time.Until(absolute).Seconds()))
-	http.Redirect(w, r, "/", 303)
+	http.Redirect(w, r, returnTo, 303)
 }
 
 func (s *Service) logout(w http.ResponseWriter, r *http.Request) {

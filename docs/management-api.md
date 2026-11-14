@@ -61,7 +61,7 @@ The receipt contains `id`, `organizationId`, `memberId`, the resulting `member` 
 
 Receipts persist across restarts and have no automatic expiry or deletion endpoint. Include them in database backups and capacity planning. Deleting receipts directly would destroy the safe-retry guarantee. A new intentional update uses a new ID. Ordinary PATCH remains available, but repeating PATCH after an uncertain result can overwrite an intervening update; it does not provide an immutable receipt.
 
-Updates use the same installation management credential and organization-bound lookup as other management operations. They do not impersonate an initiating Member or assign application permissions. The fresh-install schema is version 15; startup rejects older schemas without resetting or migrating existing data.
+Updates use the same installation management credential and organization-bound lookup as other management operations. They do not impersonate an initiating Member or assign application permissions. The fresh-install schema is version 16; startup rejects older schemas without resetting or migrating existing data.
 
 ## Directory pagination
 

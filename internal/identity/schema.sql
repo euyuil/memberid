@@ -1,7 +1,7 @@
 CREATE TABLE memberid_schema (
-    version integer PRIMARY KEY CHECK (version = 15)
+    version integer PRIMARY KEY CHECK (version = 16)
 );
-INSERT INTO memberid_schema(version) VALUES (15);
+INSERT INTO memberid_schema(version) VALUES (16);
 
 CREATE TABLE organizations (
     id text COLLATE "C" PRIMARY KEY CHECK (id = 'org_system' OR id ~ '^org_[0-9bcdfghjkmnpqrstvwxz]{27}$'),
@@ -245,6 +245,7 @@ CREATE TABLE console_logins (
     browser_hash text NOT NULL,
     verifier text NOT NULL,
     nonce text NOT NULL,
+    return_to text NOT NULL,
     expires_at timestamptz NOT NULL
 );
 CREATE TABLE console_sessions (
