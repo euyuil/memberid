@@ -105,6 +105,7 @@ func TestConsoleOIDCOrganizationScopeAndRevocation(t *testing.T) {
 	consoleJSON(t, f, server, "GET", "/api/organizations/"+f.otherMember.OrganizationID, "", "", 403)
 	consoleJSON(t, f, server, "GET", "/api/organizations/org_system", "", "", 403)
 	consoleJSON(t, f, server, "GET", "/api/events?organizationId="+f.otherMember.OrganizationID, "", "", 403)
+	consoleJSON(t, f, server, "GET", "/api/members", "", "", 403)
 	consoleJSON(t, f, server, "POST", "/api/organizations", csrf, `{"name":"Forbidden"}`, 403)
 	consoleJSON(t, f, server, "PATCH", base, "invalid", `{"name":"Rejected"}`, 403)
 	consoleJSON(t, f, server, "PATCH", base, csrf, `{"status":"disabled"}`, 403)
@@ -185,6 +186,90 @@ func TestConsoleMemberSearchAcrossPagesAndWithinOrganization(t *testing.T) {
 	assertMembers(url.Values{"q": {f.otherMember.ID}})
 	consoleJSON(t, f, server, "GET", base+"?status=disabled", "", "", 400)
 	consoleJSON(t, f, server, "GET", "/api/organizations/"+f.otherMember.OrganizationID+"/members?q=example", "", "", 403)
+}
+
+func TestConsoleAllOrganizationMembers(t *testing.T) {
+	f := newFixture(t)
+	operator, err := f.store.CreateMember(t.Context(), identity.SystemOrganizationID, "", "Platform operator")
+	if err != nil {
+		t.Fatal(err)
+	}
+	factor, err := f.store.EnsureFactor(t.Context(), "phone", "phone:e164", "+8619900000001")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.BindFactor(t.Context(), operator.OrganizationID, operator.ID, factor.ID); err != nil {
+		t.Fatal(err)
+	}
+	for _, member := range []identity.Member{operator, f.member} {
+		if err := f.store.SetAdministrator(t.Context(), identity.ManagementActor{}, member.OrganizationID, member.ID, true); err != nil {
+			t.Fatal(err)
+		}
+	}
+	server := consoleFixture(t, f)
+	consoleJSON(t, f, server, "GET", "/api/members", "", "", 401)
+	consoleLogin(t, f, server, operator.ID)
+
+	for range 50 {
+		if _, err := f.store.CreateMember(t.Context(), f.otherMember.OrganizationID, "", "Directory fixture"); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	seen := make(map[string]bool)
+	path := "/api/members"
+	for _, count := range []int{50, 3} {
+		page := consoleJSON(t, f, server, "GET", path, "", "", 200)
+		items := page["items"].([]any)
+		if len(items) != count {
+			t.Fatalf("got %d members on page, want %d", len(items), count)
+		}
+		for _, value := range items {
+			id := value.(map[string]any)["id"].(string)
+			if seen[id] {
+				t.Fatalf("duplicate member across pages: %s", id)
+			}
+			seen[id] = true
+		}
+		if count == 50 {
+			cursor, ok := page["nextAfter"].(string)
+			if !ok || cursor == "" {
+				t.Fatal("missing first page cursor")
+			}
+			path = "/api/members?after=" + url.QueryEscape(cursor)
+		} else if page["nextAfter"] != nil {
+			t.Fatal("last page has a next cursor")
+		}
+	}
+	for _, member := range []identity.Member{operator, f.member, f.otherMember} {
+		if !seen[member.ID] {
+			t.Fatalf("missing member %s", member.ID)
+		}
+	}
+
+	matches := consoleJSON(t, f, server, "GET", "/api/members?q=example+member", "", "", 200)["items"].([]any)
+	if len(matches) != 2 {
+		t.Fatalf("expected two same-name members, got %d", len(matches))
+	}
+	for _, value := range matches {
+		entry := value.(map[string]any)
+		switch entry["id"] {
+		case f.member.ID:
+			if entry["organizationId"] != f.member.OrganizationID || entry["organizationName"] != "Example Team" || entry["administrator"] != true {
+				t.Fatalf("unexpected first organization entry: %+v", entry)
+			}
+		case f.otherMember.ID:
+			if entry["organizationId"] != f.otherMember.OrganizationID || entry["organizationName"] != "Second Team" || entry["administrator"] != false {
+				t.Fatalf("unexpected second organization entry: %+v", entry)
+			}
+		default:
+			t.Fatalf("unexpected member: %+v", entry)
+		}
+	}
+	filtered := consoleJSON(t, f, server, "GET", "/api/members?q=example+member&administrator=yes", "", "", 200)["items"].([]any)
+	if len(filtered) != 1 || filtered[0].(map[string]any)["id"] != f.member.ID {
+		t.Fatalf("unexpected filtered members: %+v", filtered)
+	}
 }
 
 func TestConsolePlatformLoginAndPersonalAudit(t *testing.T) {

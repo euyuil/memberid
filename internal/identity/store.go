@@ -22,8 +22,14 @@ func readOrganization(row pgx.Row) (Organization, error) {
 
 func readMember(row pgx.Row) (Member, error) {
 	var member Member
+	err := scanMember(row, &member)
+	return member, err
+}
+
+func scanMember(row pgx.Row, member *Member, extra ...any) error {
 	var manual, departed bool
-	err := row.Scan(&member.ID, &member.OrganizationID, &member.DisplayName, &manual, &departed, &member.CreatedAt, &member.UpdatedAt)
+	fields := []any{&member.ID, &member.OrganizationID, &member.DisplayName, &manual, &departed, &member.CreatedAt, &member.UpdatedAt}
+	err := row.Scan(append(fields, extra...)...)
 	member.Status, member.BlockSources = "active", []string{}
 	if manual {
 		member.BlockSources = append(member.BlockSources, "manual")
@@ -35,7 +41,7 @@ func readMember(row pgx.Row) (Member, error) {
 		member.Status = "blocked"
 	}
 	member.CreatedAt, member.UpdatedAt = member.CreatedAt.UTC(), member.UpdatedAt.UTC()
-	return member, storageError(err)
+	return storageError(err)
 }
 
 func readFactor(row pgx.Row) (Factor, error) {

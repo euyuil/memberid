@@ -94,6 +94,7 @@ func New(ctx context.Context, store *identity.Store, installation *config.Loaded
 		respond(w, v, e)
 	})
 	s.routes.HandleFunc("PATCH /api/organizations/{organizationId}", s.mutate)
+	s.routes.HandleFunc("GET /api/members", s.allOrganizationMembers)
 	s.routes.HandleFunc("GET /api/organizations/{organizationId}/members", s.members)
 	s.routes.HandleFunc("POST /api/organizations/{organizationId}/members", s.mutate)
 	s.routes.HandleFunc("GET /api/organizations/{organizationId}/members/{memberId}", s.member)
@@ -276,15 +277,26 @@ func (s *Service) organizations(w http.ResponseWriter, r *http.Request) {
 	v, e := s.store.Organizations(r.Context(), r.URL.Query().Get("after"), 50)
 	respond(w, v, e)
 }
-func (s *Service) members(w http.ResponseWriter, r *http.Request) {
-	org := r.PathValue("organizationId")
-	q := r.URL.Query()
-	filter := identity.MemberDirectoryFilter{
+func memberDirectoryFilter(q url.Values) identity.MemberDirectoryFilter {
+	return identity.MemberDirectoryFilter{
 		Query:         q.Get("q"),
 		Status:        q.Get("status"),
 		Administrator: q.Get("administrator"),
 	}
-	v, e := s.store.MemberDirectory(r.Context(), org, q.Get("after"), 50, filter)
+}
+func (s *Service) allOrganizationMembers(w http.ResponseWriter, r *http.Request) {
+	if !r.Context().Value(sessionKey{}).(session).actor.Platform {
+		problem(w, 403, "forbidden")
+		return
+	}
+	q := r.URL.Query()
+	page, err := s.store.AllOrganizationMembers(r.Context(), q.Get("after"), 50, memberDirectoryFilter(q))
+	respond(w, page, err)
+}
+func (s *Service) members(w http.ResponseWriter, r *http.Request) {
+	org := r.PathValue("organizationId")
+	q := r.URL.Query()
+	v, e := s.store.MemberDirectory(r.Context(), org, q.Get("after"), 50, memberDirectoryFilter(q))
 	if e != nil {
 		respond(w, nil, e)
 		return
