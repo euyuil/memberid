@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"testing"
+
+	"github.com/euyuil/memberid/internal/authorization"
 )
 
 func TestUntrustedPrincipalsCannotUseInstallationMutations(t *testing.T) {
@@ -67,11 +69,8 @@ func TestUntrustedPrincipalsCannotUseInstallationMutations(t *testing.T) {
 }
 
 func TestEmptyPrincipalCannotAcquireManagementAuthority(t *testing.T) {
-	if err := authorizeManagement(t.Context(), nil, Principal{}, SystemOrganizationID, false); !errors.Is(err, ErrForbidden) {
+	if err := authorizeAll(t.Context(), nil, Principal{}, authorization.Requirement{Target: "organizations/" + SystemOrganizationID, Action: "get"}); !errors.Is(err, ErrForbidden) {
 		t.Fatal("empty principal acquired authority", err)
-	}
-	if err := authorizeManagement(t.Context(), nil, InstallationManagerPrincipal(), SystemOrganizationID, false); !errors.Is(err, ErrForbidden) {
-		t.Fatal("installation manager acquired a Member/CLI administrator entry point", err)
 	}
 	if _, err := (Principal{}).auditID(); !errors.Is(err, ErrForbidden) {
 		t.Fatal("empty principal received an audit identity", err)

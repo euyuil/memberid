@@ -24,7 +24,7 @@ func (s *Service) registerProviderRoutes(installation *config.Loaded, dingTalkPr
 	}
 	const path = "/api/organizations/{organizationId}/providers"
 	s.routes.HandleFunc("GET "+path, func(w http.ResponseWriter, r *http.Request) {
-		items, err := s.store.Providers(r.Context(), r.PathValue("organizationId"))
+		items, err := s.store.ManagementProviders(r.Context(), r.Context().Value(sessionKey{}).(session).actor.Principal(), r.PathValue("organizationId"))
 		respond(w, map[string]any{
 			"items":            items,
 			"feishuCallback":   installation.Issuer + "/login/feishu/callback",

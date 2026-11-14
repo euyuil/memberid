@@ -25,6 +25,7 @@ Built-in role permissions live in code; assignments remain in `administrators`.
 | O5-O6: organization updates | Shared scope/action checks at the existing transactional authorization point, including explicitly submitted unchanged status fields. Private/CLI updates retain their installation-only entry contract. |
 | O4, M4-M6, A2-A3: organization/Member creation, Member changes and administrator assignments | Shared checks for collection create, field-specific update/status.update, and assignment create/delete. Private/CLI Member writes and new update receipts use the same operation mappings under installation-only admission. |
 | O1-O3, M1-M3, A1, B1 (console), E1-E2: management reads | Shared service checks before querying any response contents. Composite Member responses require all listed pairs; navigation and event defaults select only a view permitted by current authority. |
+| P1-P4 and I2: provider management | Shared directory and typed create/update/status checks. The authoritative save check follows upstream verification; private/CLI credential configuration retains installation-only admission. |
 | Remaining catalog operations | Existing operation-specific authorization; migration to the shared evaluator remains follow-up work. |
 
 The pure evaluator has no permission lock or cross-request allow cache. Its
@@ -59,8 +60,8 @@ installation credential for every read.
 
 | Checkpoint | Current behavior and intended boundary |
 | --- | --- |
-| Console read | Resolve the current console session, grant and eligible administrator; constrain the requested organization or global view before querying. The shared evaluator checks the listed read targets before response queries, except provider directories pending their migration. |
-| Console write | Request-entry authentication/scope/CSRF checks precede the service transaction. Its service authorization check is the authoritative operation boundary; migrated writes use `authorizeAll`. Provider configuration reaches this boundary after optional upstream credential verification and before saving. |
+| Console read | Resolve the current console session, grant and eligible administrator; constrain the requested organization or global view before querying. The shared evaluator checks the listed read targets before response queries, including provider directories. |
+| Console write | Request-entry authentication/CSRF checks precede the service transaction. Its service authorization check is the authoritative operation boundary; writes use `authorizeAll`. Provider configuration reaches this boundary after optional upstream credential verification and before saving. |
 | Account view | Resolve the SSO session and explicitly selected eligible Member before rendering the account view. An administrator assignment is not required. |
 | Account commit | After fresh target-factor verification, validate the current session, request, source binding and Member in the transaction that commits the binding. Opening the page or starting verification does not reserve authority for this later step. |
 | Private API / CLI | Authenticate the installation credential on every private request, or use the trusted operator entry point. Store transactions still enforce resource and lifecycle constraints. Migrated operations also validate their scope/action mapping, without admitting Member credentials to these interfaces. |
@@ -255,7 +256,9 @@ These links identify existing operation code and checks. [Evaluator tests](../in
 cover scope/action semantics; [management authorization tests](../internal/identity/authorization_integration_test.go)
 cover organization/Member writes, assignments, and the revocation boundary.
 [Read authorization tests](../internal/identity/management_reads_integration_test.go)
-cover service-level navigation, composite reads, audit filters and revocation. Other linked
+cover service-level navigation, composite reads, audit filters and revocation.
+[Provider authorization tests](../internal/identity/provider_authorization_integration_test.go)
+cover scope, status, availability, and assignment revocation during verification. Other linked
 tests remain baselines, not proof that every catalog operation is migrated.
 
 | Rows | Implementation | Existing automated checks |

@@ -5,6 +5,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/euyuil/memberid/internal/authorization"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -42,12 +43,10 @@ func ConfigureProvider(ctx context.Context, principal Principal, organizationID,
 	default:
 		return Provider{}, ErrInvalid
 	}
-	current, err := managementActor(ctx, store.pool, principal.memberID, principal.grantID)
-	if err != nil {
+	// This early decision avoids unnecessary provider I/O. The save transaction
+	// makes the authoritative decision after verification completes.
+	if err := authorizeAll(ctx, store.pool, principal, providerWriteRequirements(organizationID, kind, id, input.Enabled != nil)...); err != nil {
 		return Provider{}, err
-	}
-	if !current.Platform && current.OrganizationID != organizationID {
-		return Provider{}, ErrForbidden
 	}
 	switch kind {
 	case "dingtalk":
@@ -68,6 +67,13 @@ func validProviderInput(organizationID, namespace string, input ProviderInput, c
 
 func (app DingTalkApplication) Provider() Provider {
 	return Provider{app.Namespace, "dingtalk", app.DisplayName, app.CorpID, app.ClientID, app.Enabled, app.AuthorizationStatus, app.Revision, app.CreatedAt}
+}
+
+func (store *Store) ManagementProviders(ctx context.Context, principal Principal, organizationID string) ([]Provider, error) {
+	if err := store.authorizeManagementRead(ctx, principal, authorization.Requirement{Target: "organizations/" + organizationID + "/providers", Action: "list"}); err != nil {
+		return nil, err
+	}
+	return store.Providers(ctx, organizationID)
 }
 
 func (store *Store) Providers(ctx context.Context, organizationID string) ([]Provider, error) {
@@ -97,7 +103,7 @@ func (store *Store) Providers(ctx context.Context, organizationID string) ([]Pro
 	return items, rows.Err()
 }
 
-func lockProviderManagement(ctx context.Context, tx pgx.Tx, principal Principal, observed Organization, disabling bool) (int, error) {
+func lockProviderManagement(ctx context.Context, tx pgx.Tx, principal Principal, observed Organization, disabling bool, requirements ...authorization.Requirement) (int, error) {
 	if principal.kind != memberPrincipal && !principal.installation() {
 		return 0, ErrForbidden
 	}
@@ -105,9 +111,9 @@ func lockProviderManagement(ctx context.Context, tx pgx.Tx, principal Principal,
 		if err := managementLock(ctx, tx); err != nil {
 			return 0, err
 		}
-		if err := authorizeManagement(ctx, tx, principal, observed.ID, false); err != nil {
-			return 0, err
-		}
+	}
+	if err := authorizeAll(ctx, tx, principal, requirements...); err != nil {
+		return 0, err
 	}
 	current, err := readOrganization(tx.QueryRow(ctx, "SELECT "+organizationColumns+" FROM organizations WHERE id=$1 FOR UPDATE", observed.ID))
 	if err != nil {

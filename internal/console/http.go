@@ -143,16 +143,11 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			problem(w, 403, "invalid_csrf")
 			return
 		}
-		// Resolve the route before applying organization scope. Query/body values
-		// never establish the actor or widen an organization administrator's scope.
+		// Resolve supported API routes. Resource authorization is enforced by
+		// the operation services using the authenticated principal.
 		_, pattern := s.routes.Handler(r)
 		if pattern == "" {
 			http.NotFound(w, r)
-			return
-		}
-		parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
-		if len(parts) >= 3 && parts[1] == "organizations" && !v.actor.Platform && parts[2] != v.actor.OrganizationID {
-			problem(w, 403, "forbidden")
 			return
 		}
 		r = r.WithContext(context.WithValue(r.Context(), sessionKey{}, v))

@@ -69,6 +69,9 @@ func (apps *FeishuApplications) lookup(ctx context.Context, db queryer, organiza
 }
 
 func (apps *FeishuApplications) configure(ctx context.Context, principal Principal, organizationID, namespace string, input ProviderInput) (Provider, error) {
+	if principal.kind != memberPrincipal {
+		return Provider{}, ErrForbidden
+	}
 	if !validProviderInput(organizationID, namespace, input, true) || organizationID == SystemOrganizationID ||
 		!feishu.ValidApplication(input.TenantID, input.ClientID) || input.ClientSecret != "" && !feishu.ValidSecret(input.ClientSecret) {
 		return Provider{}, ErrInvalid
@@ -113,7 +116,7 @@ func (apps *FeishuApplications) configure(ctx context.Context, principal Princip
 	encrypted := apps.cipher.Seal(nil, nil, []byte(secret), feishuAAD(candidate))
 	var result feishuApplication
 	err = pgx.BeginFunc(ctx, apps.store.pool, func(tx pgx.Tx) error {
-		before, err := lockProviderManagement(ctx, tx, principal, organization, current.Enabled && !candidate.Enabled)
+		before, err := lockProviderManagement(ctx, tx, principal, organization, current.Enabled && !candidate.Enabled, providerWriteRequirements(organizationID, "feishu", namespace, input.Enabled != nil)...)
 		if err != nil {
 			return err
 		}

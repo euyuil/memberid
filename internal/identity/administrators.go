@@ -47,23 +47,6 @@ func managementActor(ctx context.Context, db queryer, memberID, grantID string) 
 	return actor, err
 }
 
-func authorizeManagement(ctx context.Context, tx pgx.Tx, principal Principal, organizationID string, platformOnly bool) error {
-	if principal.kind == operatorPrincipal {
-		return nil
-	}
-	if principal.kind != memberPrincipal {
-		return ErrForbidden
-	}
-	current, err := managementActor(ctx, tx, principal.memberID, principal.grantID)
-	if err != nil {
-		return err
-	}
-	if !current.Platform && (platformOnly || current.OrganizationID != organizationID || organizationID == SystemOrganizationID) {
-		return ErrForbidden
-	}
-	return nil
-}
-
 // All manual eligibility and administrator changes share this lock. External
 // departure evidence remains authoritative and is never suppressed by this guard.
 func managementLock(ctx context.Context, tx pgx.Tx) error {
