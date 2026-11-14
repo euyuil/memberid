@@ -29,6 +29,13 @@ func TestDingTalkAuthorizationEvidenceAndPhoneEligibility(t *testing.T) {
 	if _, err = store.BindFactor(t.Context(), organization.ID, member.ID, factor.ID); err != nil {
 		t.Fatal(err)
 	}
+	dingTalkFactor, err := store.EnsureFactor(t.Context(), "dingtalk", initial.Namespace, "example-union")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = store.BindFactor(t.Context(), organization.ID, member.ID, dingTalkFactor.ID); err != nil {
+		t.Fatal(err)
+	}
 	other, otherMember := organizationAndMember(t, store)
 	if _, err = store.BindFactor(t.Context(), other.ID, otherMember.ID, factor.ID); err != nil {
 		t.Fatal(err)
@@ -46,21 +53,21 @@ func TestDingTalkAuthorizationEvidenceAndPhoneEligibility(t *testing.T) {
 	if err != nil || revoked.AuthorizationStatus != "revoked" || revoked.AuthorizationRevision != initial.AuthorizationRevision+1 || revoked.Revision != initial.Revision {
 		t.Fatal("denial did not record separate authorization revision", err)
 	}
-	if value, err := store.Eligibility(t.Context(), organization.ID, member.ID, factor.ID, "phone"); err != nil || value.Eligible {
-		t.Fatal("phone bypassed confirmed organization revocation", err)
+	if value, err := store.Eligibility(t.Context(), organization.ID, member.ID, factor.ID, "phone"); err != nil || !value.Eligible {
+		t.Fatal("DingTalk revocation blocked phone eligibility", err)
 	}
-	if ids, err := store.EligibleMemberIDs(t.Context(), organization.ID, []string{member.ID}); err != nil || len(ids) != 0 {
-		t.Fatal("aggregate query bypassed confirmed organization revocation", err)
+	if ids, err := store.EligibleMemberIDs(t.Context(), organization.ID, []string{member.ID}); err != nil || len(ids) != 1 {
+		t.Fatal("aggregate query lost an eligible phone binding", err)
 	}
 	if ids, err := store.EligibleMemberIDs(t.Context(), other.ID, []string{otherMember.ID}); err != nil || len(ids) != 1 {
 		t.Fatal("organization revocation affected an independent Member", err)
 	}
-	if _, err := MemberEvidence(t.Context(), store.pool, factor.ID, member.ID, organization.ID); !errors.Is(err, ErrNotFound) {
-		t.Fatal("issuance evidence bypassed revocation", err)
+	if _, err := MemberEvidence(t.Context(), store.pool, dingTalkFactor.ID, member.ID, organization.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatal("issuance accepted evidence from the revoked source", err)
 	}
 	choices, err := store.EligibleMembers(t.Context(), factor.ID)
-	if err != nil || len(choices) != 1 || choices[0].ID != otherMember.ID {
-		t.Fatal("revocation crossed organization boundary", err)
+	if err != nil || len(choices) != 2 {
+		t.Fatal("revocation reduced the available phone identities", err)
 	}
 	// An invalid replacement credential is not evidence about the stored credential.
 	input.ExpectedRevision = initial.Revision

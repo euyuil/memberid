@@ -15,8 +15,8 @@ const eligibleBindings = ` FROM member_auth_factor_bindings b
  JOIN authentication_factors f ON f.id=b.authentication_factor_id
  WHERE b.status='active' AND f.status='active' AND o.status='enabled'
  AND NOT m.manual_block AND NOT m.external_departure
- AND (f.type<>'dingtalk' OR EXISTS(SELECT 1 FROM dingtalk_applications da WHERE da.organization_id=o.id AND da.namespace=f.namespace))
- AND NOT EXISTS(SELECT 1 FROM dingtalk_applications revoked WHERE revoked.organization_id=o.id AND revoked.authorization_status='revoked')`
+ AND (f.type<>'dingtalk' OR EXISTS(SELECT 1 FROM dingtalk_applications da
+ WHERE da.organization_id=o.id AND da.namespace=f.namespace AND da.authorization_status='active'))`
 
 type Eligibility struct {
 	Eligible  bool   `json:"eligible"`

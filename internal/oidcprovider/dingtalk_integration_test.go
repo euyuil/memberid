@@ -321,7 +321,7 @@ func TestDingTalkCallbackRejectsInvalidationDuringProviderIO(t *testing.T) {
 	}
 }
 
-func TestDingTalkAuthorizationAppliesToPhoneOIDCGrants(t *testing.T) {
+func TestDingTalkRevocationPreservesPhoneOIDCGrants(t *testing.T) {
 	f := newConfiguredFixture(t, true)
 	provider, apps := enableDingTalk(t, f, true)
 	tokens := f.refreshTokens()
@@ -336,15 +336,14 @@ func TestDingTalkAuthorizationAppliesToPhoneOIDCGrants(t *testing.T) {
 	if _, err := apps.SynchronizeAuthorization(t.Context(), f.member.OrganizationID); err != nil {
 		t.Fatal(err)
 	}
-	f.status(f.userinfo(tokens["access_token"].(string)), 401)
-	f.invalidRefresh("example-web", tokens["refresh_token"].(string))
-	page, _ := f.loginPage("example-web", "openid")
-	if !strings.Contains(page.body, "No eligible Member identity") {
-		t.Fatal("SSO bypassed revoked authorization")
-	}
+	f.status(f.userinfo(tokens["access_token"].(string)), 200)
+	f.status(f.refresh("example-web", tokens["refresh_token"].(string), ""), 200)
+	page, verifier := f.loginPage("example-web", "openid")
+	code := f.complete(page, f.member.ID)
+	f.status(f.exchange("example-web", code, verifier), 200)
 	// Independently configured organizations and factor-only registration remain available.
-	page, verifier := f.loginPage("registration", "openid registration_identity")
-	code := f.complete(page, "")
+	page, verifier = f.loginPage("registration", "openid registration_identity")
+	code = f.complete(page, "")
 	f.status(f.exchange("registration", code, verifier), 200)
 	provider.authorizationError = nil
 	if _, err := apps.SynchronizeAuthorization(t.Context(), f.member.OrganizationID); err != nil {

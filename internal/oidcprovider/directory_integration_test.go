@@ -104,15 +104,23 @@ func TestLinkedPhoneDirectoryFallbackAndDefinitiveDenial(t *testing.T) {
 		f.invalidRefresh("example-web", tokens["refresh_token"].(string))
 	}
 	provider.directoryError = dingtalk.ErrAuthorizationDenied
-	f.invalidRefresh("example-web", tokens["refresh_token"].(string))
+	response = f.refresh("example-web", tokens["refresh_token"].(string), "")
+	f.status(response, 200)
+	tokens = jsonObject(t, response)
 	current, err := apps.Inspect(t.Context(), app.OrganizationID)
 	if err != nil || current.AuthorizationStatus != "revoked" {
 		t.Fatal("definitive current authorization denial was not retained", err)
 	}
-	// Recovery of network availability alone cannot erase the stored revocation.
+	// A stored application denial prevents further directory calls for the phone grant.
+	calls := provider.directoryCalls.Load()
 	provider.directoryError = nil
-	f.invalidRefresh("example-web", tokens["refresh_token"].(string))
-	f.status(f.userinfo(tokens["access_token"].(string)), 401)
+	response = f.refresh("example-web", tokens["refresh_token"].(string), "")
+	f.status(response, 200)
+	tokens = jsonObject(t, response)
+	f.status(f.userinfo(tokens["access_token"].(string)), 200)
+	if provider.directoryCalls.Load() != calls {
+		t.Fatal("phone grant depended on the revoked application")
+	}
 }
 
 func TestDirectoryObservationRejectsConcurrentInvalidation(t *testing.T) {
