@@ -10,6 +10,10 @@ import (
 // It authorizes one binding after fresh provider verification; it creates neither
 // a verified factor nor management authority. Empty unionID cancels a pending target.
 func (store *Store) PrepareSystemDingTalkAdmission(ctx context.Context, memberID, unionID string) error {
+	return store.PrepareSystemDingTalkAdmissionForSource(ctx, memberID, unionID, "")
+}
+
+func (store *Store) PrepareSystemDingTalkAdmissionForSource(ctx context.Context, memberID, unionID, providerID string) error {
 	if !ValidID(memberID, MemberKind) || unionID != "" && !validText(unionID, 512) {
 		return ErrInvalid
 	}
@@ -26,8 +30,12 @@ func (store *Store) PrepareSystemDingTalkAdmission(ctx context.Context, memberID
 			return err
 		}
 		if unionID != "" {
-			var namespace string
-			if err := tx.QueryRow(ctx, "SELECT namespace FROM dingtalk_applications WHERE organization_id=$1 AND authorization_status='active'", SystemOrganizationID).Scan(&namespace); err != nil {
+			namespace, err := dingTalkNamespace(ctx, tx, SystemOrganizationID, providerID)
+			if err != nil {
+				return ErrIneligible
+			}
+			var active bool
+			if err := tx.QueryRow(ctx, "SELECT enabled AND authorization_status='active' FROM dingtalk_applications WHERE namespace=$1 AND organization_id=$2", namespace, SystemOrganizationID).Scan(&active); err != nil || !active {
 				return ErrIneligible
 			}
 			var bound bool

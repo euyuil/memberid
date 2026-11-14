@@ -16,7 +16,7 @@ import (
 )
 
 func (service *Service) loadSession(r *http.Request, request *authorizationRequest) bool {
-	if request.Fresh || slices.Contains(request.Input.Prompt, "login") {
+	if request.Fresh || request.externalPending() || slices.Contains(request.Input.Prompt, "login") {
 		return false
 	}
 	secret := service.cookieValue(r, "session")
@@ -43,13 +43,28 @@ func (service *Service) loadSession(r *http.Request, request *authorizationReque
 	if err != nil || registered.registration.SubjectKind == "factor" && factor.Type != "phone" {
 		return false
 	}
-	if factor.Type == "dingtalk" {
+	if factor.Type != "phone" {
+		members, err := service.store.EligibleMembers(r.Context(), factor.ID)
+		if err != nil || len(members) == 0 {
+			return false
+		}
+	}
+	switch factor.Type {
+	case "dingtalk":
 		if service.dingtalk == nil {
 			return false
 		}
 		if registered.registration.OrganizationID != "" {
-			app, err := service.dingtalk.Application(r.Context(), registered.registration.OrganizationID)
-			if err != nil || app.Namespace != factor.Namespace {
+			if _, err := service.dingtalk.ApplicationSource(r.Context(), registered.registration.OrganizationID, factor.Namespace); err != nil {
+				return false
+			}
+		}
+	case "feishu":
+		if service.feishu == nil {
+			return false
+		}
+		if registered.registration.OrganizationID != "" {
+			if _, _, err := service.feishu.LoginSource(r.Context(), registered.registration.OrganizationID, factor.Namespace); err != nil {
 				return false
 			}
 		}
@@ -160,11 +175,26 @@ func (service *Service) login(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		switch r.PostForm.Get("action") {
+		case "choose-organization":
+			if request.Verification != nil || request.ChallengeID != "" || request.externalPending() ||
+				registered.registration.SubjectKind != "member" || registered.registration.OrganizationID != "" {
+				http.Error(w, "Invalid organization selection", http.StatusBadRequest)
+				return
+			}
+			organization, err := service.store.Organization(r.Context(), r.PostForm.Get("organization"))
+			if err != nil || organization.Status != "enabled" {
+				message = "Login providers are unavailable for that organization."
+				break
+			}
+			request.ProviderOrganizationID = organization.ID
+		case "feishu":
+			service.startFeishu(w, r, request, registered)
+			return
 		case "dingtalk":
 			service.startDingTalk(w, r, request, registered)
 			return
 		case "send":
-			if service.phone == nil || request.DingTalk != nil {
+			if service.phone == nil || request.externalPending() {
 				http.Error(w, "Phone verification unavailable", http.StatusBadRequest)
 				return
 			}
@@ -185,7 +215,7 @@ func (service *Service) login(w http.ResponseWriter, r *http.Request) {
 			request.Fresh = true
 			message = "Verification code requested. Enter the code within five minutes."
 		case "verify":
-			if service.phone == nil || request.DingTalk != nil {
+			if service.phone == nil || request.externalPending() {
 				http.Error(w, "Phone verification unavailable", http.StatusBadRequest)
 				return
 			}
@@ -204,7 +234,7 @@ func (service *Service) login(w http.ResponseWriter, r *http.Request) {
 			}
 			message = "Phone verified. Select your identity and continue."
 		case "cancel":
-			request.DingTalk = nil
+			request.DingTalk, request.Feishu = nil, nil
 			request.Verification = nil
 			request.ChallengeID = ""
 			request.PhoneNumber = ""

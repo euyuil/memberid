@@ -16,14 +16,23 @@ A stored administrator assignment plus a currently eligible Member is required f
 | List/create/rename/block/unblock Members | Any organization | Own organization |
 | Grant/revoke administrator assignment | Any organization | Own organization |
 | Read bindings and management events | Any organization | Own organization |
+| List, configure and disable identity providers | Any organization | Own organization |
 
-Platform administrators can switch organizations from the management scope in the header while retaining their original operator identity. The sidebar has separate Organizations, Members, and Operation history entries. Switching between them keeps the selected organization. In the all-organization scope, platform administrators see members from every organization. Each row identifies its organization and opens the member detail in that organization. Organization administrators see their own organization in the header. These permissions belong exclusively to MemberID management and are not added to business application identity claims. There are no custom roles, invitations, deletion, bulk operations, credential resets, provider configuration pages, or client-registration pages in this version. Provider configuration, explicit factor binding, and first-administrator recovery remain operator tasks.
+Platform administrators can switch organizations from the management scope in the header while retaining their original operator identity. The sidebar has separate Organizations, Members, Identity providers, and Operation history entries. Switching between them keeps the selected organization. In the all-organization scope, platform administrators see members from every organization. Each row identifies its organization and opens the member detail in that organization. Organization administrators see their own organization in the header. These permissions belong exclusively to MemberID management and are not added to business application identity claims. There are no custom roles, invitations, deletion, bulk operations, credential resets or client-registration pages in this version. Explicit operator binding and first-administrator recovery use the operator tools.
+
+## Organization identity providers
+
+Choose an organization, then open **身份提供商** (Identity providers). This directory lists the configured DingTalk and Feishu applications. Add multiple applications of either type with distinct application IDs and recognizable display names. Edit the display name, rotate the application secret, or enable and disable a source independently. The provider type, application ID, and tenant or corporation ID identify the binding namespace and stay fixed after creation. A replacement application gets its own row.
+
+Saving a new secret verifies the application credentials before storing an encrypted value. Leaving the secret blank during editing keeps the existing one. An operator-initiated disable is rejected if it would remove the last eligible administrator from an organization that currently has one. Confirmed upstream revocation applies even in that case. Configuration changes are audited with actor and provider IDs, display name, type, and enabled state.
+
+See [Feishu setup](feishu.md) and [DingTalk setup](dingtalk.md) for the required application and runtime settings.
 
 ## Build and register the console
 
 Build with `sh scripts/check.sh` or `sh scripts/package.sh VERSION NEW_OUTPUT_DIRECTORY`. Both build the locked frontend before embedding it in Go. Node/npm are build dependencies; the resulting executable needs neither at runtime.
 
-Initialize a protected installation and a new database as described in [operator setup](operations.md). This increment uses fresh schema version **14**. Existing databases are not migrated or erased. Start the OIDC process before starting the console so its discovery and keys are reachable.
+Initialize a protected installation and a new database as described in [operator setup](operations.md). This increment uses fresh schema version **15**. Existing databases are not migrated or erased. Start the OIDC process before starting the console so its discovery and keys are reachable.
 
 Register a dedicated confidential Member client with no organization restriction:
 
@@ -66,7 +75,7 @@ Console sessions expire after 30 minutes of inactivity or eight hours after orig
 
 “Sign out of console” deletes only this console session; it does not log out of MemberID SSO or downstream applications. A subsequent login can reuse eligible SSO within the original authentication limit. Existing business application sessions remain owned by those applications.
 
-The browser uses `/api/session`, `/api/organizations`, `/api/members` (platform administrators only), `/api/organizations/{organizationId}/members`, the Member `administrator` subresource, `/api/events`, and `/api/logout`. This same-origin UI API is distinct from the documented private `/v1` integration API; it does not accept management bearer credentials or actor impersonation fields. Direct foreign-organization requests are rejected regardless of visible navigation. Directory pages contain at most 50 records, ordered by opaque ID; event pages use descending numeric IDs. In the Member directory, search names or IDs and filter by identity status or administrator assignment. These conditions apply across the selected scope before pagination. A successful create opens the new organization workspace or Member detail. An interrupted create request is not automatically retried: refresh the directory before creating another record.
+The browser uses `/api/session`, `/api/organizations`, `/api/members` (platform administrators only), `/api/organizations/{organizationId}/members`, the Member `administrator` subresource, `/api/organizations/{organizationId}/providers`, `/api/events`, and `/api/logout`. This same-origin UI API is distinct from the documented private `/v1` integration API; it does not accept management bearer credentials or actor impersonation fields. Direct foreign-organization requests are rejected regardless of visible navigation. Directory pages contain at most 50 records, ordered by opaque ID; event pages use descending numeric IDs. In the Member directory, search names or IDs and filter by identity status or administrator assignment. These conditions apply across the selected scope before pagination. A successful create opens the new organization workspace or Member detail. An interrupted create request is not automatically retried: refresh the directory before creating another record.
 
 The Member detail separates identity status from sign-in blockers. It shows disabled organizations, Member blocks, and missing or revoked bindings using the current detail data. Sign-in also checks factor and provider availability.
 

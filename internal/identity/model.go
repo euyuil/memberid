@@ -62,4 +62,6 @@ func validText(value string, maximum int) bool {
 		strings.IndexFunc(value, unicode.IsControl) == -1
 }
 
-func validFactorType(kind string) bool { return kind == "phone" || kind == "dingtalk" }
+func validFactorType(kind string) bool {
+	return kind == "phone" || kind == "dingtalk" || kind == "feishu"
+}

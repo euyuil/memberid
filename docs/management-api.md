@@ -61,7 +61,7 @@ The receipt contains `id`, `organizationId`, `memberId`, the resulting `member` 
 
 Receipts persist across restarts and have no automatic expiry or deletion endpoint. Include them in database backups and capacity planning. Deleting receipts directly would destroy the safe-retry guarantee. A new intentional update uses a new ID. Ordinary PATCH remains available, but repeating PATCH after an uncertain result can overwrite an intervening update; it does not provide an immutable receipt.
 
-Updates use the same installation management credential and organization-bound lookup as other management operations. They do not impersonate an initiating Member or assign application permissions. The fresh-install schema is version 14; startup rejects older schemas without resetting or migrating existing data.
+Updates use the same installation management credential and organization-bound lookup as other management operations. They do not impersonate an initiating Member or assign application permissions. The fresh-install schema is version 15; startup rejects older schemas without resetting or migrating existing data.
 
 ## Directory pagination
 
@@ -90,7 +90,7 @@ Eligibility is not proof of a new authentication event and grants no business pe
 
 Trusted integrations can query `POST /v1/organizations/{organizationId}/member-eligibility` with `{"memberIds":["MEMBER_ID"]}`. Supply 1 through 100 distinct, valid Member IDs. Empty lists, duplicate IDs, malformed IDs, unknown fields, and query parameters are rejected with 400. The response is `{"eligibleMemberIds":["MEMBER_ID"]}` with unique identifiers in ascending order; it is an empty array when none qualify. A missing organization, missing Member, or Member belonging to another organization contributes no result. This is a bounded candidate query, not an unrestricted directory or contact-attribute lookup.
 
-A Member qualifies when at least one of its explicit bindings passes the same stored eligibility rules used by login selection and the specific-binding query: an active binding and factor, an enabled organization, no manual or external-departure block, and an active application in the matching namespace for a DingTalk factor. Multiple usable factors produce one Member ID. A revoked factor binding does not make another independent binding unusable.
+A Member qualifies when at least one of its explicit bindings passes the same stored eligibility rules used by login selection and the specific-binding query: an active binding and factor, an enabled organization, no manual or external-departure block, and an active application in the matching namespace for a DingTalk or Feishu factor. Multiple usable factors produce one Member ID. A revoked factor binding does not make another independent binding unusable.
 
 The candidates and eligibility gates are evaluated in one SQL statement and therefore share one database snapshot. Separate requests or batches do not share a snapshot or reserve future eligibility. This query performs no fresh upstream provider verification and does not establish an authentication time, authenticate a token's specific factor, or grant application permissions. Resource servers must still verify the presented token and check its explicit binding through `POST /v1/eligibility`. Applications retain their own permission rules and coordination for subsequent changes.
 

@@ -11,6 +11,7 @@ import (
 
 	"github.com/euyuil/memberid/internal/config"
 	"github.com/euyuil/memberid/internal/dingtalk"
+	"github.com/euyuil/memberid/internal/feishu"
 	"github.com/euyuil/memberid/internal/identity"
 	"github.com/euyuil/memberid/internal/oidcprovider"
 	"github.com/euyuil/memberid/internal/sms"
@@ -32,7 +33,11 @@ func authenticationHandler(ctx context.Context, directory string) (http.Handler,
 	if dingTalkEnabled != "" && dingTalkEnabled != "false" && dingTalkEnabled != "true" {
 		return nil, nil, errors.New("MEMBERID_DINGTALK_ENABLED must be true or false")
 	}
-	if sender == nil && dingTalkEnabled != "true" {
+	feishuEnabled := os.Getenv("MEMBERID_FEISHU_ENABLED")
+	if feishuEnabled != "" && feishuEnabled != "false" && feishuEnabled != "true" {
+		return nil, nil, errors.New("MEMBERID_FEISHU_ENABLED must be true or false")
+	}
+	if sender == nil && dingTalkEnabled != "true" && feishuEnabled != "true" {
 		return nil, nil, errors.New("enable and configure at least one authentication provider before starting OIDC")
 	}
 	store, err := identity.Open(ctx, os.Getenv("MEMBERID_DATABASE_URL"))
@@ -68,7 +73,15 @@ func authenticationHandler(ctx context.Context, directory string) (http.Handler,
 			return nil, nil, err
 		}
 	}
-	provider, err := oidcprovider.New(loaded, store, phone, dingTalkVerifier, directoryVerifier)
+	var feishuApps *identity.FeishuApplications
+	if feishuEnabled == "true" {
+		feishuApps, err = identity.NewFeishuApplications(store, key, feishu.New())
+		if err != nil {
+			store.Close()
+			return nil, nil, err
+		}
+	}
+	provider, err := oidcprovider.New(loaded, store, phone, dingTalkVerifier, directoryVerifier, feishuApps)
 	if err != nil {
 		store.Close()
 		return nil, nil, err
@@ -79,6 +92,25 @@ func authenticationHandler(ctx context.Context, directory string) (http.Handler,
 	go func() {
 		defer close(synchronized)
 		directoryVerifier.RunSynchronization(cleanup, func() { slog.Warn("DingTalk background synchronization incomplete") })
+	}()
+	feishuFinished := make(chan struct{})
+	go func() {
+		defer close(feishuFinished)
+		if feishuApps == nil {
+			return
+		}
+		ticker := time.NewTicker(15 * time.Minute)
+		defer ticker.Stop()
+		for {
+			if err := feishuApps.CheckApplications(cleanup); err != nil && cleanup.Err() == nil {
+				slog.Warn("Feishu application checks incomplete")
+			}
+			select {
+			case <-cleanup.Done():
+				return
+			case <-ticker.C:
+			}
+		}
 	}()
 	go func() {
 		defer close(finished)
@@ -97,5 +129,5 @@ func authenticationHandler(ctx context.Context, directory string) (http.Handler,
 			}
 		}
 	}()
-	return provider, func() { cancel(); <-finished; <-synchronized; store.Close() }, nil
+	return provider, func() { cancel(); <-finished; <-synchronized; <-feishuFinished; store.Close() }, nil
 }

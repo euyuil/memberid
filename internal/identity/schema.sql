@@ -1,7 +1,7 @@
 CREATE TABLE memberid_schema (
-    version integer PRIMARY KEY CHECK (version = 14)
+    version integer PRIMARY KEY CHECK (version = 15)
 );
-INSERT INTO memberid_schema(version) VALUES (14);
+INSERT INTO memberid_schema(version) VALUES (15);
 
 CREATE TABLE organizations (
     id text COLLATE "C" PRIMARY KEY CHECK (id = 'org_system' OR id ~ '^org_[0-9bcdfghjkmnpqrstvwxz]{27}$'),
@@ -29,31 +29,36 @@ CREATE INDEX member_directory ON members (organization_id, created_at, id);
 
 CREATE TABLE authentication_factors (
     id text COLLATE "C" PRIMARY KEY CHECK (id ~ '^af_[0-9bcdfghjkmnpqrstvwxz]{27}$'),
-    type text NOT NULL CHECK (type IN ('phone', 'dingtalk')),
+    type text NOT NULL CHECK (type IN ('phone', 'dingtalk', 'feishu')),
     namespace text NOT NULL CHECK (char_length(namespace) BETWEEN 1 AND 512),
     subject text NOT NULL CHECK (char_length(subject) BETWEEN 1 AND 512),
     status text NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'disabled')),
     created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
     updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
     UNIQUE (type, namespace, subject),
-    UNIQUE (id, type)
+    UNIQUE (id, type),
+    UNIQUE (id, type, namespace)
 );
 
 CREATE TABLE member_auth_factor_bindings (
-    id uuid NOT NULL DEFAULT gen_random_uuid() UNIQUE,
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     member_id text COLLATE "C" NOT NULL,
     organization_id text COLLATE "C" NOT NULL,
     authentication_factor_id text COLLATE "C" NOT NULL,
     factor_type text NOT NULL,
+    provider_namespace text,
     status text NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'revoked')),
     created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
     revoked_at timestamptz,
-    PRIMARY KEY (member_id, factor_type),
     FOREIGN KEY (member_id, organization_id) REFERENCES members(id, organization_id),
     FOREIGN KEY (authentication_factor_id, factor_type) REFERENCES authentication_factors(id, type),
+    FOREIGN KEY (authentication_factor_id, factor_type, provider_namespace) REFERENCES authentication_factors(id, type, namespace) ON UPDATE CASCADE,
     UNIQUE (organization_id, authentication_factor_id),
+    CHECK ((factor_type = 'feishu') = (provider_namespace IS NOT NULL)),
     CHECK ((status = 'active' AND revoked_at IS NULL) OR (status = 'revoked' AND revoked_at IS NOT NULL))
 );
+CREATE UNIQUE INDEX member_single_factor_type ON member_auth_factor_bindings (member_id, factor_type) WHERE factor_type <> 'feishu';
+CREATE UNIQUE INDEX member_feishu_source ON member_auth_factor_bindings (member_id, provider_namespace) WHERE factor_type = 'feishu';
 
 CREATE TABLE phone_challenges (
     id text COLLATE "C" PRIMARY KEY,
@@ -126,8 +131,10 @@ CREATE TABLE organization_enrollments (
 );
 
 CREATE TABLE dingtalk_applications (
-    organization_id text COLLATE "C" PRIMARY KEY REFERENCES organizations(id),
-    namespace text COLLATE "C" NOT NULL UNIQUE,
+    organization_id text COLLATE "C" NOT NULL REFERENCES organizations(id),
+    namespace text COLLATE "C" PRIMARY KEY,
+    display_name text NOT NULL DEFAULT 'DingTalk' CHECK (char_length(display_name) BETWEEN 1 AND 128),
+    enabled boolean NOT NULL DEFAULT true,
     corp_id text NOT NULL,
     client_id text NOT NULL UNIQUE,
     revision bigint NOT NULL CHECK (revision > 0),
@@ -137,12 +144,15 @@ CREATE TABLE dingtalk_applications (
     directory_revision bigint NOT NULL DEFAULT 0 CHECK (directory_revision >= 0),
     authorization_verified_at timestamptz NOT NULL DEFAULT clock_timestamp(),
     created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-    updated_at timestamptz NOT NULL DEFAULT clock_timestamp()
+    updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+    UNIQUE (organization_id,namespace)
 );
+CREATE INDEX dingtalk_applications_organization ON dingtalk_applications (organization_id, namespace);
 
 CREATE TABLE dingtalk_identities (
     member_id text COLLATE "C" PRIMARY KEY,
-    organization_id text COLLATE "C" NOT NULL REFERENCES dingtalk_applications(organization_id),
+    organization_id text COLLATE "C" NOT NULL,
+    namespace text COLLATE "C" NOT NULL,
     union_id text COLLATE "C" NOT NULL,
     external_member_id text COLLATE "C" NOT NULL,
     department_ids jsonb CHECK (department_ids IS NULL OR jsonb_typeof(department_ids)='array'),
@@ -150,18 +160,36 @@ CREATE TABLE dingtalk_identities (
     last_event_time bigint NOT NULL DEFAULT 0 CHECK (last_event_time >= 0),
     last_event_departure boolean NOT NULL DEFAULT false,
     FOREIGN KEY (member_id,organization_id) REFERENCES members(id,organization_id),
-    UNIQUE (organization_id,union_id),
-    UNIQUE (organization_id,external_member_id)
+    FOREIGN KEY (organization_id,namespace) REFERENCES dingtalk_applications(organization_id,namespace),
+    UNIQUE (namespace,union_id),
+    UNIQUE (namespace,external_member_id)
 );
 CREATE UNIQUE INDEX oidc_dingtalk_state ON oidc_authorization_requests ((data->'dingtalk'->>'stateHash')) WHERE data->'dingtalk' IS NOT NULL;
 
 CREATE TABLE dingtalk_events (
-    organization_id text COLLATE "C" NOT NULL REFERENCES dingtalk_applications(organization_id),
+    namespace text COLLATE "C" NOT NULL REFERENCES dingtalk_applications(namespace),
     event_id text COLLATE "C" NOT NULL,
     event_hash bytea NOT NULL CHECK (octet_length(event_hash) = 32),
     received_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-    PRIMARY KEY (organization_id,event_id)
+    PRIMARY KEY (namespace,event_id)
 );
+
+CREATE TABLE feishu_applications (
+    organization_id text COLLATE "C" NOT NULL REFERENCES organizations(id),
+    namespace text COLLATE "C" PRIMARY KEY,
+    display_name text NOT NULL CHECK (char_length(display_name) BETWEEN 1 AND 128),
+    enabled boolean NOT NULL,
+    tenant_key text NOT NULL,
+    client_id text NOT NULL UNIQUE,
+    revision bigint NOT NULL CHECK (revision > 0),
+    secret_ciphertext bytea NOT NULL,
+    authorization_status text NOT NULL DEFAULT 'active' CHECK (authorization_status IN ('active', 'revoked')),
+    authorization_revision bigint NOT NULL DEFAULT 1 CHECK (authorization_revision > 0),
+    created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+    updated_at timestamptz NOT NULL DEFAULT clock_timestamp()
+);
+CREATE INDEX feishu_applications_organization ON feishu_applications (organization_id, namespace);
+CREATE UNIQUE INDEX oidc_feishu_state ON oidc_authorization_requests ((data->'feishu'->>'stateHash')) WHERE data->'feishu' IS NOT NULL;
 
 CREATE TABLE account_link_requests (
     id text COLLATE "C" PRIMARY KEY,

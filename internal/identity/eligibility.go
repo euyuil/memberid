@@ -16,7 +16,9 @@ const eligibleBindings = ` FROM member_auth_factor_bindings b
  WHERE b.status='active' AND f.status='active' AND o.status='enabled'
  AND NOT m.manual_block AND NOT m.external_departure
  AND (f.type<>'dingtalk' OR EXISTS(SELECT 1 FROM dingtalk_applications da
- WHERE da.organization_id=o.id AND da.namespace=f.namespace AND da.authorization_status='active'))`
+ WHERE da.organization_id=o.id AND da.namespace=f.namespace AND da.enabled AND da.authorization_status='active'))
+ AND (f.type<>'feishu' OR EXISTS(SELECT 1 FROM feishu_applications fa
+ WHERE fa.organization_id=o.id AND fa.namespace=f.namespace AND fa.enabled AND fa.authorization_status='active'))`
 
 type Eligibility struct {
 	Eligible  bool   `json:"eligible"`

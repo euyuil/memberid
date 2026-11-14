@@ -23,21 +23,6 @@ func LinkPhone(ctx context.Context, tx pgx.Tx, verified Verification, target Pho
 	if err := tx.QueryRow(ctx, "SELECT id FROM organizations WHERE id=$1 AND status='enabled' FOR SHARE", target.OrganizationID).Scan(&id); err != nil {
 		return ErrIneligible
 	}
-	// Lock configured authorization so revocation cannot pass the final check.
-	rows, err := tx.Query(ctx, "SELECT organization_id FROM dingtalk_applications WHERE organization_id=$1 FOR SHARE", target.OrganizationID)
-	if err != nil {
-		return err
-	}
-	for rows.Next() {
-		if err := rows.Scan(&id); err != nil {
-			rows.Close()
-			return err
-		}
-	}
-	rows.Close()
-	if err := rows.Err(); err != nil {
-		return err
-	}
 	if err := tx.QueryRow(ctx, "SELECT id FROM authentication_factors WHERE id=$1 AND status='active' FOR SHARE", target.SourceFactorID).Scan(&id); err != nil {
 		return ErrIneligible
 	}

@@ -17,12 +17,16 @@ import (
 )
 
 func consoleFixture(t *testing.T, f *fixture) *httptest.Server {
+	return consoleProviderFixture(t, f, new(testDingTalk), new(testFeishu))
+}
+
+func consoleProviderFixture(t *testing.T, f *fixture, dingTalk identity.DingTalkAuthorizationChecker, feishu identity.FeishuProvider) *httptest.Server {
 	t.Helper()
 	server := httptest.NewUnstartedServer(nil)
 	origin := "http://" + server.Listener.Addr().String()
 	registration := config.Client{ID: "console", SecretSHA256: config.SecretHash(f.secret), RedirectURIs: []string{origin + "/auth/callback"}, SubjectKind: "member", Preauthorized: true}
 	f.service.configuration.Clients = append(f.service.configuration.Clients, registration)
-	h, err := console.New(t.Context(), f.store, f.service.configuration, console.Settings{Origin: origin, ClientID: "console"}, f.secret)
+	h, err := console.New(t.Context(), f.store, f.service.configuration, console.Settings{Origin: origin, ClientID: "console"}, f.secret, dingTalk, feishu)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -54,7 +54,7 @@ type session struct {
 	secret string
 }
 
-func New(ctx context.Context, store *identity.Store, installation *config.Loaded, settings Settings, secret string) (*Service, error) {
+func New(ctx context.Context, store *identity.Store, installation *config.Loaded, settings Settings, secret string, dingTalk identity.DingTalkAuthorizationChecker, feishu identity.FeishuProvider) (*Service, error) {
 	u, err := url.Parse(settings.Origin)
 	if err != nil || u.Host == "" || u.User != nil || u.Path != "" || u.RawQuery != "" || u.Fragment != "" || u.ForceQuery {
 		return nil, errors.New("console origin must be an exact HTTPS origin")
@@ -101,6 +101,9 @@ func New(ctx context.Context, store *identity.Store, installation *config.Loaded
 	s.routes.HandleFunc("PATCH /api/organizations/{organizationId}/members/{memberId}", s.mutate)
 	s.routes.HandleFunc("PUT /api/organizations/{organizationId}/members/{memberId}/administrator", s.administrator)
 	s.routes.HandleFunc("GET /api/events", s.events)
+	if err := s.registerProviderRoutes(installation, dingTalk, feishu); err != nil {
+		return nil, err
+	}
 	static, _ := fs.Sub(assets, "static")
 	s.routes.Handle("GET /", http.FileServer(http.FS(static)))
 	return s, nil
@@ -414,6 +417,8 @@ func respond(w http.ResponseWriter, value any, err error) {
 			problem(w, 409, "last_administrator")
 		case errors.Is(err, identity.ErrNotFound):
 			problem(w, 404, "not_found")
+		case errors.Is(err, identity.ErrProviderUnavailable):
+			problem(w, 503, "provider_unavailable")
 		case errors.Is(err, identity.ErrInvalid):
 			problem(w, 400, "invalid_request")
 		case errors.Is(err, identity.ErrConflict):

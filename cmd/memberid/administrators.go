@@ -40,8 +40,9 @@ func prepareSystemDingTalk(ctx context.Context, args []string, stdout, stderr io
 	f := flag.NewFlagSet("dingtalk "+args[0], flag.ContinueOnError)
 	f.SetOutput(stderr)
 	member := f.String("member", "", "existing system organization Member identifier")
-	union := ""
+	union, providerID := "", ""
 	if args[0] == "allow-system-member" {
+		f.StringVar(&providerID, "provider", "", "system organization DingTalk provider ID when multiple are configured")
 		f.StringVar(&union, "union-id", "", "exact union ID from the system organization's provider namespace")
 	}
 	if err := f.Parse(args[1:]); err != nil {
@@ -55,7 +56,7 @@ func prepareSystemDingTalk(ctx context.Context, args []string, stdout, stderr io
 		return err
 	}
 	defer store.Close()
-	if err = store.PrepareSystemDingTalkAdmission(ctx, *member, union); err != nil {
+	if err = store.PrepareSystemDingTalkAdmissionForSource(ctx, *member, union, providerID); err != nil {
 		return err
 	}
 	return json.NewEncoder(stdout).Encode(map[string]any{"memberId": *member, "admissionPrepared": union != ""})

@@ -17,13 +17,14 @@ type DingTalkLoginProvider interface {
 // DingTalkLoginContext binds an attempt to current policy revisions; it is not authentication evidence.
 type DingTalkLoginContext struct {
 	OrganizationID        string `json:"organizationId"`
+	Namespace             string `json:"namespace"`
 	ApplicationRevision   int64  `json:"applicationRevision"`
 	AuthorizationRevision int64  `json:"authorizationRevision"`
 	OrganizationRevision  int64  `json:"organizationRevision"`
 }
 
 func (app DingTalkApplication) LoginContext() DingTalkLoginContext {
-	return DingTalkLoginContext{app.OrganizationID, app.Revision, app.AuthorizationRevision, app.organizationRevision}
+	return DingTalkLoginContext{app.OrganizationID, app.Namespace, app.Revision, app.AuthorizationRevision, app.organizationRevision}
 }
 
 type DingTalkVerifier struct {
@@ -49,6 +50,10 @@ func NewDingTalkVerifier(applications *DingTalkApplications, provider DingTalkLo
 }
 
 func (verifier *DingTalkVerifier) Application(ctx context.Context, organizationID string) (DingTalkApplication, error) {
+	return verifier.ApplicationSource(ctx, organizationID, "")
+}
+
+func (verifier *DingTalkVerifier) ApplicationSource(ctx context.Context, organizationID, namespace string) (DingTalkApplication, error) {
 	organization, err := verifier.applications.store.Organization(ctx, organizationID)
 	if err != nil {
 		return DingTalkApplication{}, err
@@ -56,11 +61,11 @@ func (verifier *DingTalkVerifier) Application(ctx context.Context, organizationI
 	if organization.Status != "enabled" {
 		return DingTalkApplication{}, ErrIneligible
 	}
-	app, err := verifier.applications.Inspect(ctx, organizationID)
+	app, err := verifier.applications.InspectSource(ctx, organizationID, namespace)
 	if err != nil {
 		return DingTalkApplication{}, err
 	}
-	if app.AuthorizationStatus != "active" {
+	if !app.Enabled || app.AuthorizationStatus != "active" {
 		return DingTalkApplication{}, ErrIneligible
 	}
 	app.organizationRevision = organization.lifecycleRevision
@@ -68,7 +73,7 @@ func (verifier *DingTalkVerifier) Application(ctx context.Context, organizationI
 }
 
 func (verifier *DingTalkVerifier) Verify(ctx context.Context, login DingTalkLoginContext, code string) (DingTalkLoginProof, error) {
-	app, err := verifier.applications.Load(ctx, login.OrganizationID)
+	app, err := verifier.applications.loadSource(ctx, login.OrganizationID, login.Namespace)
 	if err != nil {
 		return DingTalkLoginProof{}, err
 	}
@@ -79,7 +84,7 @@ func (verifier *DingTalkVerifier) Verify(ctx context.Context, login DingTalkLogi
 	if err != nil {
 		return DingTalkLoginProof{}, err
 	}
-	if organization.Status != "enabled" || organization.lifecycleRevision != login.OrganizationRevision || app.AuthorizationStatus != "active" {
+	if organization.Status != "enabled" || organization.lifecycleRevision != login.OrganizationRevision || !app.Enabled || app.AuthorizationStatus != "active" {
 		return DingTalkLoginProof{}, ErrIneligible
 	}
 	timeout, cancel := context.WithTimeout(ctx, 15*time.Second)
@@ -128,14 +133,14 @@ func (verifier *DingTalkVerifier) admit(ctx context.Context, tx pgx.Tx, proof Di
 	if organization.Status != "enabled" || organization.lifecycleRevision != app.organizationRevision {
 		return Verification{}, ErrIneligible
 	}
-	current, _, err := readApplication(tx.QueryRow(ctx, "SELECT "+applicationColumns+" FROM dingtalk_applications WHERE organization_id=$1 FOR UPDATE", app.OrganizationID))
+	current, _, err := readApplication(tx.QueryRow(ctx, "SELECT "+applicationColumns+" FROM dingtalk_applications WHERE organization_id=$1 AND namespace=$2 FOR UPDATE", app.OrganizationID, app.Namespace))
 	if err != nil {
 		return Verification{}, err
 	}
-	if current.Revision != app.Revision || current.AuthorizationRevision != app.AuthorizationRevision || current.directoryRevision != app.directoryRevision || current.AuthorizationStatus != "active" || current.Namespace != app.Namespace || current.CorpID != app.CorpID || current.ClientID != app.ClientID {
+	if current.Revision != app.Revision || current.AuthorizationRevision != app.AuthorizationRevision || current.directoryRevision != app.directoryRevision || !current.Enabled || current.AuthorizationStatus != "active" || current.Namespace != app.Namespace || current.CorpID != app.CorpID || current.ClientID != app.ClientID {
 		return Verification{}, ErrConflict
 	}
-	rows, err := tx.Query(ctx, "SELECT member_id,union_id FROM dingtalk_identities WHERE organization_id=$1 AND (union_id=$2 OR external_member_id=$3) FOR UPDATE", app.OrganizationID, proof.member.UnionID, proof.member.UserID)
+	rows, err := tx.Query(ctx, "SELECT member_id,union_id FROM dingtalk_identities WHERE namespace=$1 AND (union_id=$2 OR external_member_id=$3) FOR UPDATE", app.Namespace, proof.member.UnionID, proof.member.UserID)
 	if err != nil {
 		return Verification{}, err
 	}
@@ -254,7 +259,7 @@ func (verifier *DingTalkVerifier) admit(ctx context.Context, tx pgx.Tx, proof Di
 		}
 	}
 	if count == 0 {
-		_, err = tx.Exec(ctx, "INSERT INTO dingtalk_identities(member_id,organization_id,union_id,external_member_id,department_ids,verified_at) VALUES($1,$2,$3,$4,$5,$6)", memberID, app.OrganizationID, proof.member.UnionID, proof.member.UserID, departments, proof.authenticatedAt)
+		_, err = tx.Exec(ctx, "INSERT INTO dingtalk_identities(member_id,organization_id,namespace,union_id,external_member_id,department_ids,verified_at) VALUES($1,$2,$3,$4,$5,$6,$7)", memberID, app.OrganizationID, app.Namespace, proof.member.UnionID, proof.member.UserID, departments, proof.authenticatedAt)
 	} else {
 		_, err = tx.Exec(ctx, "UPDATE dingtalk_identities SET external_member_id=$2,department_ids=COALESCE($3::jsonb,department_ids),verified_at=$4 WHERE member_id=$1", memberID, proof.member.UserID, departments, proof.authenticatedAt)
 	}

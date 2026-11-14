@@ -81,27 +81,28 @@ func (directory *DingTalkDirectory) reconcileAll(ctx context.Context) error {
 	after := ""
 	incomplete := false
 	for {
-		rows, err := directory.applications.store.pool.Query(ctx, `SELECT a.organization_id FROM dingtalk_applications a
+		rows, err := directory.applications.store.pool.Query(ctx, `SELECT a.organization_id,a.namespace FROM dingtalk_applications a
  JOIN organizations o ON o.id=a.organization_id AND o.status='enabled'
- WHERE a.organization_id>$1 ORDER BY a.organization_id LIMIT 100`, after)
+ WHERE a.enabled AND a.namespace>$1 ORDER BY a.namespace LIMIT 100`, after)
 		if err != nil {
 			return err
 		}
-		ids, err := pgx.CollectRows(rows, pgx.RowTo[string])
+		type source struct{ OrganizationID, Namespace string }
+		applications, err := pgx.CollectRows(rows, pgx.RowToStructByPos[source])
 		if err != nil {
 			return err
 		}
-		if len(ids) == 0 {
+		if len(applications) == 0 {
 			break
 		}
-		for _, id := range ids {
-			if _, err := directory.Reconcile(ctx, id); err != nil {
+		for _, app := range applications {
+			if _, err := directory.ReconcileSource(ctx, app.OrganizationID, app.Namespace); err != nil {
 				incomplete = true
 			}
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
-			after = id
+			after = app.Namespace
 		}
 	}
 	if incomplete {

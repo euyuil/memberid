@@ -26,6 +26,7 @@ func manageDingTalk(ctx context.Context, args []string, stdout, stderr io.Writer
 	flags.SetOutput(stderr)
 	directory := flags.String("directory", "", "protected installation directory")
 	organizationID := flags.String("organization", "", "MemberID organization identifier")
+	namespace := flags.String("provider", "", "application provider ID when the organization has multiple applications")
 	var input identity.DingTalkApplicationInput
 	var secretFile string
 	if args[0] == "configure" {
@@ -84,7 +85,7 @@ func manageDingTalk(ctx context.Context, args []string, stdout, stderr io.Writer
 		if err != nil {
 			return err
 		}
-		result, err := directory.Reconcile(ctx, *organizationID)
+		result, err := directory.ReconcileSource(ctx, *organizationID, *namespace)
 		if result.Application.OrganizationID != "" {
 			if encodeErr := json.NewEncoder(stdout).Encode(result); encodeErr != nil {
 				return encodeErr
@@ -94,11 +95,11 @@ func manageDingTalk(ctx context.Context, args []string, stdout, stderr io.Writer
 	}
 	var result identity.DingTalkApplication
 	if args[0] == "inspect" {
-		result, err = applications.Inspect(ctx, *organizationID)
+		result, err = applications.InspectSource(ctx, *organizationID, *namespace)
 	} else if args[0] == "sync" {
-		result, err = applications.SynchronizeAuthorization(ctx, *organizationID)
+		result, err = applications.SynchronizeSource(ctx, *organizationID, *namespace)
 	} else {
-		result, err = applications.Configure(ctx, *organizationID, input)
+		result, err = applications.ConfigureSource(ctx, *organizationID, *namespace, input)
 	}
 	if err != nil {
 		return err

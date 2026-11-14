@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/euyuil/memberid/internal/config"
+	"github.com/euyuil/memberid/internal/identity"
 )
 
 //go:embed login.html
@@ -21,8 +22,9 @@ type pageData struct {
 	ClientID, Scopes, Message, Nonce                               string
 	Members                                                        []memberChoice
 	Verified, Pending, PhonePending, FactorClient, ConsentRequired bool
-	PhoneEnabled, DingTalkEnabled, OrganizationRestricted          bool
-	DingTalkOrganizationID                                         string
+	PhoneEnabled, ProviderEnabled, OrganizationRestricted          bool
+	ProviderOrganizationID, ProviderOrganizationName               string
+	Providers                                                      []identity.Provider
 }
 
 func (service *Service) renderLogin(w http.ResponseWriter, r *http.Request, request *authorizationRequest, client client, message string) {
@@ -41,15 +43,49 @@ func (service *Service) renderLogin(w http.ResponseWriter, r *http.Request, requ
 		choices = append(choices, memberChoice{member.ID, organization.Name + " — " + member.DisplayName})
 	}
 	verified := request.Verification != nil
-	if verified && request.Method == "dingtalk" && message == "" {
-		message = "DingTalk verified. Select your identity and continue."
+	if verified && message == "" {
+		switch request.Method {
+		case "dingtalk":
+			message = "DingTalk verified. Select your identity and continue."
+		case "feishu":
+			message = "Feishu verified. Select your identity and continue."
+		}
 	}
 	if verified && client.registration.SubjectKind == "member" && len(choices) == 0 {
 		message = "No eligible Member identity is available. Contact your organization administrator."
 	}
-	data := pageData{Request: request, ClientID: client.registration.ID, Scopes: strings.Join(request.Scopes, ", "), Message: message, Nonce: config.RandomSecret(), Members: choices, Verified: verified, Pending: request.ChallengeID != "" || request.DingTalk != nil, PhonePending: request.ChallengeID != "", PhoneEnabled: service.phone != nil, DingTalkEnabled: service.dingtalk != nil && client.registration.SubjectKind == "member", OrganizationRestricted: client.registration.OrganizationID != "", DingTalkOrganizationID: client.registration.OrganizationID, FactorClient: client.registration.SubjectKind == "factor", ConsentRequired: !client.registration.Preauthorized || slices.Contains(request.Input.Prompt, "consent")}
-	if request.DingTalk != nil {
-		data.DingTalkOrganizationID = request.DingTalk.OrganizationID
+	data := pageData{
+		Request: request, ClientID: client.registration.ID, Scopes: strings.Join(request.Scopes, ", "), Message: message,
+		Nonce: config.RandomSecret(), Members: choices, Verified: verified,
+		Pending: request.ChallengeID != "" || request.externalPending(), PhonePending: request.ChallengeID != "",
+		PhoneEnabled: service.phone != nil, ProviderEnabled: client.registration.SubjectKind == "member" && (service.dingtalk != nil || service.feishu != nil),
+		OrganizationRestricted: client.registration.OrganizationID != "", ProviderOrganizationID: client.registration.OrganizationID,
+		FactorClient: client.registration.SubjectKind == "factor", ConsentRequired: !client.registration.Preauthorized || slices.Contains(request.Input.Prompt, "consent"),
+	}
+	if !data.OrganizationRestricted {
+		data.ProviderOrganizationID = request.ProviderOrganizationID
+	}
+	if data.ProviderEnabled && data.ProviderOrganizationID != "" {
+		ctx := r.Context()
+		organization, err := service.store.Organization(ctx, data.ProviderOrganizationID)
+		if err != nil {
+			http.Error(w, "Login temporarily unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		data.ProviderOrganizationName = organization.Name
+		if organization.Status == "enabled" {
+			providers, err := service.store.Providers(ctx, organization.ID)
+			if err != nil {
+				http.Error(w, "Login temporarily unavailable", http.StatusServiceUnavailable)
+				return
+			}
+			for _, provider := range providers {
+				if provider.Enabled && provider.AuthorizationStatus == "active" &&
+					(provider.Type == "feishu" && service.feishu != nil || provider.Type == "dingtalk" && service.dingtalk != nil) {
+					data.Providers = append(data.Providers, provider)
+				}
+			}
+		}
 	}
 	formTargets := []string{"'self'"}
 	if slices.Contains(client.registration.RedirectURIs, request.Input.RedirectURI) {
@@ -58,8 +94,11 @@ func (service *Service) renderLogin(w http.ResponseWriter, r *http.Request, requ
 			formTargets = append(formTargets, target.Scheme+"://"+target.Host)
 		}
 	}
-	if data.DingTalkEnabled {
+	if data.ProviderEnabled && service.dingtalk != nil {
 		formTargets = append(formTargets, "https://login.dingtalk.com")
+	}
+	if data.ProviderEnabled && service.feishu != nil {
+		formTargets = append(formTargets, "https://accounts.feishu.cn")
 	}
 	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'nonce-"+data.Nonce+"'; form-action "+strings.Join(formTargets, " ")+"; base-uri 'none'; frame-ancestors 'none'")
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
