@@ -23,6 +23,7 @@ Built-in role permissions live in code; assignments remain in `administrators`.
 | Operations | Enforcement status |
 | --- | --- |
 | O5-O6: organization updates | Shared scope/action checks at the existing transactional authorization point, including explicitly submitted unchanged status fields. Private/CLI updates retain their installation-only entry contract. |
+| O4, M4-M6, A2-A3: organization/Member creation, Member changes and administrator assignments | Shared checks for collection create, field-specific update/status.update, and assignment create/delete. Private/CLI Member writes and new update receipts use the same operation mappings under installation-only admission. |
 | Remaining catalog operations | Existing operation-specific authorization; migration to the shared evaluator remains follow-up work. |
 
 The pure evaluator has no permission lock or cross-request allow cache. Its
@@ -54,10 +55,10 @@ update and denial of the next decision. Existing lifecycle locks remain in place
 | Checkpoint | Current behavior and intended boundary |
 | --- | --- |
 | Console read | Resolve the current console session, grant and eligible administrator; constrain the requested organization or global view before querying. The shared evaluator will check the listed read targets here. |
-| Console write | Request-entry authentication/scope/CSRF checks precede the service transaction. Its current `authorizeManagement` check is the authoritative operation boundary. Provider configuration reaches this boundary after optional upstream credential verification and before saving. |
+| Console write | Request-entry authentication/scope/CSRF checks precede the service transaction. Its service authorization check is the authoritative operation boundary; migrated writes use `authorizeAll`. Provider configuration reaches this boundary after optional upstream credential verification and before saving. |
 | Account view | Resolve the SSO session and explicitly selected eligible Member before rendering the account view. An administrator assignment is not required. |
 | Account commit | After fresh target-factor verification, validate the current session, request, source binding and Member in the transaction that commits the binding. Opening the page or starting verification does not reserve authority for this later step. |
-| Private API / CLI | Authenticate the installation credential on every private request, or use the trusted operator entry point. Store transactions still enforce resource and lifecycle constraints. There is no delegated Member policy evaluator on these paths today. |
+| Private API / CLI | Authenticate the installation credential on every private request, or use the trusted operator entry point. Store transactions still enforce resource and lifecycle constraints. Migrated operations also validate their scope/action mapping, without admitting Member credentials to these interfaces. |
 
 After an operation passes its authoritative check, the [short-operation
 completion rule](authorization-boundaries.md#revocation-and-operations-in-progress)
@@ -75,7 +76,7 @@ comes from stored relationships, not caller-supplied path strings.
 | `O` | One organization; ordinary properties and status share this target. |
 | `O/members`, `M` | Member collection and individual Member. |
 | `M/bindings`, `M/bindings/{bindingId}` | Explicit Member bindings; no authority over the shared factor or its other bindings. |
-| `O/roleAssignments`, `O/roleAssignments/{roleAssignmentId}` | Administrator assignments. The current store keys them by Member; the placeholder specifies the logical target, not a new public ID format or API. |
+| `O/roleAssignments`, `O/roleAssignments/{roleAssignmentId}` | Administrator assignments. The current store keys them by Member; the Member ID is the internal logical assignment key used for deletion, not a new public ID format or API. |
 | `O/providers` | Combined directory of configured provider applications. |
 | `O/providers/{providerType}` | Typed destination collection, currently `dingtalk` or `feishu`. |
 | `O/providers/{providerType}/{providerId}` | One provider application. Preserve its namespace ID and resolve it with its type and organization. |
@@ -143,8 +144,8 @@ and `M`. Source and test references are indexed by row ID below.
 | M5 | `PATCH /api/M` with `displayName` | `M` | `update` | Platform; own organization admin | Console write; organization-bound Member lookup and valid display name. |
 | M6 | Same PATCH with `manualBlocked` | `M` | `status.update` | Platform; own organization admin | Console write; preserve administrator availability. Clearing manual block does not clear external departure. Combined fields require M5 and M6. |
 
-The action requirements describe the future evaluator; the composite reads
-currently rely on broad administrator/organization checks. They do not authorize
+Writes use the shared evaluator; the composite reads currently rely on broad
+administrator/organization checks. They do not authorize
 partial responses by silently dropping a denied component. Listing a defined
 representation does not require separate `get` checks on every returned row.
 The administrator flag inside a directory row is part of that representation;
@@ -246,8 +247,8 @@ extra `create` permission that administrators must hold on management history.
 ## Implementation and test evidence
 
 These links identify existing operation code and checks. [Evaluator tests](../internal/authorization/permissions_test.go)
-cover scope/action semantics; [organization authorization tests](../internal/identity/authorization_integration_test.go)
-cover the first migrated operations and the revocation boundary. Other linked
+cover scope/action semantics; [management authorization tests](../internal/identity/authorization_integration_test.go)
+cover organization/Member writes, assignments, and the revocation boundary. Other linked
 tests remain baselines, not proof that every catalog operation is migrated.
 
 | Rows | Implementation | Existing automated checks |

@@ -74,6 +74,13 @@ func (store *Store) UpdateMemberOnce(ctx context.Context, principal Principal, o
 		if !errors.Is(err, pgx.ErrNoRows) {
 			return err
 		}
+		requirements, err := memberUpdateRequirements(organizationID, memberID, change)
+		if err != nil {
+			return err
+		}
+		if err := authorizeAll(ctx, tx, principal, requirements...); err != nil {
+			return err
+		}
 		member, err := updateMember(ctx, tx, organizationID, memberID, change)
 		if err != nil {
 			return err

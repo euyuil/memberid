@@ -168,7 +168,8 @@ invariants.
   `installation-manager` principal. Trusted operator entry points retain their
   separate access contract; they do not acquire Member roles or begin accepting
   ordinary OIDC tokens through this design.
-- The scope/action evaluator is implemented and enforces organization updates.
+- The scope/action evaluator is implemented and enforces organization/Member
+  writes and administrator assignments.
   Migration of the remaining catalog operations is follow-up work. No job system,
   cancellation protocol, or external policy-decision API is added.
 
