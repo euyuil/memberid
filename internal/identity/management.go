@@ -121,7 +121,10 @@ type OrganizationChange struct {
 	Status *string `json:"status"`
 }
 
-func (store *Store) UpdateOrganization(ctx context.Context, id string, change OrganizationChange) (Organization, error) {
+func (store *Store) UpdateOrganization(ctx context.Context, principal Principal, id string, change OrganizationChange) (Organization, error) {
+	if !principal.installation() {
+		return Organization{}, ErrForbidden
+	}
 	var result Organization
 	err := pgx.BeginFunc(ctx, store.pool, func(tx pgx.Tx) error {
 		if err := managementLock(ctx, tx); err != nil {
@@ -132,7 +135,7 @@ func (store *Store) UpdateOrganization(ctx context.Context, id string, change Or
 		if err != nil {
 			return err
 		}
-		return managementEvent(ctx, tx, ManagementActor{}, id, "", "organization.update", change)
+		return managementEvent(ctx, tx, principal, id, "", "organization.update", change)
 	})
 	return result, err
 }
@@ -156,7 +159,10 @@ func validMemberChange(change MemberChange) bool {
 	return (change.DisplayName != nil || change.ManualBlocked != nil) && (change.DisplayName == nil || validText(*change.DisplayName, 128))
 }
 
-func (store *Store) UpdateMember(ctx context.Context, organizationID, memberID string, change MemberChange) (Member, error) {
+func (store *Store) UpdateMember(ctx context.Context, principal Principal, organizationID, memberID string, change MemberChange) (Member, error) {
+	if !principal.installation() {
+		return Member{}, ErrForbidden
+	}
 	var result Member
 	err := pgx.BeginFunc(ctx, store.pool, func(tx pgx.Tx) error {
 		var err error
@@ -164,7 +170,7 @@ func (store *Store) UpdateMember(ctx context.Context, organizationID, memberID s
 		if err != nil {
 			return err
 		}
-		return managementEvent(ctx, tx, ManagementActor{}, organizationID, memberID, "member.update", change)
+		return managementEvent(ctx, tx, principal, organizationID, memberID, "member.update", change)
 	})
 	return result, err
 }

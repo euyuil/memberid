@@ -1146,7 +1146,12 @@ export default function App() {
                         : event.organizationId === data.organization?.id
                           ? data.organization.name
                           : undefined
-                      const operator = event.actor === "installation-operator"
+                      const installationActor =
+                        event.actor === "installation-operator"
+                          ? "安装运维"
+                          : event.actor === "installation-manager"
+                            ? "集成管理服务"
+                            : undefined
                       const currentActor = event.actor === actor.memberId
                       return (
                         <TableRow key={event.id}>
@@ -1154,8 +1159,8 @@ export default function App() {
                             <RecordTime value={event.createdAt} />
                           </TableCell>
                           <TableCell>
-                            {operator ? (
-                              "安装运维"
+                            {installationActor ? (
+                              installationActor
                             ) : (
                               <>
                                 <RecordIdentity

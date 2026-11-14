@@ -33,7 +33,7 @@ func reconciliationFixture(t *testing.T) (*Store, *DingTalkApplications, *DingTa
 
 func TestReconcilePreservesManualBlockAndIndependentIdentity(t *testing.T) {
 	store, _, directory, _, app, member := reconciliationFixture(t)
-	if _, err := store.SetManualBlock(t.Context(), app.OrganizationID, member.ID, true); err != nil {
+	if _, err := store.SetManualBlock(t.Context(), OperatorPrincipal(), app.OrganizationID, member.ID, true); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.SetExternalDeparture(t.Context(), app.OrganizationID, member.ID, true); err != nil {
@@ -89,7 +89,7 @@ func TestReconcileRejectsChangesDuringProviderIO(t *testing.T) {
 				switch kind {
 				case "manual cycle":
 					for _, blocked := range []bool{true, false} {
-						if _, err := store.SetManualBlock(t.Context(), app.OrganizationID, member.ID, blocked); err != nil {
+						if _, err := store.SetManualBlock(t.Context(), OperatorPrincipal(), app.OrganizationID, member.ID, blocked); err != nil {
 							t.Fatal(err)
 						}
 					}
@@ -101,12 +101,12 @@ func TestReconcileRejectsChangesDuringProviderIO(t *testing.T) {
 					}
 				case "organization cycle":
 					for _, status := range []string{"disabled", "enabled"} {
-						if _, err := store.UpdateOrganization(t.Context(), app.OrganizationID, OrganizationChange{Status: &status}); err != nil {
+						if _, err := store.UpdateOrganization(t.Context(), OperatorPrincipal(), app.OrganizationID, OrganizationChange{Status: &status}); err != nil {
 							t.Fatal(err)
 						}
 					}
 				case "rotation":
-					if _, err := apps.Configure(t.Context(), app.OrganizationID, DingTalkApplicationInput{CorpID: app.CorpID, ClientID: app.ClientID, ClientSecret: "new-synthetic-secret", ExpectedRevision: app.Revision}); err != nil {
+					if _, err := apps.Configure(t.Context(), OperatorPrincipal(), app.OrganizationID, DingTalkApplicationInput{CorpID: app.CorpID, ClientID: app.ClientID, ClientSecret: "new-synthetic-secret", ExpectedRevision: app.Revision}); err != nil {
 						t.Fatal(err)
 					}
 				case "authorization":
@@ -118,7 +118,7 @@ func TestReconcileRejectsChangesDuringProviderIO(t *testing.T) {
 					if err != nil || len(bindings) != 1 {
 						t.Fatal(err)
 					}
-					if err := store.RevokeBinding(t.Context(), app.OrganizationID, member.ID, bindings[0].FactorID); err != nil {
+					if err := store.RevokeBinding(t.Context(), OperatorPrincipal(), app.OrganizationID, member.ID, bindings[0].FactorID); err != nil {
 						t.Fatal(err)
 					}
 				case "fresh login":
@@ -229,12 +229,12 @@ func TestReconciliationPassContinuesAcrossOrganizations(t *testing.T) {
 		organizations = append(organizations, organization)
 	}
 	for index, organization := range organizations {
-		if _, err := apps.Configure(t.Context(), organization.ID, DingTalkApplicationInput{CorpID: "example-corp", ClientID: fmt.Sprintf("client-%d", index), ClientSecret: "synthetic-secret"}); err != nil {
+		if _, err := apps.Configure(t.Context(), OperatorPrincipal(), organization.ID, DingTalkApplicationInput{CorpID: "example-corp", ClientID: fmt.Sprintf("client-%d", index), ClientSecret: "synthetic-secret"}); err != nil {
 			t.Fatal(err)
 		}
 	}
 	disabled := "disabled"
-	if _, err := store.UpdateOrganization(t.Context(), organizations[2].ID, OrganizationChange{Status: &disabled}); err != nil {
+	if _, err := store.UpdateOrganization(t.Context(), OperatorPrincipal(), organizations[2].ID, OrganizationChange{Status: &disabled}); err != nil {
 		t.Fatal(err)
 	}
 	calls := map[string]int{}

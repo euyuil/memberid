@@ -14,8 +14,8 @@ var (
 	ErrLastAdministrator = errors.New("the last available administrator must be retained")
 )
 
-// ManagementActor is derived by the console from an authenticated, server-side session.
-// The empty actor is reserved for trusted operator entry points, never HTTP input.
+// ManagementActor is the console presentation of a currently eligible administrator.
+// Its display and role fields are not authority; mutations accept Principal instead.
 type ManagementActor struct {
 	MemberID       string `json:"memberId"`
 	OrganizationID string `json:"organizationId"`
@@ -46,11 +46,14 @@ func managementActor(ctx context.Context, db queryer, memberID, grantID string) 
 	return actor, err
 }
 
-func authorizeManagement(ctx context.Context, tx pgx.Tx, actor ManagementActor, organizationID string, platformOnly bool) error {
-	if actor.MemberID == "" {
+func authorizeManagement(ctx context.Context, tx pgx.Tx, principal Principal, organizationID string, platformOnly bool) error {
+	if principal.kind == operatorPrincipal {
 		return nil
 	}
-	current, err := managementActor(ctx, tx, actor.MemberID, actor.GrantID)
+	if principal.kind != memberPrincipal {
+		return ErrForbidden
+	}
+	current, err := managementActor(ctx, tx, principal.memberID, principal.grantID)
 	if err != nil {
 		return err
 	}
@@ -87,20 +90,20 @@ func preserveAdministrators(ctx context.Context, tx pgx.Tx, organizationID strin
 	return nil
 }
 
-func managementEvent(ctx context.Context, tx pgx.Tx, actor ManagementActor, organizationID, memberID, action string, changes any) error {
-	principal := actor.MemberID
-	if principal == "" {
-		principal = "installation-operator"
+func managementEvent(ctx context.Context, tx pgx.Tx, principal Principal, organizationID, memberID, action string, changes any) error {
+	actorID, err := principal.auditID()
+	if err != nil {
+		return err
 	}
 	data, err := json.Marshal(changes)
 	if err != nil {
 		return err
 	}
-	_, err = tx.Exec(ctx, "INSERT INTO management_events(actor,organization_id,member_id,action,changes) VALUES($1,$2,NULLIF($3,''),$4,$5)", principal, organizationID, memberID, action, data)
+	_, err = tx.Exec(ctx, "INSERT INTO management_events(actor,organization_id,member_id,action,changes) VALUES($1,$2,NULLIF($3,''),$4,$5)", actorID, organizationID, memberID, action, data)
 	return err
 }
 
-func (store *Store) SetAdministrator(ctx context.Context, actor ManagementActor, organizationID, memberID string, enabled bool) error {
+func (store *Store) SetAdministrator(ctx context.Context, principal Principal, organizationID, memberID string, enabled bool) error {
 	if !ValidID(organizationID, OrganizationKind) || !ValidID(memberID, MemberKind) {
 		return ErrInvalid
 	}
@@ -108,7 +111,7 @@ func (store *Store) SetAdministrator(ctx context.Context, actor ManagementActor,
 		if err := managementLock(ctx, tx); err != nil {
 			return err
 		}
-		if err := authorizeManagement(ctx, tx, actor, organizationID, organizationID == SystemOrganizationID); err != nil {
+		if err := authorizeManagement(ctx, tx, principal, organizationID, organizationID == SystemOrganizationID); err != nil {
 			return err
 		}
 		if _, err := readMember(tx.QueryRow(ctx, "SELECT "+memberColumns+" FROM members WHERE id=$1 AND organization_id=$2", memberID, organizationID)); err != nil {
@@ -136,7 +139,7 @@ func (store *Store) SetAdministrator(ctx context.Context, actor ManagementActor,
 		if err = preserveAdministrators(ctx, tx, organizationID, before); err != nil {
 			return err
 		}
-		return managementEvent(ctx, tx, actor, organizationID, memberID, "administrator.update", map[string]bool{"enabled": enabled})
+		return managementEvent(ctx, tx, principal, organizationID, memberID, "administrator.update", map[string]bool{"enabled": enabled})
 	})
 }
 
@@ -187,8 +190,8 @@ func (store *Store) ManagementEvents(ctx context.Context, organizationID, member
 
 // Manage performs a bounded console mutation with authorization and audit in
 // the same transaction. Only this fixed action set is available to browsers.
-func (store *Store) Manage(ctx context.Context, actor ManagementActor, action, organizationID, memberID string, change ManagementChange) (any, error) {
-	if actor.MemberID == "" {
+func (store *Store) Manage(ctx context.Context, principal Principal, action, organizationID, memberID string, change ManagementChange) (any, error) {
+	if principal.kind != memberPrincipal {
 		return nil, ErrForbidden
 	}
 	var result any
@@ -196,7 +199,7 @@ func (store *Store) Manage(ctx context.Context, actor ManagementActor, action, o
 		if err := managementLock(ctx, tx); err != nil {
 			return err
 		}
-		if err := authorizeManagement(ctx, tx, actor, organizationID, action == "organization.create" || change.Status != nil); err != nil {
+		if err := authorizeManagement(ctx, tx, principal, organizationID, action == "organization.create" || change.Status != nil); err != nil {
 			return err
 		}
 		var err error
@@ -229,7 +232,7 @@ func (store *Store) Manage(ctx context.Context, actor ManagementActor, action, o
 		if err != nil {
 			return storageError(err)
 		}
-		return managementEvent(ctx, tx, actor, organizationID, memberID, action, change)
+		return managementEvent(ctx, tx, principal, organizationID, memberID, action, change)
 	})
 	return result, err
 }

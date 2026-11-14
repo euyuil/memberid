@@ -62,7 +62,7 @@ func New(store *identity.Store, secretSHA256 string, applications *identity.Ding
 	})
 	h.routes.HandleFunc("POST /v1/organizations/{organizationId}/members/{memberId}/bindings", h.bind)
 	h.routes.HandleFunc("DELETE /v1/organizations/{organizationId}/members/{memberId}/bindings/{factorId}", func(w http.ResponseWriter, r *http.Request) {
-		err := h.store.RevokeBinding(r.Context(), r.PathValue("organizationId"), r.PathValue("memberId"), r.PathValue("factorId"))
+		err := h.store.RevokeBinding(r.Context(), identity.InstallationManagerPrincipal(), r.PathValue("organizationId"), r.PathValue("memberId"), r.PathValue("factorId"))
 		respond(w, http.StatusNoContent, nil, err)
 	})
 	h.routes.HandleFunc("GET /v1/factors/{factorId}", func(w http.ResponseWriter, r *http.Request) {
@@ -231,7 +231,7 @@ func (h *Handler) createOrganization(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &input) {
 		return
 	}
-	value, err := h.store.CreateOrganization(r.Context(), input.ID, input.Name)
+	value, err := h.store.CreateOrganization(r.Context(), identity.InstallationManagerPrincipal(), input.ID, input.Name)
 	respond(w, http.StatusCreated, value, err)
 }
 func (h *Handler) updateOrganization(w http.ResponseWriter, r *http.Request) {
@@ -239,7 +239,7 @@ func (h *Handler) updateOrganization(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &input) {
 		return
 	}
-	value, err := h.store.UpdateOrganization(r.Context(), r.PathValue("organizationId"), input)
+	value, err := h.store.UpdateOrganization(r.Context(), identity.InstallationManagerPrincipal(), r.PathValue("organizationId"), input)
 	respond(w, http.StatusOK, value, err)
 }
 func (h *Handler) organizations(w http.ResponseWriter, r *http.Request) {
@@ -258,7 +258,7 @@ func (h *Handler) createMember(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &input) {
 		return
 	}
-	value, err := h.store.CreateMember(r.Context(), r.PathValue("organizationId"), input.ID, input.DisplayName)
+	value, err := h.store.CreateMember(r.Context(), identity.InstallationManagerPrincipal(), r.PathValue("organizationId"), input.ID, input.DisplayName)
 	respond(w, http.StatusCreated, value, err)
 }
 func (h *Handler) updateMember(w http.ResponseWriter, r *http.Request) {
@@ -266,7 +266,7 @@ func (h *Handler) updateMember(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &input) {
 		return
 	}
-	value, err := h.store.UpdateMember(r.Context(), r.PathValue("organizationId"), r.PathValue("memberId"), input)
+	value, err := h.store.UpdateMember(r.Context(), identity.InstallationManagerPrincipal(), r.PathValue("organizationId"), r.PathValue("memberId"), input)
 	respond(w, http.StatusOK, value, err)
 }
 func (h *Handler) members(w http.ResponseWriter, r *http.Request) {
@@ -284,7 +284,7 @@ func (h *Handler) bind(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &input) {
 		return
 	}
-	value, err := h.store.BindFactor(r.Context(), r.PathValue("organizationId"), r.PathValue("memberId"), input.FactorID)
+	value, err := h.store.BindFactor(r.Context(), identity.InstallationManagerPrincipal(), r.PathValue("organizationId"), r.PathValue("memberId"), input.FactorID)
 	respond(w, http.StatusOK, value, err)
 }
 func (h *Handler) eligibility(w http.ResponseWriter, r *http.Request) {
@@ -316,6 +316,6 @@ func (h *Handler) enrollOrganization(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &input) {
 		return
 	}
-	value, err := h.store.EnrollOrganization(r.Context(), input)
+	value, err := h.store.EnrollOrganization(r.Context(), identity.InstallationManagerPrincipal(), input)
 	respond(w, http.StatusOK, value, err)
 }

@@ -39,7 +39,7 @@ func manageBinding(ctx context.Context, args []string, stdout, stderr io.Writer)
 	if args[0] == "factor" {
 		result, err = store.PhoneFactor(ctx, phone)
 	} else {
-		result, err = store.BindFactor(ctx, organizationID, memberID, factorID)
+		result, err = store.BindFactor(ctx, identity.OperatorPrincipal(), organizationID, memberID, factorID)
 	}
 	if err != nil {
 		return err

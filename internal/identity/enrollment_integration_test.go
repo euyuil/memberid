@@ -34,7 +34,10 @@ func TestConcurrentEnrollmentAndImmutableReceipt(t *testing.T) {
 	}
 	results := make(chan outcome, 12)
 	for range 12 {
-		go func() { receipt, err := store.EnrollOrganization(t.Context(), input); results <- outcome{receipt, err} }()
+		go func() {
+			receipt, err := store.EnrollOrganization(t.Context(), OperatorPrincipal(), input)
+			results <- outcome{receipt, err}
+		}()
 	}
 	var first EnrollmentReceipt
 	for index := range 12 {
@@ -53,7 +56,7 @@ func TestConcurrentEnrollmentAndImmutableReceipt(t *testing.T) {
 	}
 	uppercase := input
 	uppercase.BindingID = strings.ToUpper(input.BindingID)
-	canonical, err := store.EnrollOrganization(t.Context(), uppercase)
+	canonical, err := store.EnrollOrganization(t.Context(), OperatorPrincipal(), uppercase)
 	if err != nil || canonical != first {
 		t.Fatal("UUID casing changed the accepted identity", err)
 	}
@@ -65,20 +68,20 @@ func TestConcurrentEnrollmentAndImmutableReceipt(t *testing.T) {
 	if err != nil || !eligibility.Eligible || eligibility.BindingID != input.BindingID {
 		t.Fatal("enrollment binding missing", err)
 	}
-	if _, err := store.SetManualBlock(t.Context(), input.OrganizationID, input.MemberID, true); err != nil {
+	if _, err := store.SetManualBlock(t.Context(), OperatorPrincipal(), input.OrganizationID, input.MemberID, true); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.RevokeBinding(t.Context(), input.OrganizationID, input.MemberID, input.FactorID); err != nil {
+	if err := store.RevokeBinding(t.Context(), OperatorPrincipal(), input.OrganizationID, input.MemberID, input.FactorID); err != nil {
 		t.Fatal(err)
 	}
 	renamed := "Renamed organization"
-	if _, err := store.UpdateOrganization(t.Context(), input.OrganizationID, OrganizationChange{Name: &renamed}); err != nil {
+	if _, err := store.UpdateOrganization(t.Context(), OperatorPrincipal(), input.OrganizationID, OrganizationChange{Name: &renamed}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.pool.Exec(t.Context(), "UPDATE authentication_factors SET status='disabled' WHERE id=$1", input.FactorID); err != nil {
 		t.Fatal(err)
 	}
-	replay, err := store.EnrollOrganization(t.Context(), input)
+	replay, err := store.EnrollOrganization(t.Context(), OperatorPrincipal(), input)
 	if err != nil || replay != first {
 		t.Fatal("accepted request lost its receipt after later changes", err)
 	}
@@ -98,7 +101,7 @@ func TestConcurrentEnrollmentAndImmutableReceipt(t *testing.T) {
 	} {
 		different := input
 		change(&different)
-		if _, err := store.EnrollOrganization(t.Context(), different); !errors.Is(err, ErrConflict) {
+		if _, err := store.EnrollOrganization(t.Context(), OperatorPrincipal(), different); !errors.Is(err, ErrConflict) {
 			t.Fatal("mismatched replay accepted", err)
 		}
 	}
@@ -109,7 +112,7 @@ func TestEnrollmentCollisionRollsBackAndCanRetry(t *testing.T) {
 	existingOrganization, existingMember := organizationAndMember(t, store)
 	input := enrollmentInput(t, store)
 	input.MemberID = existingMember.ID
-	if _, err := store.EnrollOrganization(t.Context(), input); !errors.Is(err, ErrMemberIDConflict) {
+	if _, err := store.EnrollOrganization(t.Context(), OperatorPrincipal(), input); !errors.Is(err, ErrMemberIDConflict) {
 		t.Fatal("existing Member was adopted", err)
 	}
 	if _, err := store.Organization(t.Context(), input.OrganizationID); !errors.Is(err, ErrNotFound) {
@@ -126,19 +129,19 @@ func TestEnrollmentCollisionRollsBackAndCanRetry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.EnrollOrganization(t.Context(), input); err != nil {
+	if _, err := store.EnrollOrganization(t.Context(), OperatorPrincipal(), input); err != nil {
 		t.Fatal("safe retry failed", err)
 	}
 	second := enrollmentInput(t, store)
 	// A duplicate binding identifier must roll back the entire second enrollment.
-	if _, err := store.EnrollOrganization(t.Context(), second); !errors.Is(err, ErrConflict) {
+	if _, err := store.EnrollOrganization(t.Context(), OperatorPrincipal(), second); !errors.Is(err, ErrConflict) {
 		t.Fatal("duplicate binding accepted", err)
 	}
 	if _, err := store.Organization(t.Context(), second.OrganizationID); !errors.Is(err, ErrNotFound) {
 		t.Fatal("binding collision left partial data", err)
 	}
 	second.BindingID = "00000000-0000-4000-8000-000000000002"
-	if _, err := store.EnrollOrganization(t.Context(), second); err != nil {
+	if _, err := store.EnrollOrganization(t.Context(), OperatorPrincipal(), second); err != nil {
 		t.Fatal(err)
 	}
 	if second.MemberID == input.MemberID {
@@ -173,12 +176,12 @@ func TestEnrollmentRequiresActiveVerifiedPhoneAndNewOrganization(t *testing.T) {
 				}
 				input.FactorID = factor.ID
 			case "existing organization":
-				if _, err := store.CreateOrganization(t.Context(), input.OrganizationID, input.Name); err != nil {
+				if _, err := store.CreateOrganization(t.Context(), OperatorPrincipal(), input.OrganizationID, input.Name); err != nil {
 					t.Fatal(err)
 				}
 				want = ErrConflict
 			}
-			if _, err := store.EnrollOrganization(t.Context(), input); !errors.Is(err, want) {
+			if _, err := store.EnrollOrganization(t.Context(), OperatorPrincipal(), input); !errors.Is(err, want) {
 				t.Fatalf("error=%v, want %v", err, want)
 			}
 			if _, err := store.Enrollment(t.Context(), input.OrganizationID); !errors.Is(err, ErrNotFound) {
@@ -194,7 +197,7 @@ func TestEnrollmentInputValidation(t *testing.T) {
 	for _, change := range []func(*OrganizationEnrollment){func(v *OrganizationEnrollment) { v.Name = " " }, func(v *OrganizationEnrollment) { v.Name = strings.Repeat("x", 129) }, func(v *OrganizationEnrollment) { v.BindingID = "not-a-uuid" }, func(v *OrganizationEnrollment) { v.MemberID = v.OrganizationID }} {
 		invalid := input
 		change(&invalid)
-		if _, err := store.EnrollOrganization(t.Context(), invalid); !errors.Is(err, ErrInvalid) {
+		if _, err := store.EnrollOrganization(t.Context(), OperatorPrincipal(), invalid); !errors.Is(err, ErrInvalid) {
 			t.Fatal("invalid request accepted", err)
 		}
 	}
@@ -220,7 +223,7 @@ func TestConflictingConcurrentEnrollmentsAcceptOneTuple(t *testing.T) {
 	for _, input := range []OrganizationEnrollment{first, second} {
 		go func() {
 			<-start
-			receipt, err := store.EnrollOrganization(t.Context(), input)
+			receipt, err := store.EnrollOrganization(t.Context(), OperatorPrincipal(), input)
 			results <- outcome{input, receipt, err}
 		}()
 	}

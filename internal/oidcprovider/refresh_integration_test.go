@@ -164,7 +164,7 @@ func TestRefreshExpiryEligibilityAndRevocation(t *testing.T) {
 					t.Fatal(err)
 				}
 			case "blocked":
-				if _, err := f.store.SetManualBlock(t.Context(), f.member.OrganizationID, f.member.ID, true); err != nil {
+				if _, err := f.store.SetManualBlock(t.Context(), identity.OperatorPrincipal(), f.member.OrganizationID, f.member.ID, true); err != nil {
 					t.Fatal(err)
 				}
 			case "revoked":

@@ -69,7 +69,7 @@ func consoleLoginTo(t *testing.T, f *fixture, server *httptest.Server, member, r
 
 func TestConsoleLoginReturnsToRequestedPage(t *testing.T) {
 	f := newFixture(t)
-	if err := f.store.SetAdministrator(t.Context(), identity.ManagementActor{}, f.member.OrganizationID, f.member.ID, true); err != nil {
+	if err := f.store.SetAdministrator(t.Context(), identity.OperatorPrincipal(), f.member.OrganizationID, f.member.ID, true); err != nil {
 		t.Fatal(err)
 	}
 	server := consoleFixture(t, f)
@@ -152,7 +152,7 @@ func consoleJSON(t *testing.T, f *fixture, server *httptest.Server, method, path
 
 func TestConsoleOIDCOrganizationScopeAndRevocation(t *testing.T) {
 	f := newFixture(t)
-	if e := f.store.SetAdministrator(t.Context(), identity.ManagementActor{}, f.member.OrganizationID, f.member.ID, true); e != nil {
+	if e := f.store.SetAdministrator(t.Context(), identity.OperatorPrincipal(), f.member.OrganizationID, f.member.ID, true); e != nil {
 		t.Fatal(e)
 	}
 	server := consoleFixture(t, f)
@@ -187,7 +187,7 @@ func TestConsoleOIDCOrganizationScopeAndRevocation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = f.store.BindFactor(t.Context(), f.member.OrganizationID, created["id"].(string), factor.ID); err != nil {
+	if _, err = f.store.BindFactor(t.Context(), identity.OperatorPrincipal(), f.member.OrganizationID, created["id"].(string), factor.ID); err != nil {
 		t.Fatal(err)
 	}
 	consoleJSON(t, f, server, "PUT", base+"/members/"+created["id"].(string)+"/administrator", csrf, `{"enabled":true}`, 200)
@@ -201,7 +201,7 @@ func TestConsoleOIDCOrganizationScopeAndRevocation(t *testing.T) {
 
 func TestConsoleMemberSearchAcrossPagesAndWithinOrganization(t *testing.T) {
 	f := newFixture(t)
-	if err := f.store.SetAdministrator(t.Context(), identity.ManagementActor{}, f.member.OrganizationID, f.member.ID, true); err != nil {
+	if err := f.store.SetAdministrator(t.Context(), identity.OperatorPrincipal(), f.member.OrganizationID, f.member.ID, true); err != nil {
 		t.Fatal(err)
 	}
 	server := consoleFixture(t, f)
@@ -210,7 +210,7 @@ func TestConsoleMemberSearchAcrossPagesAndWithinOrganization(t *testing.T) {
 
 	// Choose the search target from the second page so its position is deterministic.
 	for range 50 {
-		if _, err := f.store.CreateMember(t.Context(), f.member.OrganizationID, "", "Other member"); err != nil {
+		if _, err := f.store.CreateMember(t.Context(), identity.OperatorPrincipal(), f.member.OrganizationID, "", "Other member"); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -226,7 +226,7 @@ func TestConsoleMemberSearchAcrossPagesAndWithinOrganization(t *testing.T) {
 	}
 	targetID := members[0].(map[string]any)["id"].(string)
 	name := "Needle 100%"
-	if _, err := f.store.UpdateMember(t.Context(), f.member.OrganizationID, targetID, identity.MemberChange{DisplayName: &name}); err != nil {
+	if _, err := f.store.UpdateMember(t.Context(), identity.OperatorPrincipal(), f.member.OrganizationID, targetID, identity.MemberChange{DisplayName: &name}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := f.store.SetExternalDeparture(t.Context(), f.member.OrganizationID, targetID, true); err != nil {
@@ -258,7 +258,7 @@ func TestConsoleMemberSearchAcrossPagesAndWithinOrganization(t *testing.T) {
 
 func TestConsoleAllOrganizationMembers(t *testing.T) {
 	f := newFixture(t)
-	operator, err := f.store.CreateMember(t.Context(), identity.SystemOrganizationID, "", "Platform operator")
+	operator, err := f.store.CreateMember(t.Context(), identity.OperatorPrincipal(), identity.SystemOrganizationID, "", "Platform operator")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -266,11 +266,11 @@ func TestConsoleAllOrganizationMembers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.store.BindFactor(t.Context(), operator.OrganizationID, operator.ID, factor.ID); err != nil {
+	if _, err := f.store.BindFactor(t.Context(), identity.OperatorPrincipal(), operator.OrganizationID, operator.ID, factor.ID); err != nil {
 		t.Fatal(err)
 	}
 	for _, member := range []identity.Member{operator, f.member} {
-		if err := f.store.SetAdministrator(t.Context(), identity.ManagementActor{}, member.OrganizationID, member.ID, true); err != nil {
+		if err := f.store.SetAdministrator(t.Context(), identity.OperatorPrincipal(), member.OrganizationID, member.ID, true); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -279,7 +279,7 @@ func TestConsoleAllOrganizationMembers(t *testing.T) {
 	consoleLogin(t, f, server, operator.ID)
 
 	for range 50 {
-		if _, err := f.store.CreateMember(t.Context(), f.otherMember.OrganizationID, "", "Directory fixture"); err != nil {
+		if _, err := f.store.CreateMember(t.Context(), identity.OperatorPrincipal(), f.otherMember.OrganizationID, "", "Directory fixture"); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -342,7 +342,7 @@ func TestConsoleAllOrganizationMembers(t *testing.T) {
 
 func TestConsolePlatformLoginAndPersonalAudit(t *testing.T) {
 	f := newFixture(t)
-	m, e := f.store.CreateMember(t.Context(), identity.SystemOrganizationID, "", "Platform operator")
+	m, e := f.store.CreateMember(t.Context(), identity.OperatorPrincipal(), identity.SystemOrganizationID, "", "Platform operator")
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -350,10 +350,10 @@ func TestConsolePlatformLoginAndPersonalAudit(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	if _, e = f.store.BindFactor(t.Context(), m.OrganizationID, m.ID, factor.ID); e != nil {
+	if _, e = f.store.BindFactor(t.Context(), identity.OperatorPrincipal(), m.OrganizationID, m.ID, factor.ID); e != nil {
 		t.Fatal(e)
 	}
-	if e = f.store.SetAdministrator(t.Context(), identity.ManagementActor{}, m.OrganizationID, m.ID, true); e != nil {
+	if e = f.store.SetAdministrator(t.Context(), identity.OperatorPrincipal(), m.OrganizationID, m.ID, true); e != nil {
 		t.Fatal(e)
 	}
 	server := consoleFixture(t, f)
@@ -390,7 +390,7 @@ func TestConsoleInvalidatesExistingSession(t *testing.T) {
 	for _, change := range []string{"administrator", "member", "organization", "grant", "sso", "console idle", "console absolute"} {
 		t.Run(change, func(t *testing.T) {
 			f := newFixture(t)
-			if err := f.store.SetAdministrator(t.Context(), identity.ManagementActor{}, f.member.OrganizationID, f.member.ID, true); err != nil {
+			if err := f.store.SetAdministrator(t.Context(), identity.OperatorPrincipal(), f.member.OrganizationID, f.member.ID, true); err != nil {
 				t.Fatal(err)
 			}
 			server := consoleFixture(t, f)

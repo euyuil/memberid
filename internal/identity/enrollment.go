@@ -48,7 +48,10 @@ func (store *Store) Enrollment(ctx context.Context, organizationID string) (Enro
 
 // EnrollOrganization records a privileged, atomic provisioning decision using an already verified phone factor.
 // An accepted replay returns its original receipt and never changes current identity or eligibility.
-func (store *Store) EnrollOrganization(ctx context.Context, input OrganizationEnrollment) (EnrollmentReceipt, error) {
+func (store *Store) EnrollOrganization(ctx context.Context, principal Principal, input OrganizationEnrollment) (EnrollmentReceipt, error) {
+	if !principal.installation() {
+		return EnrollmentReceipt{}, ErrForbidden
+	}
 	var receipt EnrollmentReceipt
 	if input.OrganizationID == SystemOrganizationID {
 		return receipt, ErrInvalid

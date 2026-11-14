@@ -9,11 +9,17 @@ import (
 // PrepareSystemDingTalkAdmission is a trusted installation-operator operation.
 // It authorizes one binding after fresh provider verification; it creates neither
 // a verified factor nor management authority. Empty unionID cancels a pending target.
-func (store *Store) PrepareSystemDingTalkAdmission(ctx context.Context, memberID, unionID string) error {
-	return store.PrepareSystemDingTalkAdmissionForSource(ctx, memberID, unionID, "")
+func (store *Store) PrepareSystemDingTalkAdmission(ctx context.Context, principal Principal, memberID, unionID string) error {
+	if principal.kind != operatorPrincipal {
+		return ErrForbidden
+	}
+	return store.PrepareSystemDingTalkAdmissionForSource(ctx, principal, memberID, unionID, "")
 }
 
-func (store *Store) PrepareSystemDingTalkAdmissionForSource(ctx context.Context, memberID, unionID, providerID string) error {
+func (store *Store) PrepareSystemDingTalkAdmissionForSource(ctx context.Context, principal Principal, memberID, unionID, providerID string) error {
+	if principal.kind != operatorPrincipal {
+		return ErrForbidden
+	}
 	if !ValidID(memberID, MemberKind) || unionID != "" && !validText(unionID, 512) {
 		return ErrInvalid
 	}
@@ -49,6 +55,6 @@ func (store *Store) PrepareSystemDingTalkAdmissionForSource(ctx context.Context,
 				return storageError(err)
 			}
 		}
-		return managementEvent(ctx, tx, ManagementActor{}, SystemOrganizationID, memberID, "dingtalk.admission", map[string]bool{"enabled": unionID != ""})
+		return managementEvent(ctx, tx, principal, SystemOrganizationID, memberID, "dingtalk.admission", map[string]bool{"enabled": unionID != ""})
 	})
 }

@@ -15,7 +15,7 @@ import (
 func workerFixture(t *testing.T) (*Store, *DingTalkDirectory, <-chan struct{}, *atomic.Int64) {
 	t.Helper()
 	store, apps, organization, _ := applicationFixture(t)
-	if _, err := apps.Configure(t.Context(), organization.ID, DingTalkApplicationInput{CorpID: "example-corp", ClientID: "example-client", ClientSecret: "synthetic-secret"}); err != nil {
+	if _, err := apps.Configure(t.Context(), OperatorPrincipal(), organization.ID, DingTalkApplicationInput{CorpID: "example-corp", ClientID: "example-client", ClientSecret: "synthetic-secret"}); err != nil {
 		t.Fatal(err)
 	}
 	// A leadership session must not exhaust a one-connection application query pool.

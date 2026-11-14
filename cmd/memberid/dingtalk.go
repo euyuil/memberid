@@ -99,7 +99,7 @@ func manageDingTalk(ctx context.Context, args []string, stdout, stderr io.Writer
 	} else if args[0] == "sync" {
 		result, err = applications.SynchronizeSource(ctx, *organizationID, *namespace)
 	} else {
-		result, err = applications.ConfigureSource(ctx, *organizationID, *namespace, input)
+		result, err = applications.ConfigureSource(ctx, identity.OperatorPrincipal(), *organizationID, *namespace, input)
 	}
 	if err != nil {
 		return err

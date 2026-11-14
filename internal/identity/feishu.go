@@ -68,7 +68,7 @@ func (apps *FeishuApplications) lookup(ctx context.Context, db queryer, organiza
 	return readFeishu(db.QueryRow(ctx, "SELECT "+feishuColumns+" FROM feishu_applications WHERE organization_id=$1 AND namespace=$2", organizationID, namespace))
 }
 
-func (apps *FeishuApplications) configure(ctx context.Context, actor ManagementActor, organizationID, namespace string, input ProviderInput) (Provider, error) {
+func (apps *FeishuApplications) configure(ctx context.Context, principal Principal, organizationID, namespace string, input ProviderInput) (Provider, error) {
 	if !validProviderInput(organizationID, namespace, input, true) || organizationID == SystemOrganizationID ||
 		!feishu.ValidApplication(input.TenantID, input.ClientID) || input.ClientSecret != "" && !feishu.ValidSecret(input.ClientSecret) {
 		return Provider{}, ErrInvalid
@@ -113,7 +113,7 @@ func (apps *FeishuApplications) configure(ctx context.Context, actor ManagementA
 	encrypted := apps.cipher.Seal(nil, nil, []byte(secret), feishuAAD(candidate))
 	var result feishuApplication
 	err = pgx.BeginFunc(ctx, apps.store.pool, func(tx pgx.Tx) error {
-		before, err := lockProviderManagement(ctx, tx, actor, organization, current.Enabled && !candidate.Enabled)
+		before, err := lockProviderManagement(ctx, tx, principal, organization, current.Enabled && !candidate.Enabled)
 		if err != nil {
 			return err
 		}
@@ -134,7 +134,7 @@ func (apps *FeishuApplications) configure(ctx context.Context, actor ManagementA
 		if err != nil {
 			return err
 		}
-		return finishProviderManagement(ctx, tx, actor, "feishu", organizationID, result.ID, result.DisplayName, result.Enabled, before)
+		return finishProviderManagement(ctx, tx, principal, "feishu", organizationID, result.ID, result.DisplayName, result.Enabled, before)
 	})
 	return result.Provider, err
 }

@@ -37,7 +37,7 @@ func (s *Service) registerProviderRoutes(installation *config.Loaded, dingTalkPr
 			return
 		}
 		actor := r.Context().Value(sessionKey{}).(session).actor
-		item, err := identity.ConfigureProvider(r.Context(), actor, r.PathValue("organizationId"), r.PathValue("kind"), r.PathValue("providerId"), input, dingTalk, feishuApps)
+		item, err := identity.ConfigureProvider(r.Context(), actor.Principal(), r.PathValue("organizationId"), r.PathValue("kind"), r.PathValue("providerId"), input, dingTalk, feishuApps)
 		respond(w, item, err)
 	}
 	s.routes.HandleFunc("POST "+path+"/{kind}", configure)
