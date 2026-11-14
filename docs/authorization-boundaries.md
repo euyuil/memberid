@@ -169,7 +169,7 @@ invariants.
   separate access contract; they do not acquire Member roles or begin accepting
   ordinary OIDC tokens through this design.
 - The scope/action evaluator is implemented and enforces organization/Member
-  writes and administrator assignments.
+  writes, administrator assignments and core management reads.
   Migration of the remaining catalog operations is follow-up work. No job system,
   cancellation protocol, or external policy-decision API is added.
 

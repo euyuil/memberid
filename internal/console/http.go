@@ -90,7 +90,7 @@ func New(ctx context.Context, store *identity.Store, installation *config.Loaded
 	s.routes.HandleFunc("GET /api/organizations", s.organizations)
 	s.routes.HandleFunc("POST /api/organizations", s.mutate)
 	s.routes.HandleFunc("GET /api/organizations/{organizationId}", func(w http.ResponseWriter, r *http.Request) {
-		v, e := s.store.Organization(r.Context(), r.PathValue("organizationId"))
+		v, e := s.store.ManagementOrganization(r.Context(), r.Context().Value(sessionKey{}).(session).actor.Principal(), r.PathValue("organizationId"))
 		respond(w, v, e)
 	})
 	s.routes.HandleFunc("PATCH /api/organizations/{organizationId}", s.mutate)
@@ -280,13 +280,7 @@ func (s *Service) logout(w http.ResponseWriter, r *http.Request) {
 	respond(w, map[string]bool{"signedOut": true}, err)
 }
 func (s *Service) organizations(w http.ResponseWriter, r *http.Request) {
-	a := r.Context().Value(sessionKey{}).(session).actor
-	if !a.Platform {
-		v, e := s.store.Organization(r.Context(), a.OrganizationID)
-		respond(w, identity.Page[identity.Organization]{Items: []identity.Organization{v}}, e)
-		return
-	}
-	v, e := s.store.Organizations(r.Context(), r.URL.Query().Get("after"), 50)
+	v, e := s.store.ManagementOrganizations(r.Context(), r.Context().Value(sessionKey{}).(session).actor.Principal(), r.URL.Query().Get("after"), 50)
 	respond(w, v, e)
 }
 func memberDirectoryFilter(q url.Values) identity.MemberDirectoryFilter {
@@ -297,39 +291,18 @@ func memberDirectoryFilter(q url.Values) identity.MemberDirectoryFilter {
 	}
 }
 func (s *Service) allOrganizationMembers(w http.ResponseWriter, r *http.Request) {
-	if !r.Context().Value(sessionKey{}).(session).actor.Platform {
-		problem(w, 403, "forbidden")
-		return
-	}
 	q := r.URL.Query()
-	page, err := s.store.AllOrganizationMembers(r.Context(), q.Get("after"), 50, memberDirectoryFilter(q))
+	page, err := s.store.ManagementMemberDirectory(r.Context(), r.Context().Value(sessionKey{}).(session).actor.Principal(), q.Get("after"), 50, memberDirectoryFilter(q))
 	respond(w, page, err)
 }
 func (s *Service) members(w http.ResponseWriter, r *http.Request) {
-	org := r.PathValue("organizationId")
 	q := r.URL.Query()
-	v, e := s.store.MemberDirectory(r.Context(), org, q.Get("after"), 50, memberDirectoryFilter(q))
-	if e != nil {
-		respond(w, nil, e)
-		return
-	}
-	ids, e := s.store.AdministratorIDs(r.Context(), org)
-	respond(w, map[string]any{"items": v.Items, "nextAfter": v.NextAfter, "administratorIds": ids}, e)
+	page, err := s.store.ManagementMembers(r.Context(), r.Context().Value(sessionKey{}).(session).actor.Principal(), r.PathValue("organizationId"), q.Get("after"), 50, memberDirectoryFilter(q))
+	respond(w, page, err)
 }
 func (s *Service) member(w http.ResponseWriter, r *http.Request) {
-	org, id := r.PathValue("organizationId"), r.PathValue("memberId")
-	v, e := s.store.Member(r.Context(), org, id)
-	if e != nil {
-		respond(w, nil, e)
-		return
-	}
-	bindings, e := s.store.Bindings(r.Context(), org, id)
-	if e != nil {
-		respond(w, nil, e)
-		return
-	}
-	ids, e := s.store.AdministratorIDs(r.Context(), org)
-	respond(w, map[string]any{"member": v, "bindings": bindings, "administratorIds": ids}, e)
+	detail, err := s.store.ManagementMember(r.Context(), r.Context().Value(sessionKey{}).(session).actor.Principal(), r.PathValue("organizationId"), r.PathValue("memberId"))
+	respond(w, detail, err)
 }
 func (s *Service) mutate(w http.ResponseWriter, r *http.Request) {
 	org, id := r.PathValue("organizationId"), r.PathValue("memberId")
@@ -393,13 +366,6 @@ func (s *Service) events(w http.ResponseWriter, r *http.Request) {
 	a := r.Context().Value(sessionKey{}).(session).actor
 	q := r.URL.Query()
 	org := q.Get("organizationId")
-	if !a.Platform {
-		if org != "" && org != a.OrganizationID {
-			problem(w, 403, "forbidden")
-			return
-		}
-		org = a.OrganizationID
-	}
 	before := int64(0)
 	if q.Get("before") != "" {
 		v, e := strconv.ParseInt(q.Get("before"), 10, 64)
@@ -409,7 +375,7 @@ func (s *Service) events(w http.ResponseWriter, r *http.Request) {
 		}
 		before = v
 	}
-	v, e := s.store.ManagementEvents(r.Context(), org, q.Get("memberId"), before)
+	v, e := s.store.ManagementHistory(r.Context(), a.Principal(), org, q.Get("memberId"), before)
 	respond(w, map[string]any{"items": v}, e)
 }
 func problem(w http.ResponseWriter, status int, code string) {

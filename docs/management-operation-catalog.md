@@ -24,11 +24,16 @@ Built-in role permissions live in code; assignments remain in `administrators`.
 | --- | --- |
 | O5-O6: organization updates | Shared scope/action checks at the existing transactional authorization point, including explicitly submitted unchanged status fields. Private/CLI updates retain their installation-only entry contract. |
 | O4, M4-M6, A2-A3: organization/Member creation, Member changes and administrator assignments | Shared checks for collection create, field-specific update/status.update, and assignment create/delete. Private/CLI Member writes and new update receipts use the same operation mappings under installation-only admission. |
+| O1-O3, M1-M3, A1, B1 (console), E1-E2: management reads | Shared service checks before querying any response contents. Composite Member responses require all listed pairs; navigation and event defaults select only a view permitted by current authority. |
 | Remaining catalog operations | Existing operation-specific authorization; migration to the shared evaluator remains follow-up work. |
 
 The pure evaluator has no permission lock or cross-request allow cache. Its
 database-backed tests cover completion after revocation of an admitted bounded
 update and denial of the next decision. Existing lifecycle locks remain in place.
+Protected management read services reuse raw store queries that also serve
+protocol flows and installation-only interfaces; those raw queries do not accept
+arbitrary Member authority. The private listener continues to authenticate its
+installation credential for every read.
 
 ## Reading the catalog
 
@@ -54,7 +59,7 @@ update and denial of the next decision. Existing lifecycle locks remain in place
 
 | Checkpoint | Current behavior and intended boundary |
 | --- | --- |
-| Console read | Resolve the current console session, grant and eligible administrator; constrain the requested organization or global view before querying. The shared evaluator will check the listed read targets here. |
+| Console read | Resolve the current console session, grant and eligible administrator; constrain the requested organization or global view before querying. The shared evaluator checks the listed read targets before response queries, except provider directories pending their migration. |
 | Console write | Request-entry authentication/scope/CSRF checks precede the service transaction. Its service authorization check is the authoritative operation boundary; migrated writes use `authorizeAll`. Provider configuration reaches this boundary after optional upstream credential verification and before saving. |
 | Account view | Resolve the SSO session and explicitly selected eligible Member before rendering the account view. An administrator assignment is not required. |
 | Account commit | After fresh target-factor verification, validate the current session, request, source binding and Member in the transaction that commits the binding. Opening the page or starting verification does not reserve authority for this later step. |
@@ -144,9 +149,9 @@ and `M`. Source and test references are indexed by row ID below.
 | M5 | `PATCH /api/M` with `displayName` | `M` | `update` | Platform; own organization admin | Console write; organization-bound Member lookup and valid display name. |
 | M6 | Same PATCH with `manualBlocked` | `M` | `status.update` | Platform; own organization admin | Console write; preserve administrator availability. Clearing manual block does not clear external departure. Combined fields require M5 and M6. |
 
-Writes use the shared evaluator; the composite reads currently rely on broad
-administrator/organization checks. They do not authorize
-partial responses by silently dropping a denied component. Listing a defined
+Writes and composite reads use the shared evaluator. Composite reads require
+all listed pairs before fetching contents; they do not return partial responses
+by silently dropping a denied component. Listing a defined
 representation does not require separate `get` checks on every returned row.
 The administrator flag inside a directory row is part of that representation;
 the separate full `administratorIds` array is an assignment collection read.
@@ -248,12 +253,14 @@ extra `create` permission that administrators must hold on management history.
 
 These links identify existing operation code and checks. [Evaluator tests](../internal/authorization/permissions_test.go)
 cover scope/action semantics; [management authorization tests](../internal/identity/authorization_integration_test.go)
-cover organization/Member writes, assignments, and the revocation boundary. Other linked
+cover organization/Member writes, assignments, and the revocation boundary.
+[Read authorization tests](../internal/identity/management_reads_integration_test.go)
+cover service-level navigation, composite reads, audit filters and revocation. Other linked
 tests remain baselines, not proof that every catalog operation is migrated.
 
 | Rows | Implementation | Existing automated checks |
 | --- | --- | --- |
-| O1-O6, M1-M6, E1-E2 | [Console routes and handlers](../internal/console/http.go), [management queries](../internal/identity/management.go), [transactional mutations and events](../internal/identity/administrators.go) | [Console integration](../internal/oidcprovider/console_integration_test.go): organization scope, global Member directory, filtered pagination, platform audit, ordinary-Member rejection, and next-request revocation. |
+| O1-O6, M1-M6, E1-E2 | [Console routes and handlers](../internal/console/http.go), [protected read services](../internal/identity/management_reads.go), [management queries](../internal/identity/management.go), [transactional mutations and events](../internal/identity/administrators.go) | [Console integration](../internal/oidcprovider/console_integration_test.go): organization scope, global Member directory, filtered pagination, platform audit, ordinary-Member rejection, and next-request revocation. |
 | A1-A3 and availability constraints | [Administrator store](../internal/identity/administrators.go), [administrator CLI](../cmd/memberid/administrators.go) | [Administrator integration](../internal/identity/administrators_integration_test.go): forged actor fields cannot widen scope; system reservation, current grant checks, concurrent last-administrator removal, and system admission. |
 | P1-P4, I1-I2 | [Provider console routes](../internal/console/providers.go), [provider management checks](../internal/identity/providers.go), [DingTalk configuration](../internal/identity/dingtalk_applications.go), [Feishu configuration](../internal/identity/feishu.go) | [Provider console and Feishu integration](../internal/oidcprovider/feishu_integration_test.go), [private DingTalk integration](../internal/management/dingtalk_integration_test.go), [DingTalk CLI integration](../cmd/memberid/dingtalk_integration_test.go). |
 | B1-B4 and ordinary private organization/Member routes | [Private routes](../internal/management/http.go), [identity store](../internal/identity/store.go), [CLI creation/blocking](../cmd/memberid/manage.go), [binding CLI](../cmd/memberid/bindings.go) | [Private HTTP integration](../internal/management/http_integration_test.go), [identity-store integration](../internal/identity/store_integration_test.go), [CLI integration](../cmd/memberid/manage_integration_test.go), [credential separation](../internal/oidcprovider/management_integration_test.go). |

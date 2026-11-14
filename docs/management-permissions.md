@@ -3,8 +3,9 @@
 This document records the agreed design for MemberID management scopes, CRUD
 actions, and wildcard matching. It complements the [Member role definitions](roles.md)
 and the [catalog of existing operations](management-operation-catalog.md).
-The scope/action parser and evaluator implement these rules. Organization/Member writes and administrator assignments
-use the shared check; the [catalog rollout status](management-operation-catalog.md#current-enforcement)
+The scope/action parser and evaluator implement these rules. Core management
+reads, organization/Member writes and administrator assignments use the shared
+check; the [catalog rollout status](management-operation-catalog.md#current-enforcement)
 identifies the remaining operation migrations. The [console access
 matrix](console.md#first-version-access-model) and [private management API](management-api.md)
 continue to describe the available interfaces and their current access contracts.
