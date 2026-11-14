@@ -46,3 +46,31 @@ func TestManagementWritePermissionBoundaries(t *testing.T) {
 		t.Fatal("private installation principal acquired administrator entry", err)
 	}
 }
+
+func TestCompositeMemberReadRequiresEveryComponent(t *testing.T) {
+	org, _ := NewID(OrganizationKind)
+	member, _ := NewID(MemberKind)
+	base := "organizations/" + org
+	requirements := memberReadRequirements(org, member)
+	permissions := []authorization.Permission{
+		permission(base+"/members/"+member, "get"),
+		permission(base+"/members/"+member+"/bindings", "list"),
+		permission(base+"/roleAssignments", "list"),
+	}
+	if err := checkManagementPermissions(permissions, requirements...); err != nil {
+		t.Fatal(err)
+	}
+	for omitted := range permissions {
+		partial := append([]authorization.Permission{}, permissions[:omitted]...)
+		partial = append(partial, permissions[omitted+1:]...)
+		if err := checkManagementPermissions(partial, requirements...); !errors.Is(err, ErrForbidden) {
+			t.Fatalf("missing component %d allowed composite: %v", omitted, err)
+		}
+	}
+	if err := checkManagementPermissions([]authorization.Permission{permission(base+"/members", "list")}, memberReadRequirements(org, "")...); !errors.Is(err, ErrForbidden) {
+		t.Fatal("member listing implicitly included full assignment directory", err)
+	}
+	if err := checkManagementPermissions([]authorization.Permission{permission(base+"/members/*", "get")}, authorization.Requirement{Target: base + "/members", Action: "list"}); !errors.Is(err, ErrForbidden) {
+		t.Fatal("instance get implied collection listing", err)
+	}
+}

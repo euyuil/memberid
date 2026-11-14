@@ -21,24 +21,18 @@ func managementPermissions(actor ManagementActor) []authorization.Permission {
 	organization := "organizations/" + actor.OrganizationID
 	return []authorization.Permission{
 		permission(organization, "get", "update"),
-		permission(organization+"/members", "create"),
-		permission(organization+"/members/*", "update", "status.update"),
-		permission(organization+"/roleAssignments", "create"),
+		permission(organization+"/members", "list", "create"),
+		permission(organization+"/members/*", "get", "update", "status.update"),
+		permission(organization+"/members/*/bindings", "list"),
+		permission(organization+"/roleAssignments", "list", "create"),
 		permission(organization+"/roleAssignments/*", "delete"),
+		permission(organization+"/managementEvents", "list"),
 	}
 }
 
 func authorizeAll(ctx context.Context, db queryer, principal Principal, requirements ...authorization.Requirement) error {
-	if len(requirements) == 0 {
-		return ErrInvalid
-	}
-	for _, requirement := range requirements {
-		if !registeredManagementOperation(requirement) {
-			return ErrInvalid
-		}
-	}
 	if principal.installation() {
-		return nil
+		return checkManagementPermissions([]authorization.Permission{permission("**", "**")}, requirements...)
 	}
 	if principal.kind != memberPrincipal {
 		return ErrForbidden
@@ -47,7 +41,19 @@ func authorizeAll(ctx context.Context, db queryer, principal Principal, requirem
 	if err != nil {
 		return err
 	}
-	if err = authorization.Check(managementPermissions(actor), requirements...); errors.Is(err, authorization.ErrDenied) {
+	return checkManagementPermissions(managementPermissions(actor), requirements...)
+}
+
+func checkManagementPermissions(permissions []authorization.Permission, requirements ...authorization.Requirement) error {
+	if len(requirements) == 0 {
+		return ErrInvalid
+	}
+	for _, requirement := range requirements {
+		if !registeredManagementOperation(requirement) {
+			return ErrInvalid
+		}
+	}
+	if err := authorization.Check(permissions, requirements...); errors.Is(err, authorization.ErrDenied) {
 		return ErrForbidden
 	} else if err != nil {
 		return ErrInvalid
@@ -60,7 +66,10 @@ func authorizeAll(ctx context.Context, db queryer, principal Principal, requirem
 func registeredManagementOperation(requirement authorization.Requirement) bool {
 	parts := strings.Split(requirement.Target, "/")
 	if requirement.Target == "organizations" {
-		return requirement.Action == "create"
+		return requirement.Action == "create" || requirement.Action == "list"
+	}
+	if requirement.Target == "memberDirectory" || requirement.Target == "managementEvents" {
+		return requirement.Action == "list"
 	}
 	if len(parts) < 2 || parts[0] != "organizations" || !ValidID(parts[1], OrganizationKind) {
 		return false
@@ -71,12 +80,20 @@ func registeredManagementOperation(requirement authorization.Requirement) bool {
 	switch parts[2] {
 	case "members":
 		if len(parts) == 3 {
-			return requirement.Action == "create"
+			return requirement.Action == "create" || requirement.Action == "list"
 		}
-		return len(parts) == 4 && ValidID(parts[3], MemberKind) && (requirement.Action == "update" || requirement.Action == "status.update")
+		if !ValidID(parts[3], MemberKind) {
+			return false
+		}
+		if len(parts) == 5 && parts[4] == "bindings" {
+			return requirement.Action == "list"
+		}
+		return len(parts) == 4 && (requirement.Action == "get" || requirement.Action == "update" || requirement.Action == "status.update")
+	case "managementEvents":
+		return len(parts) == 3 && requirement.Action == "list"
 	case "roleAssignments":
 		if len(parts) == 3 {
-			return requirement.Action == "create"
+			return requirement.Action == "create" || requirement.Action == "list"
 		}
 		// Existing assignments are keyed by Member, not a separate public ID.
 		return len(parts) == 4 && ValidID(parts[3], MemberKind) && requirement.Action == "delete"
