@@ -4,15 +4,6 @@ import { Badge } from "@/components/ui/badge"
 import { Link, type NavigationState } from "@/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog"
 
 export function DirectoryToolbar({
   title,
@@ -46,16 +37,16 @@ export function DirectoryFooter({
 
 export function RecordIdentity({
   name,
-  id,
   icon,
   href,
   state,
+  onClick,
 }: {
   name: string
-  id?: string
   icon?: ReactNode
   href?: string
   state?: NavigationState
+  onClick?: () => void
 }) {
   return (
     <div className="record-identity">
@@ -66,13 +57,23 @@ export function RecordIdentity({
       )}
       <div className="record-text">
         {href ? (
-          <Link className="record-name" href={href} state={state}>
+          <Link className="record-name" href={href} state={state} title={name}>
             {name}
           </Link>
+        ) : onClick ? (
+          <button
+            type="button"
+            className="record-name"
+            title={name}
+            onClick={onClick}
+          >
+            {name}
+          </button>
         ) : (
-          <span className="record-name">{name}</span>
+          <span className="record-name" title={name}>
+            {name}
+          </span>
         )}
-        {id && <RecordIdentifier value={id} label={name} />}
       </div>
     </div>
   )
@@ -87,53 +88,40 @@ export function RecordIdentifier({
 }) {
   const [feedback, setFeedback] = useState("")
   const [copying, setCopying] = useState(false)
-  const compact =
-    value.length > 20 ? `${value.slice(0, 8)}…${value.slice(-6)}` : value
   return (
-    <Dialog onOpenChange={() => setFeedback("")}>
-      <DialogTrigger
-        className="record-id"
-        title={value}
-        aria-label={`查看 ${label} 的完整 ID`}
-      >
-        <code>{compact}</code>
-        <Copy aria-hidden="true" />
-      </DialogTrigger>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>完整 ID</DialogTitle>
-          <DialogDescription>{label}</DialogDescription>
-        </DialogHeader>
+    <div className="record-identifier">
+      <div className="identifier-value">
         <Input
-          aria-label="完整 ID"
+          aria-label={label}
           value={value}
           readOnly
           onFocus={(event) => event.currentTarget.select()}
         />
-        <p className="identifier-feedback" role="status">
-          {feedback || "可复制完整 ID，或选中文本手动复制。"}
-        </p>
-        <DialogFooter>
-          <Button
-            disabled={copying}
-            onClick={async () => {
-              setCopying(true)
-              try {
-                await navigator.clipboard.writeText(value)
-                setFeedback("已复制完整 ID。")
-              } catch {
-                setFeedback("无法自动复制，请选中上方 ID 手动复制。")
-              } finally {
-                setCopying(false)
-              }
-            }}
-          >
-            <Copy data-icon="inline-start" />
-            复制完整 ID
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          aria-label={`复制${label}`}
+          disabled={copying}
+          onClick={async () => {
+            setCopying(true)
+            try {
+              await navigator.clipboard.writeText(value)
+              setFeedback("已复制完整 ID。")
+            } catch {
+              setFeedback("无法自动复制，请选中上方 ID 手动复制。")
+            } finally {
+              setCopying(false)
+            }
+          }}
+        >
+          <Copy aria-hidden="true" />
+        </Button>
+      </div>
+      <p className="identifier-feedback" role="status">
+        {feedback}
+      </p>
+    </div>
   )
 }
 
@@ -156,8 +144,7 @@ export function RecordTime({ value }: { value: string }) {
   const date = new Date(value)
   return (
     <time className="record-time" dateTime={value}>
-      <span>{date.toLocaleDateString("zh-CN")}</span>
-      <span>{date.toLocaleTimeString("zh-CN", { hour12: false })}</span>
+      {date.toLocaleString("zh-CN", { hour12: false })}
     </time>
   )
 }
