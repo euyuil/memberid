@@ -6,13 +6,15 @@ const (
 	memberPrincipal principalKind = iota + 1
 	installationManagerPrincipal
 	operatorPrincipal
+	accountPrincipal
 )
 
 // Principal identifies a server-authenticated caller, not a role or permission
 // snapshot. Its zero value grants no access. It is never decoded from HTTP input.
 type Principal struct {
-	kind              principalKind
-	memberID, grantID string
+	kind                           principalKind
+	memberID, grantID              string
+	sessionID, factorID, bindingID string
 }
 
 // Principal retains the authenticated identity reference. Authorization resolves
@@ -22,6 +24,17 @@ func (actor ManagementActor) Principal() Principal {
 		return Principal{}
 	}
 	return Principal{kind: memberPrincipal, memberID: actor.MemberID, grantID: actor.GrantID}
+}
+
+// AccountPrincipal retains references from an authenticated SSO session and its
+// selected Member binding. Construction is not authentication: account handlers
+// verify the cookie/request and authorization resolves current stored evidence.
+// Account context never inherits the Member's administrator permissions.
+func AccountPrincipal(sessionID, memberID, factorID, bindingID string) Principal {
+	if sessionID == "" || !ValidID(memberID, MemberKind) || !ValidID(factorID, FactorKind) || !ValidUUID(bindingID) {
+		return Principal{}
+	}
+	return Principal{kind: accountPrincipal, memberID: memberID, sessionID: sessionID, factorID: factorID, bindingID: bindingID}
 }
 
 // InstallationManagerPrincipal is used only after the private listener validates

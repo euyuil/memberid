@@ -53,12 +53,12 @@ Administrator removal and manual identity changes remain subject to the [last-av
 
 The current implementation stores administrator assignments separately from Members. An assigned administrator in `org_system` is a platform administrator; an assigned administrator in an ordinary organization administers that organization. Members without an assignment have no management authority. There is no generic role-definition or role-assignment API.
 
-The [console access matrix](console.md#first-version-access-model) describes current behavior. It is not the complete action catalog or an implementation of the agreed scope and action design. Trusted CLI operations and the installation-wide credential of the [private management API](management-api.md) retain their existing, separate access contracts; they are not additional Member roles.
+The [console access matrix](console.md#first-version-access-model) describes current behavior. The [operation catalog](management-operation-catalog.md) supplies the complete scope/action mapping and enforcement boundaries. Trusted CLI operations and the installation-wide credential of the [private management API](management-api.md) retain their existing, separate access contracts; they are not additional Member roles.
 
 The [scope, CRUD, and wildcard rules](management-permissions.md) and
 [operation catalog](management-operation-catalog.md) are documented separately.
-Implementation contracts, assignment persistence and API representation, and
-migration of the remaining operations to the shared authorization evaluator remain follow-up work. New capabilities
+Shared service authorization is implemented for the catalogued Member operations.
+Generic assignment persistence and public API representation remain separate design work. New capabilities
 require explicit catalog entries rather than implied access from a role name.
 
 Built-in role permissions are evaluated in the service; see the [current enforcement status](management-operation-catalog.md#current-enforcement). There is no generic role API, custom-role mechanism, new credential type, or application-authorization service. The OIDC profile and database schema remain unchanged.

@@ -2,8 +2,8 @@
 
 This catalog maps existing functionality to the agreed [roles](roles.md),
 [scope/action rules](management-permissions.md), and [authorization
-boundaries](authorization-boundaries.md). The mappings are design contracts for
-the shared evaluator. Adoption is incremental as recorded below; existing
+boundaries](authorization-boundaries.md). The mappings are contracts for
+the shared evaluator and the explicit operator/workflow boundaries below; existing
 administrator assignments, identity eligibility and lifecycle constraints remain
 authoritative. The catalog does not itself add endpoints, token claims, or schema.
 
@@ -26,7 +26,10 @@ Built-in role permissions live in code; assignments remain in `administrators`.
 | O4, M4-M6, A2-A3: organization/Member creation, Member changes and administrator assignments | Shared checks for collection create, field-specific update/status.update, and assignment create/delete. Private/CLI Member writes and new update receipts use the same operation mappings under installation-only admission. |
 | O1-O3, M1-M3, A1, B1 (console), E1-E2: management reads | Shared service checks before querying any response contents. Composite Member responses require all listed pairs; navigation and event defaults select only a view permitted by current authority. |
 | P1-P4 and I2: provider management | Shared directory and typed create/update/status checks. The authoritative save check follows upstream verification; private/CLI credential configuration retains installation-only admission. |
-| Remaining catalog operations | Existing operation-specific authorization; migration to the shared evaluator remains follow-up work. |
+| S1-S3: account views and binding creation | Shared checks with an account principal restricted to the selected Member. Current SSO/source-binding evidence is resolved from storage; commit retains fresh verification, request, client and lifecycle checks. |
+| B2-B3: installation binding writes | Explicit installation-only admission plus shared create/delete checks. Revocation resolves the stored binding ID from the existing factor selector. |
+| S4, I4-I7: verification, provisioning, eligibility and provider workflows | Explicit existing workflow contracts, not new delegated Member actions. Enrollment is an installation-only atomic operation; provider observations remain authoritative. |
+| Private/CLI reads, including B1, B4, I1 and I3/I4 receipt reads; accepted receipt replays | Existing installation admission on every request or trusted CLI entry, followed by the documented bounded query/replay contract. These interfaces do not accept Member authority or expose a permission-decision API. |
 
 The pure evaluator has no permission lock or cross-request allow cache. Its
 database-backed tests cover completion after revocation of an admitted bounded
@@ -62,9 +65,9 @@ installation credential for every read.
 | --- | --- |
 | Console read | Resolve the current console session, grant and eligible administrator; constrain the requested organization or global view before querying. The shared evaluator checks the listed read targets before response queries, including provider directories. |
 | Console write | Request-entry authentication/CSRF checks precede the service transaction. Its service authorization check is the authoritative operation boundary; writes use `authorizeAll`. Provider configuration reaches this boundary after optional upstream credential verification and before saving. |
-| Account view | Resolve the SSO session and explicitly selected eligible Member before rendering the account view. An administrator assignment is not required. |
-| Account commit | After fresh target-factor verification, validate the current session, request, source binding and Member in the transaction that commits the binding. Opening the page or starting verification does not reserve authority for this later step. |
-| Private API / CLI | Authenticate the installation credential on every private request, or use the trusted operator entry point. Store transactions still enforce resource and lifecycle constraints. Migrated operations also validate their scope/action mapping, without admitting Member credentials to these interfaces. |
+| Account view | Resolve the SSO session and explicitly selected eligible Member before rendering the account view. Shared `get` covers only this fixed account representation; an administrator assignment is not required. |
+| Account commit | After fresh target-factor verification, validate the current session, request, source binding and Member in the transaction that commits the binding. Shared `create` is checked for the selected Member's binding collection. Opening the page or starting verification does not reserve authority for this later step. |
+| Private API / CLI | Authenticate the installation credential on every private request, or use the trusted operator entry point. Store transactions still enforce resource and lifecycle constraints. Organization/Member/provider/assignment/binding mutations also validate their scope/action mapping; the separate query and compound workflow contracts above do not admit Member credentials. |
 
 After an operation passes its authoritative check, the [short-operation
 completion rule](authorization-boundaries.md#revocation-and-operations-in-progress)
@@ -258,8 +261,11 @@ cover organization/Member writes, assignments, and the revocation boundary.
 [Read authorization tests](../internal/identity/management_reads_integration_test.go)
 cover service-level navigation, composite reads, audit filters and revocation.
 [Provider authorization tests](../internal/identity/provider_authorization_integration_test.go)
-cover scope, status, availability, and assignment revocation during verification. Other linked
-tests remain baselines, not proof that every catalog operation is migrated.
+cover scope, status, availability, and assignment revocation during verification.
+[Account authorization tests](../internal/identity/account_authorization_integration_test.go)
+cover selected-Member isolation, current SSO/binding evidence and the separation
+from administrator authority. HTTP account tests below exercise successful
+linking and failure/rollback through the existing verification workflows.
 
 | Rows | Implementation | Existing automated checks |
 | --- | --- | --- |
@@ -272,9 +278,9 @@ tests remain baselines, not proof that every catalog operation is migrated.
 | I4-I5 | [Enrollment store](../internal/identity/enrollment.go), [candidate eligibility](../internal/management/eligibility.go), [identity eligibility](../internal/identity/eligibility.go) | [Enrollment HTTP integration](../internal/management/enrollment_integration_test.go), [enrollment transactions](../internal/identity/enrollment_integration_test.go), [eligibility HTTP integration](../internal/management/eligibility_integration_test.go). |
 | I6-I7 | [System admission](../internal/identity/system_admission.go), [provider CLI](../cmd/memberid/dingtalk.go), [provider synchronization](../internal/identity/dingtalk_authorization.go), [directory reconciliation](../internal/identity/dingtalk_reconcile.go) | [System admission guards](../internal/identity/administrators_integration_test.go), [provider authorization](../internal/identity/dingtalk_authorization_integration_test.go), [directory reconciliation](../internal/identity/dingtalk_reconcile_integration_test.go). |
 
-## Review and future enforcement acceptance
+## Coverage and acceptance
 
-Documentation review must verify the following against the catalog and sources:
+Review must verify the following against the catalog and sources:
 
 - Every console resource route, related private route and CLI command maps to a
   row or an explicitly classified workflow/session endpoint.
@@ -291,11 +297,11 @@ Documentation review must verify the following against the catalog and sources:
   constraints; manual status actions cannot erase external departure or fabricate
   provider verification. Self-service does not inherit operator privileges.
 
-As each remaining operation is migrated, add focused tests for its mappings and the
-authorization-before/after-revocation boundary alongside each affected operation.
-Existing next-request revocation and last-administrator tests are useful baselines,
-not proof of every migrated operation or all in-flight concurrency behavior. Exact
-role-assignment API/ID representation, persistent permission storage, and new
-capabilities remain separate implementation work. No deletion of organizations,
+All 36 catalog entries are covered by shared Member-operation checks or an
+explicit installation, session, or verification workflow contract above. Future
+operations need their own entry, service check, and focused tests. Existing
+next-request revocation and last-administrator tests do not prove every possible
+in-flight interleaving. Public role-assignment API/ID representation, persistent
+permission storage, and new capabilities remain separate design work. No deletion of organizations,
 Members, or provider applications, custom roles, deny rules, or external policy
 service is introduced here.

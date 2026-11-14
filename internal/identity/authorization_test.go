@@ -97,3 +97,41 @@ func TestProviderActionsSeparateCreationConfigurationAndStatus(t *testing.T) {
 		t.Fatal("unsupported provider deletion", err)
 	}
 }
+
+func TestAccountAuthorityIsLimitedToSelectedSelf(t *testing.T) {
+	org, _ := NewID(OrganizationKind)
+	member, _ := NewID(MemberKind)
+	other, _ := NewID(MemberKind)
+	factor, _ := NewID(FactorKind)
+	target := "organizations/" + org + "/members/" + member
+	permissions := accountPermissions(org, member)
+	for _, test := range []struct {
+		target, action string
+		allow          bool
+	}{
+		{target, "get", true}, {target + "/bindings", "create", true},
+		{target, "update", false}, {target + "/bindings", "list", false},
+		{target + "/bindings/00000000-0000-4000-8000-000000000001", "delete", false},
+		{"organizations/" + org + "/members/" + other, "get", false},
+		{"organizations/" + org + "/roleAssignments", "create", false},
+		{"organizations", "create", false}, {"memberDirectory", "list", false},
+	} {
+		err := checkManagementPermissions(permissions, authorization.Requirement{Target: test.target, Action: test.action})
+		if (err == nil) != test.allow {
+			t.Errorf("%s %s: %v", test.action, test.target, err)
+		}
+	}
+	if err := checkManagementPermissions(managementPermissions(ManagementActor{Platform: true}), authorization.Requirement{Target: target + "/bindings/" + factor, Action: "delete"}); !errors.Is(err, ErrInvalid) {
+		t.Fatal("factor ID accepted as binding ID", err)
+	}
+	// Even platform/installation credentials cannot substitute for a verified
+	// account-flow context at self-service binding entry points.
+	for _, principal := range []Principal{{}, OperatorPrincipal(), InstallationManagerPrincipal(), (ManagementActor{MemberID: member, GrantID: "synthetic-grant", Platform: true}).Principal()} {
+		if err := LinkPhone(t.Context(), nil, principal, Verification{}, PhoneLinkTarget{}); !errors.Is(err, ErrForbidden) {
+			t.Fatal(err)
+		}
+		if _, err := (&DingTalkVerifier{}).Link(t.Context(), nil, principal, DingTalkLoginProof{}, member); !errors.Is(err, ErrForbidden) {
+			t.Fatal(err)
+		}
+	}
+}

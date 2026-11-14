@@ -6,8 +6,8 @@ revocation on operations already in progress. It complements the [Member
 roles](roles.md) and [management scopes and actions](management-permissions.md).
 The [operation catalog](management-operation-catalog.md) maps existing entry
 points to targets, required actions, role coverage, and authorization checkpoints.
-The [rollout status](management-operation-catalog.md#current-enforcement) distinguishes
-implemented checks from remaining migrations. Token contents and API credential
+The [rollout status](management-operation-catalog.md#current-enforcement) records
+shared checks and separate installation/workflow contracts. Token contents and API credential
 contracts remain unchanged. The [OIDC profile](oidc.md), [console](console.md), and
 [private management API](management-api.md) describe the current interfaces.
 
@@ -154,7 +154,7 @@ not a guarantee of success if those constraints fail. Existing transactions and
 locks remain in place; this document neither removes them nor weakens their
 invariants.
 
-## Current implementation and follow-up work
+## Current implementation and validation
 
 - OIDC ID Tokens and access tokens remain JWTs under the current profile;
   Refresh Tokens remain opaque credentials. No claim, issuer, subject,
@@ -168,12 +168,20 @@ invariants.
   `installation-manager` principal. Trusted operator entry points retain their
   separate access contract; they do not acquire Member roles or begin accepting
   ordinary OIDC tokens through this design.
-- The scope/action evaluator is implemented and enforces organization/Member
-  writes, administrator assignments, provider configuration and management reads.
-  Migration of the remaining catalog operations is follow-up work. No job system,
-  cancellation protocol, or external policy-decision API is added.
+- The scope/action evaluator enforces organization/Member writes, administrator
+  assignments, provider configuration, management reads, and self-service binding.
+  An account principal references the selected Member, SSO session, factor and
+  source binding. Its current stored evidence is checked without requiring or
+  inheriting an administrator assignment. The account controller still checks
+  cookie possession, five-minute authentication freshness at commit, request and
+  client context, and fresh target proof. This is not a new credential or JWT claim.
+- Installation-only reads, receipt replay, enrollment, eligibility queries, system
+  admission and provider synchronization keep the explicit contracts recorded in
+  the catalog. No job system, cancellation protocol, or external decision API is added.
 
-Each remaining migration requires focused validation of its authorization and
-revocation boundaries. Organization-update tests cover a decision made before
-revocation, completion of the admitted update, and rejection of the next decision;
-they do not establish end-to-end guarantees for unrelated workflows.
+Organization-update tests cover a decision made before revocation, completion of
+that admitted update, and denial of the next decision. Provider tests revoke the
+assignment during upstream verification and confirm rejection at the later save
+boundary. Account tests cover current source evidence, proof freshness, replay,
+cancellation and rollback. These are specific observed boundaries, not a claim
+that every possible concurrent workflow interleaving has been tested.

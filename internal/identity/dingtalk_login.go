@@ -6,6 +6,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/euyuil/memberid/internal/authorization"
 	"github.com/euyuil/memberid/internal/dingtalk"
 	"github.com/jackc/pgx/v5"
 )
@@ -114,11 +115,17 @@ type dingTalkLinkTarget struct{ memberID, factorID, bindingID string }
 // Link attaches freshly verified DingTalk evidence to an existing eligible Member.
 // The caller must authenticate the source session and commit this operation with
 // its single-use account transaction. It never merges or replaces identities.
-func (verifier *DingTalkVerifier) Link(ctx context.Context, tx pgx.Tx, proof DingTalkLoginProof, memberID, sourceFactorID, sourceBindingID string) (Verification, error) {
-	if !ValidID(memberID, MemberKind) || !ValidID(sourceFactorID, FactorKind) || !ValidUUID(sourceBindingID) {
+func (verifier *DingTalkVerifier) Link(ctx context.Context, tx pgx.Tx, principal Principal, proof DingTalkLoginProof, memberID string) (Verification, error) {
+	if principal.kind != accountPrincipal {
+		return Verification{}, ErrForbidden
+	}
+	if !ValidID(memberID, MemberKind) {
 		return Verification{}, ErrInvalid
 	}
-	return verifier.admit(ctx, tx, proof, &dingTalkLinkTarget{memberID, sourceFactorID, sourceBindingID})
+	if err := authorizeAll(ctx, tx, principal, authorization.Requirement{Target: "organizations/" + proof.application.OrganizationID + "/members/" + memberID + "/bindings", Action: "create"}); err != nil {
+		return Verification{}, err
+	}
+	return verifier.admit(ctx, tx, proof, &dingTalkLinkTarget{memberID, principal.factorID, principal.bindingID})
 }
 
 func (verifier *DingTalkVerifier) admit(ctx context.Context, tx pgx.Tx, proof DingTalkLoginProof, target *dingTalkLinkTarget) (Verification, error) {

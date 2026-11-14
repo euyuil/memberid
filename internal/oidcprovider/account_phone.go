@@ -160,7 +160,9 @@ func (service *Service) accountPhonePost(w http.ResponseWriter, r *http.Request,
 			if err := tx.QueryRow(r.Context(), "SELECT state,data->>'challengeId' FROM account_link_requests WHERE id=$1 AND expires_at>$2 FOR UPDATE", request.ID, service.now()).Scan(&state, &challenge); err != nil || state != "pending" || challenge != request.ChallengeID || !service.accountClient(request.accountDetails) {
 				return identity.ErrIneligible
 			}
-			if err := identity.LinkPhone(r.Context(), tx, verified, identity.PhoneLinkTarget{OrganizationID: request.OrganizationID, MemberID: request.MemberID, SourceFactorID: request.FactorID, SourceBindingID: request.BindingID}); err != nil {
+			principal := identity.AccountPrincipal(current.id, request.MemberID, current.verified.Factor.ID, request.BindingID)
+			target := identity.PhoneLinkTarget{OrganizationID: request.OrganizationID, MemberID: request.MemberID, SourceFactorID: request.FactorID, SourceBindingID: request.BindingID}
+			if err := identity.LinkPhone(r.Context(), tx, principal, verified, target); err != nil {
 				return err
 			}
 			_, err = tx.Exec(r.Context(), "UPDATE account_link_requests SET state='completed' WHERE id=$1", request.ID)

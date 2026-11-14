@@ -54,3 +54,19 @@ The fresh-install schema is version 16. Databases with another schema version ar
 ## Validation boundary
 
 Automated HTTP and disposable-PostgreSQL tests cover real forms and callbacks, phone attempt limits, atomic verification rollback, cancellation during SMS delivery, CSRF, browser and session binding, exact return validation, fresh authentication, cancellation, concurrent replay, failed upstream verification, eligibility changes during provider I/O, binding conflicts, distinct organizations, stable OIDC subjects, and original session/grant preservation. Browser inspection of the actual phone template at 320-pixel width confirmed identical input and button positions across seven synthetic states, with no horizontal overflow. These are rendered-state checks, separate from HTTP flow validation. These checks simulate SMS delivery and DingTalk and do not establish real upstream authorization or live GitLab acceptance.
+
+## Scoped self-service authorization
+
+Account views and final phone/DingTalk binding creation use the shared
+[scope/action evaluator](management-permissions.md). The server constructs an
+account principal from the authenticated SSO session and selected Member's source
+binding. Authorization resolves current session and binding evidence and permits
+only `get` of that Member's fixed account-page context and `create` on its binding
+collection. It grants no console directories, Member updates, unbinding, or access
+to other Members that happen to share the source factor. Administrator assignments
+do not expand this account context.
+
+The final check occurs after target verification and before the binding write.
+Existing browser, request, source freshness, client, conflict and replay checks
+remain required. The initial page does not reserve permission for the later
+commit. Subjects, authentication time, grants and token lifetimes are unchanged.
