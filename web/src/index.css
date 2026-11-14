@@ -141,8 +141,10 @@ code { font-size: 11px; color: var(--muted-foreground); overflow-wrap: anywhere;
 .brand { display: flex; align-items: center; gap: 12px; font-size: 20px; font-weight: 650; letter-spacing: -.03em; }
 .brand > svg { width: 32px; height: 32px; }
 .brand small { display: block; font-size: 11px; font-weight: 400; color: var(--muted-foreground); margin-top: 3px; letter-spacing: .06em; }
-.sidebar nav { display: flex; flex-direction: column; gap: 8px; }
-.sidebar nav button { justify-content: flex-start; }
+.sidebar nav { display: grid; gap: 20px; }
+.nav-group { display: grid; gap: 4px; }
+.nav-group > span { padding: 0 10px 4px; color: var(--muted-foreground); font-size: 12px; }
+.nav-group > a { justify-content: flex-start; }
 .actor-panel { margin-top: auto; display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }
 .actor-panel .eyebrow { margin: 12px 0 0; }
 .workspace { min-width: 0; }
@@ -151,7 +153,7 @@ code { font-size: 11px; color: var(--muted-foreground); overflow-wrap: anywhere;
 .scope-bar strong { overflow-wrap: anywhere; }
 .scope-note { margin-left: auto; }
 .page-content { padding: 36px 40px 20px; max-width: 1500px; margin: 0 auto; }
-.page-heading, .section-heading, .organization-summary { display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+.page-heading, .organization-summary { display: flex; align-items: center; justify-content: space-between; gap: 24px; }
 .page-heading .muted { margin-top: 10px; }
 .actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .feedback { min-height: 72px; padding-top: 12px; padding-bottom: 12px; }
@@ -159,7 +161,6 @@ code { font-size: 11px; color: var(--muted-foreground); overflow-wrap: anywhere;
 .directory th { height: 44px; padding-inline: 20px; background: var(--muted); font-size: 12px; }
 .directory td { padding: 12px 20px; }
 .directory td [data-slot=button][data-variant=link] { padding-left: 0; }
-.section-heading { padding: 20px; }
 .organization-summary { margin-bottom: 24px; }
 .organization-summary > div:first-child { display: flex; align-items: center; gap: 16px; }
 .pagination { display: flex; justify-content: flex-end; gap: 8px; padding: 16px 20px; border-top: 1px solid var(--border); }
@@ -180,7 +181,9 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
 @media (max-width: 850px) {
  .console-shell { grid-template-columns: 1fr; }
  .sidebar { padding: 16px 20px; border-right: 0; border-bottom: 1px solid var(--border); gap: 20px; }
- .sidebar nav { flex-direction: row; }
+ .sidebar nav { display: flex; flex-wrap: wrap; gap: 8px 16px; }
+ .nav-group { display: flex; flex-wrap: wrap; align-items: center; }
+ .nav-group > span { padding: 0 6px 0 0; }
  .actor-panel { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 8px; }
  .actor-panel > [data-slot=separator], .actor-panel code { display: none; }
  .actor-panel .eyebrow { margin: 0; }

@@ -9,6 +9,7 @@ import {
   LogOut,
   Plus,
   Search,
+  Users,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -114,8 +115,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new Error(messages[body.error] ?? "请求未完成，请稍后重试。")
   return body as T
 }
+function routeHash(values: Record<string, string>) {
+  return `#${new URLSearchParams(values)}`
+}
 function navigate(values: Record<string, string>) {
-  window.location.hash = new URLSearchParams(values).toString()
+  window.location.hash = routeHash(values)
 }
 function Status({ active, text }: { active: boolean; text?: string }) {
   return (
@@ -216,9 +220,16 @@ export default function App() {
   const [error, setError] = useState("")
   const [action, setAction] = useState<Action | null>(null)
   const params = new URLSearchParams(location.slice(1))
-  const org = params.get("org") ?? ""
-  const member = params.get("member") ?? ""
-  const events = params.get("view") === "events"
+  const actorOrganization =
+    session && !session.actor.platform ? session.actor.organizationId : ""
+  const org = params.get("org") || actorOrganization
+  const view = params.get("view")
+  const events = view === "events"
+  // Organization links without a view previously opened the member directory.
+  const membersView =
+    !events && (view === "members" || (view !== "organization" && !!org))
+  const activeView = events ? "events" : membersView ? "members" : "organization"
+  const member = membersView ? (params.get("member") ?? "") : ""
   const historyTarget = params.get("target") ?? ""
   const after = params.get("after") ?? ""
   const memberFilters = {
@@ -226,7 +237,13 @@ export default function App() {
     status: params.get("status") ?? "",
     administrator: params.get("administrator") ?? "",
   }
-  const memberListRoute = { org, ...memberFilters, ...(after ? { after } : {}) }
+  const scopeRoute: Record<string, string> = org ? { org } : {}
+  const memberDirectoryRoute = { view: "members", ...scopeRoute }
+  const memberListRoute = {
+    ...memberDirectoryRoute,
+    ...memberFilters,
+    ...(after ? { after } : {}),
+  }
   const memberSearchActive = Object.values(memberFilters).some(Boolean)
 
   useEffect(() => {
@@ -241,14 +258,7 @@ export default function App() {
     window.addEventListener("memberid-sign-in-required", expired)
     window.addEventListener("hashchange", change)
     request<Session>("/api/session")
-      .then((s) => {
-        setSession(s)
-        if (
-          !s.actor.platform &&
-          !new URLSearchParams(window.location.hash.slice(1)).get("org")
-        )
-          navigate({ org: s.actor.organizationId })
-      })
+      .then(setSession)
       .catch(() => setSession(null))
     return () => {
       window.removeEventListener("hashchange", change)
@@ -305,13 +315,15 @@ export default function App() {
                   options
                 ),
               }
-            : {
-                organization,
-                members: await request<Data["members"]>(
-                  `/api/organizations/${encodeURIComponent(org)}/members?${new URLSearchParams({ ...memberFilters, after })}`,
-                  options
-                ),
-              }
+            : membersView
+              ? {
+                  organization,
+                  members: await request<Data["members"]>(
+                    `/api/organizations/${encodeURIComponent(org)}/members?${new URLSearchParams({ ...memberFilters, after })}`,
+                    options
+                  ),
+                }
+              : { organization }
         } else
           result = {
             organizations: await request<Page<Organization>>(
@@ -408,7 +420,11 @@ export default function App() {
       body: {},
       field: isOrganization ? "name" : "displayName",
       openCreated: (id) =>
-        navigate(isOrganization ? { org: id } : { ...memberListRoute, member: id }),
+        navigate(
+          isOrganization
+            ? { view: "organization", org: id }
+            : { ...memberListRoute, member: id }
+        ),
     })
 
   return (
@@ -421,24 +437,39 @@ export default function App() {
           </span>
         </a>
         <nav aria-label="主导航">
-          <Button
-            variant={!events ? "secondary" : "ghost"}
-            onClick={() =>
-              navigate(actor.platform ? {} : { org: actor.organizationId })
-            }
-          >
-            <Building2 data-icon="inline-start" />
-            {actor.platform ? "组织目录" : "我的组织"}
-          </Button>
-          <Button
-            variant={events ? "secondary" : "ghost"}
-            onClick={() =>
-              navigate({ view: "events", ...(org ? { org } : {}) })
-            }
-          >
-            <History data-icon="inline-start" />
-            操作记录
-          </Button>
+          <div className="nav-group" role="group" aria-labelledby="nav-identity">
+            <span id="nav-identity">身份管理</span>
+            <Button
+              variant={!membersView && !events ? "secondary" : "ghost"}
+              render={<a href={routeHash({ view: "organization", ...scopeRoute })} />}
+              nativeButton={false}
+              aria-current={!membersView && !events ? "page" : undefined}
+            >
+              <Building2 data-icon="inline-start" />
+              组织
+            </Button>
+            <Button
+              variant={membersView ? "secondary" : "ghost"}
+              render={<a href={routeHash(memberDirectoryRoute)} />}
+              nativeButton={false}
+              aria-current={membersView ? "page" : undefined}
+            >
+              <Users data-icon="inline-start" />
+              成员
+            </Button>
+          </div>
+          <div className="nav-group" role="group" aria-labelledby="nav-audit">
+            <span id="nav-audit">审计</span>
+            <Button
+              variant={events ? "secondary" : "ghost"}
+              render={<a href={routeHash({ view: "events", ...scopeRoute })} />}
+              nativeButton={false}
+              aria-current={events ? "page" : undefined}
+            >
+              <History data-icon="inline-start" />
+              操作记录
+            </Button>
+          </div>
         </nav>
         <div className="actor-panel">
           <Separator />
@@ -477,7 +508,7 @@ export default function App() {
               name={scopeName}
               onSelect={(id) =>
                 navigate({
-                  ...(events ? { view: "events" } : {}),
+                  view: activeView,
                   ...(id ? { org: id } : {}),
                 })
               }
@@ -493,33 +524,23 @@ export default function App() {
         <div className="page-content">
           <div className="page-heading">
             <div>
-              <p className="eyebrow">
-                {events
-                  ? "管理追溯"
-                  : member
-                    ? "成员身份"
-                    : org
-                      ? "组织工作区"
-                      : "组织目录"}
-              </p>
               <h1>
                 {events
                   ? "操作记录"
-                  : (selected?.displayName ??
-                    data.organization?.name ??
-                    "组织")}
+                  : membersView
+                    ? (member ? selected?.displayName ?? "成员详情" : "成员")
+                    : (data.organization?.name ?? "组织")}
               </h1>
-              <p className="muted">
-                {events
-                  ? historyTarget
+              {events && (
+                <p className="muted">
+                  {historyTarget
                     ? `仅查看成员 ${data.historyMember?.displayName ?? historyTarget} 的操作记录。`
-                    : "查看已完成的管理操作及其变更内容。"
-                  : member
-                    ? "资料、登录方式与管理权限分别维护。"
-                    : org
-                      ? "管理本组织的独立成员身份与管理员。"
-                      : "进入组织，维护成员与管理权限。"}
-              </p>
+                    : "查看已完成的管理操作及其变更内容。"}
+                </p>
+              )}
+              {membersView && !org && (
+                <p className="muted">选择组织后查看和管理成员。</p>
+              )}
             </div>
             <div className="actions">
               {events && org && historyTarget && (
@@ -540,19 +561,36 @@ export default function App() {
                   </Button>
                 </>
               )}
-              {actor.platform && !events && !org && (
+              {actor.platform && !events && !membersView && !org && (
                 <Button onClick={() => create(true)}>
                   <Plus data-icon="inline-start" />
                   新建组织
                 </Button>
               )}
-              {org && !events && (member || actor.platform) && (
-                <Button
-                  variant="outline"
-                  onClick={() => navigate(member ? memberListRoute : {})}
-                >
-                  {member ? "返回成员列表" : "所有组织"}
+              {member && (
+                <Button variant="outline" onClick={() => navigate(memberListRoute)}>
+                  返回成员列表
                 </Button>
+              )}
+              {membersView && !member && data.organization && (
+                <Button onClick={() => create(false)}>
+                  <Plus data-icon="inline-start" />
+                  新增成员
+                </Button>
+              )}
+              {!membersView && !events && org && (
+                <>
+                  {actor.platform && (
+                    <Button variant="outline" onClick={() => navigate({})}>
+                      所有组织
+                    </Button>
+                  )}
+                  {data.organization && (
+                    <Button onClick={() => navigate(memberDirectoryRoute)}>
+                      查看成员
+                    </Button>
+                  )}
+                </>
               )}
             </div>
           </div>
@@ -563,12 +601,12 @@ export default function App() {
               </Alert>
             )}
           </div>
-          {org && !events && !member && (actor.platform || org === actor.organizationId) && (
+          {membersView && org && !member && (actor.platform || org === actor.organizationId) && (
             <MemberSearch
               key={`${org}:${JSON.stringify(memberFilters)}`}
               filters={memberFilters}
-              onSubmit={(filters) => navigate({ org, ...filters })}
-              onClear={() => navigate({ org })}
+              onSubmit={(filters) => navigate({ ...memberDirectoryRoute, ...filters })}
+              onClear={() => navigate(memberDirectoryRoute)}
             />
           )}
           {loading ? (
@@ -597,7 +635,9 @@ export default function App() {
                           <TableCell>
                             <Button
                               variant="link"
-                              onClick={() => navigate({ org: o.id })}
+                              onClick={() =>
+                                navigate({ view: activeView, org: o.id })
+                              }
                             >
                               {o.name}
                             </Button>
@@ -614,8 +654,10 @@ export default function App() {
                           <TableCell>
                             <Button
                               variant="ghost"
-                              aria-label={`管理 ${o.name}`}
-                              onClick={() => navigate({ org: o.id })}
+                              aria-label={membersView ? `查看 ${o.name} 的成员` : `管理 ${o.name}`}
+                              onClick={() =>
+                                navigate({ view: activeView, org: o.id })
+                              }
                             >
                               <ChevronRight />
                             </Button>
@@ -627,130 +669,123 @@ export default function App() {
                   <Pager
                     after={after}
                     next={data.organizations.nextAfter}
-                    route={{}}
+                    route={membersView ? memberDirectoryRoute : {}}
                   />
                 </section>
               )}
-              {data.organization && !events && !member && (
-                <>
-                  <section className="organization-summary">
-                    <div>
-                      <Status active={data.organization.status === "enabled"} />
-                      <code>{org}</code>
-                    </div>
-                    <div className="actions">
+              {data.organization && !events && !membersView && (
+                <section className="organization-summary">
+                  <div>
+                    <Status active={data.organization.status === "enabled"} />
+                    <code>{org}</code>
+                  </div>
+                  <div className="actions">
+                    <Button
+                      variant="outline"
+                      onClick={() =>
+                        rename(
+                          "name",
+                          data.organization!.name,
+                          base,
+                          "修改组织名称"
+                        )
+                      }
+                    >
+                      修改名称
+                    </Button>
+                    {actor.platform && org !== "org_system" && (
                       <Button
-                        variant="outline"
+                        variant={
+                          data.organization.status === "enabled"
+                            ? "destructive"
+                            : "outline"
+                        }
                         onClick={() =>
-                          rename(
-                            "name",
-                            data.organization!.name,
-                            base,
-                            "修改组织名称"
-                          )
+                          setAction({
+                            title:
+                              data.organization!.status === "enabled"
+                                ? "停用组织"
+                                : "恢复组织",
+                            description:
+                              "停用后，该组织成员无法通过后续登录和身份有效性检查。已有业务系统会话由各应用管理。",
+                            path: base,
+                            method: "PATCH",
+                            body: {
+                              status:
+                                data.organization!.status === "enabled"
+                                  ? "disabled"
+                                  : "enabled",
+                            },
+                            destructive:
+                              data.organization!.status === "enabled",
+                          })
                         }
                       >
-                        修改名称
+                        {data.organization.status === "enabled"
+                          ? "停用组织"
+                          : "恢复组织"}
                       </Button>
-                      {actor.platform && org !== "org_system" && (
-                        <Button
-                          variant={
-                            data.organization.status === "enabled"
-                              ? "destructive"
-                              : "outline"
-                          }
-                          onClick={() =>
-                            setAction({
-                              title:
-                                data.organization!.status === "enabled"
-                                  ? "停用组织"
-                                  : "恢复组织",
-                              description:
-                                "停用后，该组织成员无法通过后续登录和身份有效性检查。已有业务系统会话由各应用管理。",
-                              path: base,
-                              method: "PATCH",
-                              body: {
-                                status:
-                                  data.organization!.status === "enabled"
-                                    ? "disabled"
-                                    : "enabled",
-                              },
-                              destructive:
-                                data.organization!.status === "enabled",
-                            })
-                          }
-                        >
-                          {data.organization.status === "enabled"
-                            ? "停用组织"
-                            : "恢复组织"}
-                        </Button>
-                      )}
-                    </div>
-                  </section>
-                  <section className="directory">
-                    <div className="section-heading">
-                      <h2>成员</h2>
-                      <Button onClick={() => create(false)}>
-                        <Plus data-icon="inline-start" />
-                        新增成员
-                      </Button>
-                    </div>
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>成员</TableHead>
-                          <TableHead>身份状态</TableHead>
-                          <TableHead>管理权限</TableHead>
-                          <TableHead>成员 ID</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {data.members?.items.map((m) => (
-                          <TableRow key={m.id}>
-                            <TableCell>
-                              <Button
-                                variant="link"
-                                onClick={() =>
-                                  navigate({ ...memberListRoute, member: m.id })
-                                }
-                              >
-                                {m.displayName}
-                              </Button>
-                            </TableCell>
-                            <TableCell>
-                              <MemberStatus member={m} />
-                            </TableCell>
-                            <TableCell>
-                              {data.members!.administratorIds.includes(m.id) ? (
-                                <Badge variant="secondary">{adminTitle}</Badge>
-                              ) : (
-                                <span className="muted">普通成员</span>
-                              )}
-                            </TableCell>
-                            <TableCell>
-                              <code>{m.id}</code>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                    {data.members?.items.length === 0 && (
-                      <NoRecords
-                        text={memberSearchActive ? "没有符合条件的成员" : "还没有成员"}
-                        description={
-                          memberSearchActive
-                            ? "修改搜索条件或清除筛选后再试。"
-                            : undefined
-                        }
-                      />
                     )}
-                    <Pager
-                      after={after}
-                      next={data.members?.nextAfter}
-                      route={{ org, ...memberFilters }}
+                  </div>
+                </section>
+              )}
+              {data.members && (
+                <section className="directory">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>成员</TableHead>
+                        <TableHead>身份状态</TableHead>
+                        <TableHead>管理权限</TableHead>
+                        <TableHead>成员 ID</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {data.members.items.map((m) => (
+                        <TableRow key={m.id}>
+                          <TableCell>
+                            <Button
+                              variant="link"
+                              onClick={() =>
+                                navigate({ ...memberListRoute, member: m.id })
+                              }
+                            >
+                              {m.displayName}
+                            </Button>
+                          </TableCell>
+                          <TableCell>
+                            <MemberStatus member={m} />
+                          </TableCell>
+                          <TableCell>
+                            {data.members!.administratorIds.includes(m.id) ? (
+                              <Badge variant="secondary">{adminTitle}</Badge>
+                            ) : (
+                              <span className="muted">普通成员</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <code>{m.id}</code>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                  {data.members.items.length === 0 && (
+                    <NoRecords
+                      text={memberSearchActive ? "没有符合条件的成员" : "还没有成员"}
+                      description={
+                        memberSearchActive
+                          ? "修改搜索条件或清除筛选后再试。"
+                          : undefined
+                      }
                     />
-                  </section>
-                </>
+                  )}
+                  <Pager
+                    after={after}
+                    next={data.members.nextAfter}
+                    route={{ ...memberDirectoryRoute, ...memberFilters }}
+                  />
+                </section>
               )}
               {selected && data.detail && (
                 <div className="detail-grid">
