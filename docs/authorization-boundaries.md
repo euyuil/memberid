@@ -4,6 +4,8 @@ This document records the agreed division between tokens and server-side
 authorization, the timing of management authorization checks, and the effect of
 revocation on operations already in progress. It complements the [Member
 roles](roles.md) and [management scopes and actions](management-permissions.md).
+The [operation catalog](management-operation-catalog.md) maps existing entry
+points to targets, required actions, role coverage, and authorization checkpoints.
 This is a design decision, not a change to token contents, APIs, persistence, or
 runtime enforcement. The [OIDC profile](oidc.md), [console](console.md), and
 [private management API](management-api.md) describe the current interfaces.
@@ -62,6 +64,11 @@ Before a protected management operation starts executing, the server must:
    action, and operation-specific authorization constraints. For example,
    creating a role assignment checks the recipient and intended authority as
    well as access to the assignment collection.
+
+An update can require several actions on the same target. For example, modifying
+ordinary organization properties and its status requires both `update` and
+`status.update`. Resolve all required pairs from the request before executing
+the bounded operation; reject it in full if any required pair is denied.
 
 This decision is the operation's authorization point. UI capability checks,
 client-side permission lists, and an earlier request's successful decision do
@@ -160,8 +167,8 @@ invariants.
   `installation-manager` principal. Trusted operator entry points retain their
   separate access contract; they do not acquire Member roles or begin accepting
   ordinary OIDC tokens through this design.
-- The generic scope/action evaluator, complete role-to-operation mappings, and
-  corresponding implementation changes remain follow-up work. No job system,
+- The generic scope/action evaluator and implementation of the catalog's
+  role-to-operation mappings remain follow-up work. No job system,
   cancellation protocol, or external policy-decision API is added.
 
 The agreed authorization and revocation boundaries require implementation and

@@ -79,6 +79,11 @@ type DirectoryMember = Member & {
 }
 type MemberPage = Page<DirectoryMember> & { administratorIds?: string[] }
 type Binding = { id: string; factorType: string; status: string }
+const factorLabels: Partial<Record<string, string>> = {
+  phone: "手机号",
+  dingtalk: "钉钉",
+  feishu: "飞书",
+}
 type Event = {
   id: number
   actor: string
@@ -1041,7 +1046,7 @@ export default function App() {
                     data.detail.bindings.map((b) => (
                       <div className="binding-row" key={b.id}>
                         <strong>
-                          {b.factorType === "phone" ? "手机号" : "钉钉"}
+                          {factorLabels[b.factorType] ?? b.factorType}
                         </strong>
                         <Status
                           active={b.status === "active"}
