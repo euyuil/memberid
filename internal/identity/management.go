@@ -125,9 +125,16 @@ func (store *Store) UpdateOrganization(ctx context.Context, principal Principal,
 	if !principal.installation() {
 		return Organization{}, ErrForbidden
 	}
+	requirements, err := organizationUpdateRequirements(id, change)
+	if err != nil {
+		return Organization{}, err
+	}
 	var result Organization
-	err := pgx.BeginFunc(ctx, store.pool, func(tx pgx.Tx) error {
+	err = pgx.BeginFunc(ctx, store.pool, func(tx pgx.Tx) error {
 		if err := managementLock(ctx, tx); err != nil {
+			return err
+		}
+		if err := authorizeAll(ctx, tx, principal, requirements...); err != nil {
 			return err
 		}
 		var err error

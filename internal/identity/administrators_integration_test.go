@@ -19,29 +19,8 @@ func TestAdministratorActorScopeAndRevocation(t *testing.T) {
 	}
 	local, factor := administratorMember(t, s, org.ID, 1)
 	platform, platformFactor := administratorMember(t, s, SystemOrganizationID, 2)
-	actorFor := func(member Member, factor Factor) ManagementActor {
-		t.Helper()
-		bindings, err := s.Bindings(t.Context(), member.OrganizationID, member.ID)
-		if err != nil || len(bindings) != 1 {
-			t.Fatal(bindings, err)
-		}
-		data, err := json.Marshal(map[string]string{"memberId": member.ID, "factorId": factor.ID, "bindingId": bindings[0].ID})
-		if err != nil {
-			t.Fatal(err)
-		}
-		if _, err = s.pool.Exec(t.Context(), "INSERT INTO oidc_sessions(id,secret_hash,verification,expires_at,absolute_expires_at) VALUES($1,$1,'{}',clock_timestamp()+interval '1 hour',clock_timestamp()+interval '2 hours')", member.ID); err != nil {
-			t.Fatal(err)
-		}
-		if _, err = s.pool.Exec(t.Context(), "INSERT INTO oidc_grants(id,client_id,session_id,data,expires_at,absolute_expires_at) VALUES($1,'synthetic-management',$1,$2,clock_timestamp()+interval '1 hour',clock_timestamp()+interval '2 hours')", member.ID, data); err != nil {
-			t.Fatal(err)
-		}
-		actor, err := s.ManagementActor(t.Context(), member.ID, member.ID)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return actor
-	}
-	localActor, platformActor := actorFor(local, factor), actorFor(platform, platformFactor)
+
+	localActor, platformActor := administratorActor(t, s, local, factor), administratorActor(t, s, platform, platformFactor)
 	if localActor.Platform || !platformActor.Platform {
 		t.Fatal("incorrect administrator scope")
 	}
@@ -232,4 +211,27 @@ func TestSystemOrganizationRejectsAutomaticDingTalkAdmission(t *testing.T) {
 	if _, e = admitLogin(t.Context(), verifier, proof); !errors.Is(e, ErrConflict) {
 		t.Fatal("revoked binding restored", e)
 	}
+}
+
+func administratorActor(t *testing.T, s *Store, member Member, factor Factor) ManagementActor {
+	t.Helper()
+	bindings, err := s.Bindings(t.Context(), member.OrganizationID, member.ID)
+	if err != nil || len(bindings) != 1 {
+		t.Fatal(bindings, err)
+	}
+	data, err := json.Marshal(map[string]string{"memberId": member.ID, "factorId": factor.ID, "bindingId": bindings[0].ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.pool.Exec(t.Context(), "INSERT INTO oidc_sessions(id,secret_hash,verification,expires_at,absolute_expires_at) VALUES($1,$1,'{}',clock_timestamp()+interval '1 hour',clock_timestamp()+interval '2 hours')", member.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.pool.Exec(t.Context(), "INSERT INTO oidc_grants(id,client_id,session_id,data,expires_at,absolute_expires_at) VALUES($1,'synthetic-management',$1,$2,clock_timestamp()+interval '1 hour',clock_timestamp()+interval '2 hours')", member.ID, data); err != nil {
+		t.Fatal(err)
+	}
+	actor, err := s.ManagementActor(t.Context(), member.ID, member.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return actor
 }

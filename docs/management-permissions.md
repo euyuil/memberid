@@ -3,7 +3,9 @@
 This document records the agreed design for MemberID management scopes, CRUD
 actions, and wildcard matching. It complements the [Member role definitions](roles.md)
 and the [catalog of existing operations](management-operation-catalog.md).
-These rules are not implemented by this documentation change. The [console access
+The scope/action parser and evaluator implement these rules. Organization updates
+use the shared check; the [catalog rollout status](management-operation-catalog.md#current-enforcement)
+identifies the remaining operation migrations. The [console access
 matrix](console.md#first-version-access-model) and [private management API](management-api.md)
 continue to describe the available interfaces and their current access contracts.
 
@@ -284,7 +286,8 @@ foreign Member. Wildcards do not bypass these restrictions or the existing
 The [operation catalog](management-operation-catalog.md) supplies mappings for
 existing functionality and identifies operator-only contracts. Assignment IDs
 and API serialization, persistence schema, management API changes, additional
-capabilities, and enforcement implementation remain follow-up work. This design
+capabilities, and the remaining enforcement migrations remain follow-up work.
+Built-in role permissions are defined in code, with current administrator
+assignments read from the existing store for each operation. This implementation
 does not introduce custom roles, exclusion or deny rules, an application-authorization
-service, or changes to OIDC behavior. No runtime, database, token, or UI change is
-part of this documentation update.
+service, or changes to the database schema, token contents, or OIDC behavior.

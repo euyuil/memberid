@@ -723,17 +723,14 @@ export default function App() {
         {membersView &&
           !member &&
           (actor.platform || org === actor.organizationId) && (
-            <>
-              <DirectoryToolbar title="成员目录" />
-              <MemberSearch
-                key={`${org}:${JSON.stringify(memberFilters)}`}
-                filters={memberFilters}
-                onSubmit={(filters) =>
-                  navigate({ ...memberDirectoryRoute, ...filters })
-                }
-                onClear={() => navigate(memberDirectoryRoute)}
-              />
-            </>
+            <MemberSearch
+              key={`${org}:${JSON.stringify(memberFilters)}`}
+              filters={memberFilters}
+              onSubmit={(filters) =>
+                navigate({ ...memberDirectoryRoute, ...filters })
+              }
+              onClear={() => navigate(memberDirectoryRoute)}
+            />
           )}
         {loading ? (
           <div
@@ -748,7 +745,7 @@ export default function App() {
           <>
             {data.organizations && (
               <section className="directory" aria-label="组织列表">
-                <DirectoryToolbar title={providers ? "选择组织" : "组织目录"} />
+                {providers && <DirectoryToolbar title="选择组织" />}
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -884,9 +881,6 @@ export default function App() {
                       {!org && <TableHead>所属组织</TableHead>}
                       <TableHead>身份状态</TableHead>
                       <TableHead>管理权限</TableHead>
-                      <TableHead className="row-actions">
-                        <span className="sr-only">操作</span>
-                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -928,27 +922,6 @@ export default function App() {
                           ) : (
                             <span className="muted">普通成员</span>
                           )}
-                        </TableCell>
-                        <TableCell className="row-actions">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            nativeButton={false}
-                            render={
-                              <Link
-                                href={routeURL({
-                                  view: "members",
-                                  org: m.organizationId,
-                                  member: m.id,
-                                })}
-                                state={{ memberList: location }}
-                              />
-                            }
-                            aria-label={`查看 ${m.displayName}`}
-                          >
-                            查看
-                            <ChevronRight data-icon="inline-end" />
-                          </Button>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -1125,7 +1098,6 @@ export default function App() {
                 className="directory event-directory"
                 aria-label="操作记录列表"
               >
-                <DirectoryToolbar title="管理操作" />
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -1448,7 +1420,8 @@ function MemberSearch({
       }}
     >
       <label className="search-field">
-        姓名或成员 ID
+        <span className="sr-only">姓名或成员 ID</span>
+        <Search aria-hidden="true" />
         <Input
           type="search"
           placeholder="搜索姓名或成员 ID…"
@@ -1457,8 +1430,8 @@ function MemberSearch({
           onChange={(event) => setQuery(event.target.value)}
         />
       </label>
-      <label className="grid gap-1 text-xs">
-        身份状态
+      <label className="filter-field">
+        <span className="sr-only">身份状态</span>
         <select
           className="filter-select"
           value={status}
@@ -1469,8 +1442,8 @@ function MemberSearch({
           <option value="blocked">已阻断</option>
         </select>
       </label>
-      <label className="grid gap-1 text-xs">
-        管理权限
+      <label className="filter-field">
+        <span className="sr-only">管理权限</span>
         <select
           className="filter-select"
           value={administrator}
@@ -1482,7 +1455,6 @@ function MemberSearch({
         </select>
       </label>
       <Button type="submit" variant="outline">
-        <Search data-icon="inline-start" />
         搜索
       </Button>
       <Button
