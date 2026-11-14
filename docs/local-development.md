@@ -32,10 +32,13 @@ The console container trusts that certificate through a read-only mount. Remove 
 
 ## Start the stack
 
-Run the following from the repository root in Git Bash or a POSIX shell:
+From the repository root, define this helper in Git Bash or a POSIX shell. The environment settings preserve Linux paths in container command arguments when using Git Bash on Windows.
 
 ```sh
-dc() { docker compose --env-file .local/compose/compose.env "$@"; }
+dc() {
+  MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' \
+    docker compose --env-file .local/compose/compose.env "$@"
+}
 dc up -d --wait
 dc ps
 ```
