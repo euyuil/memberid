@@ -57,6 +57,8 @@ import {
   StatusBadge,
 } from "@/components/directory"
 import { Providers, type ProviderDirectory } from "@/Providers"
+import { memberListLocation, parseRoute, routeURL, type Route } from "@/routes"
+import { currentLocation, Link, navigate } from "@/navigation"
 
 type Actor = {
   memberId: string
@@ -139,12 +141,6 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (!response.ok)
     throw new Error(messages[body.error] ?? "请求未完成，请稍后重试。")
   return body as T
-}
-function routeHash(values: Record<string, string>) {
-  return `#${new URLSearchParams(values)}`
-}
-function navigate(values: Record<string, string>) {
-  window.location.hash = routeHash(values)
 }
 function Status({ active, text }: { active: boolean; text?: string }) {
   return (
@@ -253,79 +249,81 @@ function NoRecords({
 
 export default function App() {
   const [session, setSession] = useState<Session | null>()
-  const [location, setLocation] = useState(window.location.hash)
+  const [location, setLocation] = useState(currentLocation)
   const [revision, setRevision] = useState(0)
   const [data, setData] = useState<Data>({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [action, setAction] = useState<Action | null>(null)
-  const params = new URLSearchParams(location.slice(1))
-  const actorOrganization =
-    session && !session.actor.platform ? session.actor.organizationId : ""
-  const org = params.get("org") || actorOrganization
-  const view = params.get("view")
+  const route = parseRoute(location)
+  const params = route?.query ?? new URLSearchParams()
+  const org = route?.org ?? ""
+  const view = route?.view
   const events = view === "events"
   const providers = view === "providers"
-  // Organization links without a view previously opened the member directory.
-  const membersView =
-    !events &&
-    !providers &&
-    (view === "members" || (view !== "organization" && !!org))
-  const activeView = events
-    ? "events"
-    : providers
-      ? "providers"
-      : membersView
-        ? "members"
-        : "organization"
-  const member = membersView && org ? (params.get("member") ?? "") : ""
-  const historyTarget = params.get("target") ?? ""
+  const membersView = view === "members"
+  const activeView = view ?? "organization"
+  const member = route?.member ?? ""
+  const historyTarget = events ? (params.get("memberId") ?? "") : ""
   const after = params.get("after") ?? ""
   const memberFilters = {
     q: params.get("q") ?? "",
     status: params.get("status") ?? "",
     administrator: params.get("administrator") ?? "",
   }
-  const scopeRoute: Record<string, string> = org ? { org } : {}
-  const memberDirectoryRoute = { view: "members", ...scopeRoute }
-  const memberListState = {
-    ...memberFilters,
-    ...(after ? { after } : {}),
-  }
-  const fromAllOrganizations = params.get("from") === "all"
-  const memberListRoute = {
-    ...memberDirectoryRoute,
-    ...memberListState,
-    ...(fromAllOrganizations ? { from: "all" } : {}),
-  }
-  const memberReturnRoute = fromAllOrganizations
-    ? { view: "members", ...memberListState }
-    : memberListRoute
+  const scopeRoute: Route = org ? { org } : {}
+  const memberDirectoryRoute: Route = { view: "members", ...scopeRoute }
+  const memberReturnRoute =
+    memberListLocation(window.history.state?.memberList) ??
+    routeURL(memberDirectoryRoute)
+  const fromAllOrganizations = !parseRoute(memberReturnRoute)?.org
+  const memberNavigationState = { memberList: memberReturnRoute }
   const memberQuery = new URLSearchParams({ ...memberFilters, after })
   const memberSearchActive = Object.values(memberFilters).some(Boolean)
+  const forbidden =
+    !!session &&
+    !!route &&
+    !session.actor.platform &&
+    !route.root &&
+    org !== session.actor.organizationId
 
   useEffect(() => {
+    let previousLocation = currentLocation()
     const change = () => {
+      const next = currentLocation()
+      if (next === previousLocation) return
+      previousLocation = next
       setAction(null)
       setData({})
       setLoading(true)
       setError("")
-      setLocation(window.location.hash)
+      setLocation(next)
     }
     const expired = () => setSession(null)
     window.addEventListener("memberid-sign-in-required", expired)
-    window.addEventListener("hashchange", change)
+    window.addEventListener("popstate", change)
     request<Session>("/api/session")
       .then(setSession)
       .catch(() => setSession(null))
     return () => {
-      window.removeEventListener("hashchange", change)
+      window.removeEventListener("popstate", change)
       window.removeEventListener("memberid-sign-in-required", expired)
     }
   }, [])
 
   useEffect(() => {
-    if (!session) return
+    if (session && parseRoute(location)?.root) {
+      navigate(
+        session.actor.platform
+          ? { view: "organization" }
+          : { view: "members", org: session.actor.organizationId },
+        { replace: true }
+      )
+    }
+  }, [session, location])
+
+  useEffect(() => {
+    if (!session || !route || route.root || forbidden) return
     const abort = new AbortController()
     async function load() {
       setLoading(true)
@@ -409,7 +407,22 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session, location, revision])
 
-  if (session === undefined)
+  if (!route || forbidden)
+    return (
+      <main className="login-page">
+        <h1>{forbidden ? "没有访问权限" : "页面不存在"}</h1>
+        <p>
+          {forbidden
+            ? "当前身份无权访问此管理范围。"
+            : "请检查链接，或返回管理首页。"}
+        </p>
+        <Button render={<Link href="/" />} nativeButton={false}>
+          返回管理首页
+        </Button>
+      </main>
+    )
+
+  if (session === undefined || (session && route.root))
     return (
       <main className="login-page">
         <Skeleton className="h-12 w-64" />
@@ -418,6 +431,10 @@ export default function App() {
     )
   if (!session) {
     const code = new URLSearchParams(window.location.search).get("error") ?? ""
+    const returnQuery = new URLSearchParams(window.location.search)
+    returnQuery.delete("error")
+    const returnTo =
+      window.location.pathname + (returnQuery.size ? `?${returnQuery}` : "")
     return (
       <main className="login-page">
         <div className="identity-mark">
@@ -432,7 +449,9 @@ export default function App() {
         </p>
         <Button
           size="lg"
-          render={<a href="/auth/login" />}
+          render={
+            <a href={`/auth/login?${new URLSearchParams({ returnTo })}`} />
+          }
           nativeButton={false}
         >
           使用 MemberID 登录
@@ -488,7 +507,8 @@ export default function App() {
         navigate(
           isOrganization
             ? { view: "organization", org: id }
-            : { ...memberListRoute, member: id }
+            : { ...memberDirectoryRoute, member: id },
+          { state: isOrganization ? undefined : { memberList: location } }
         ),
     })
 
@@ -498,28 +518,28 @@ export default function App() {
       navigation={[
         {
           label: "组织",
-          href: routeHash({ view: "organization", ...scopeRoute }),
+          href: routeURL({ view: "organization", ...scopeRoute }),
           icon: Building2,
           active: activeView === "organization",
           group: "身份管理",
         },
         {
           label: "成员",
-          href: routeHash(memberDirectoryRoute),
+          href: routeURL(memberDirectoryRoute),
           icon: Users,
           active: membersView,
           group: "身份管理",
         },
         {
           label: "身份提供商",
-          href: routeHash({ view: "providers", ...scopeRoute }),
+          href: routeURL({ view: "providers", ...scopeRoute }),
           icon: KeyRound,
           active: providers,
           group: "身份管理",
         },
         {
           label: "操作记录",
-          href: routeHash({ view: "events", ...scopeRoute }),
+          href: routeURL({ view: "events", ...scopeRoute }),
           icon: History,
           active: events,
           group: "活动",
@@ -532,7 +552,7 @@ export default function App() {
             headers: { "X-CSRF-Token": session.csrf },
           })
           setSession(null)
-          window.history.replaceState(null, "", "/")
+          navigate("/", { replace: true })
         } catch (e) {
           setError((e as Error).message)
         }
@@ -613,16 +633,24 @@ export default function App() {
               {data.historyMember && (
                 <Button
                   variant="outline"
-                  onClick={() =>
-                    navigate({ ...memberListRoute, member: historyTarget })
+                  render={
+                    <Link
+                      href={routeURL({
+                        ...memberDirectoryRoute,
+                        member: historyTarget,
+                      })}
+                      state={memberNavigationState}
+                    />
                   }
+                  nativeButton={false}
                 >
                   返回成员详情
                 </Button>
               )}
               <Button
                 variant="outline"
-                onClick={() => navigate({ view: "events", org })}
+                render={<Link href={routeURL({ view: "events", org })} />}
+                nativeButton={false}
               >
                 查看本组织记录
               </Button>
@@ -637,7 +665,8 @@ export default function App() {
           {member && (
             <Button
               variant="outline"
-              onClick={() => navigate(memberReturnRoute)}
+              render={<Link href={memberReturnRoute} />}
+              nativeButton={false}
             >
               {fromAllOrganizations ? "返回所有组织的成员" : "返回成员列表"}
             </Button>
@@ -651,12 +680,19 @@ export default function App() {
           {!membersView && !events && !providers && org && (
             <>
               {actor.platform && (
-                <Button variant="outline" onClick={() => navigate({})}>
+                <Button
+                  variant="outline"
+                  render={<Link href="/organizations" />}
+                  nativeButton={false}
+                >
                   所有组织
                 </Button>
               )}
               {data.organization && (
-                <Button onClick={() => navigate(memberDirectoryRoute)}>
+                <Button
+                  render={<Link href={routeURL(memberDirectoryRoute)} />}
+                  nativeButton={false}
+                >
                   查看成员
                 </Button>
               )}
@@ -728,7 +764,7 @@ export default function App() {
                             name={o.name}
                             id={o.id}
                             icon={<Building2 />}
-                            href={routeHash({ view: activeView, org: o.id })}
+                            href={routeURL({ view: activeView, org: o.id })}
                           />
                         </TableCell>
                         <TableCell>
@@ -747,9 +783,12 @@ export default function App() {
                                 ? `管理 ${o.name} 的身份提供商`
                                 : `管理 ${o.name}`
                             }
-                            onClick={() =>
-                              navigate({ view: activeView, org: o.id })
+                            render={
+                              <Link
+                                href={routeURL({ view: activeView, org: o.id })}
+                              />
                             }
+                            nativeButton={false}
                           >
                             <ChevronRight />
                           </Button>
@@ -852,12 +891,12 @@ export default function App() {
                             name={m.displayName}
                             id={m.id}
                             icon={Array.from(m.displayName)[0] || <Users />}
-                            href={routeHash({
-                              ...memberListRoute,
+                            href={routeURL({
+                              view: "members",
                               org: m.organizationId,
                               member: m.id,
-                              ...(!org ? { from: "all" } : {}),
                             })}
+                            state={{ memberList: location }}
                           />
                         </TableCell>
                         {!org && (
@@ -1040,13 +1079,13 @@ export default function App() {
                   </p>
                   <Button
                     variant="outline"
-                    onClick={() =>
-                      navigate({
-                        ...memberListRoute,
-                        view: "events",
-                        target: member,
-                      })
+                    render={
+                      <Link
+                        href={routeURL({ org, view: "events", target: member })}
+                        state={memberNavigationState}
+                      />
                     }
+                    nativeButton={false}
                   >
                     查看记录
                     <ChevronRight data-icon="inline-end" />
@@ -1149,11 +1188,14 @@ export default function App() {
                     variant="outline"
                     disabled={!params.get("before")}
                     onClick={() =>
-                      navigate({
-                        ...memberListRoute,
-                        view: "events",
-                        target: historyTarget,
-                      })
+                      navigate(
+                        {
+                          org,
+                          view: "events",
+                          target: historyTarget,
+                        },
+                        { state: memberNavigationState }
+                      )
                     }
                   >
                     最新记录
@@ -1162,12 +1204,15 @@ export default function App() {
                     variant="outline"
                     disabled={data.events.length < 50}
                     onClick={() =>
-                      navigate({
-                        ...memberListRoute,
-                        view: "events",
-                        target: historyTarget,
-                        before: String(data.events!.at(-1)!.id),
-                      })
+                      navigate(
+                        {
+                          org,
+                          view: "events",
+                          target: historyTarget,
+                          before: String(data.events!.at(-1)!.id),
+                        },
+                        { state: memberNavigationState }
+                      )
                     }
                   >
                     更早记录
@@ -1186,7 +1231,7 @@ export default function App() {
           csrf={session.csrf}
           onClose={() => setAction(null)}
           onComplete={(id, submittedFrom) => {
-            if (window.location.hash !== submittedFrom) {
+            if (currentLocation() !== submittedFrom) {
               refresh()
               return
             }
@@ -1445,7 +1490,7 @@ function Pager({
   count: number
   after: string
   next?: string
-  route: Record<string, string>
+  route: Route
 }) {
   return (
     <DirectoryFooter count={count}>
@@ -1501,7 +1546,7 @@ function ActionDialog({
               setError("请检查填写内容。名称不能为空，最多 128 个字符。")
               return
             }
-            const submittedFrom = window.location.hash
+            const submittedFrom = currentLocation()
             setPending(true)
             try {
               const result = await request<{ id?: string }>(action.path, {

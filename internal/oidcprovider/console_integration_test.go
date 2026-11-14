@@ -38,13 +38,19 @@ func consoleProviderFixture(t *testing.T, f *fixture, dingTalk identity.DingTalk
 
 func consoleLogin(t *testing.T, f *fixture, server *httptest.Server, member string) reply {
 	t.Helper()
-	r := f.call(f.browser, "GET", server.URL+"/auth/login", nil, nil)
+	return consoleLoginTo(t, f, server, member, "/")
+}
+
+func consoleLoginTo(t *testing.T, f *fixture, server *httptest.Server, member, returnTo string) reply {
+	t.Helper()
+	r := f.call(f.browser, "GET", server.URL+"/auth/login?"+url.Values{"returnTo": {returnTo}}.Encode(), nil, nil)
 	f.status(r, 303)
 	r = f.call(f.browser, "GET", r.header.Get("Location"), nil, nil)
 	f.status(r, 302)
 	r = f.call(f.browser, "GET", r.header.Get("Location"), nil, nil)
 	f.status(r, 200)
-	if !strings.Contains(r.body, "Select your identity") {
+	// Reused SSO enables identity selection without a verification message.
+	if strings.Contains(r.body, `name="member" disabled`) {
 		r = f.verifyPhone(r)
 	}
 	r = f.submit(r.body, "continue", url.Values{"member": {member}, "consent": {"yes"}})
@@ -59,6 +65,64 @@ func consoleLogin(t *testing.T, f *fixture, server *httptest.Server, member stri
 	replay := f.call(f.browser, "GET", callback, nil, nil)
 	f.status(replay, 400)
 	return r
+}
+
+func TestConsoleLoginReturnsToRequestedPage(t *testing.T) {
+	f := newFixture(t)
+	if err := f.store.SetAdministrator(t.Context(), identity.OperatorPrincipal(), f.member.OrganizationID, f.member.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	server := consoleFixture(t, f)
+	base := "/organizations/" + f.member.OrganizationID
+	for _, target := range []string{
+		base + "/members?q=%E5%A7%93%E5%90%8D+%26+Alice&status=active&administrator=yes&after=" + f.member.ID,
+		base + "/members/" + f.member.ID,
+		"/organizations/" + f.otherMember.OrganizationID + "/members/" + f.otherMember.ID,
+	} {
+		r := consoleLoginTo(t, f, server, f.member.ID, target)
+		if r.header.Get("Location") != target {
+			t.Fatalf("returned to %q, want %q", r.header.Get("Location"), target)
+		}
+		consoleJSON(t, f, server, "GET", "/api/session", "", "", 200)
+	}
+	consoleJSON(t, f, server, "GET", "/api/organizations/"+f.otherMember.OrganizationID+"/members/"+f.otherMember.ID, "", "", 403)
+}
+
+func TestConsoleLoginReturnTargetValidationAndFailure(t *testing.T) {
+	f := newFixture(t)
+	server := consoleFixture(t, f)
+	for _, target := range []string{"", "https://example.invalid", "//example.invalid", `/\example.invalid`, "/%2f%2fexample.invalid", "/auth/login", "/api/members", "/unknown"} {
+		r := f.call(f.browser, "GET", server.URL+"/auth/login?"+url.Values{"returnTo": {target}}.Encode(), nil, nil)
+		f.status(r, 400)
+		if r.header.Get("Location") != "" || len(r.header.Values("Set-Cookie")) != 0 {
+			t.Fatal("invalid return target started a login", target)
+		}
+	}
+	for _, query := range []string{"returnTo=%2Fmembers&returnTo=%2Fevents", "returnTo=%ZZ"} {
+		f.status(f.call(f.browser, "GET", server.URL+"/auth/login?"+query, nil, nil), 400)
+	}
+	var logins int
+	if err := f.store.Database().QueryRow(t.Context(), "SELECT count(*) FROM console_logins").Scan(&logins); err != nil || logins != 0 {
+		t.Fatal("invalid target persisted login state", logins, err)
+	}
+	target := "/members?q=Alice%26Bob&after=mbr_cursor"
+	r := f.call(f.browser, "GET", server.URL+"/auth/login?"+url.Values{"returnTo": {target}}.Encode(), nil, nil)
+	f.status(r, 303)
+	authorization, err := url.Parse(r.header.Get("Location"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	callback := server.URL + "/auth/callback?" + url.Values{
+		"state": {authorization.Query().Get("state")}, "error": {"access_denied"}, "returnTo": {"//example.invalid"},
+	}.Encode()
+	f.status(f.call(browserClient(), "GET", callback, nil, nil), 400)
+	r = f.call(f.browser, "GET", callback, nil, nil)
+	f.status(r, 303)
+	destination, err := url.Parse(r.header.Get("Location"))
+	if err != nil || destination.Path != "/members" || destination.Query().Get("q") != "Alice&Bob" || destination.Query().Get("after") != "mbr_cursor" || destination.Query().Get("error") != "login_failed" {
+		t.Fatal("callback did not use its stored return target", r.header)
+	}
+	f.status(f.call(f.browser, "GET", callback, nil, nil), 400)
 }
 
 func consoleJSON(t *testing.T, f *fixture, server *httptest.Server, method, path, csrf, body string, want int) map[string]any {

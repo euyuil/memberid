@@ -3,6 +3,7 @@ set -eu
 export GOWORK=off
 npm --prefix web ci
 npm --prefix web run lint
+npm --prefix web test
 npm --prefix web run build
 unformatted=$(gofmt -l cmd internal)
 if [ -n "$unformatted" ]; then

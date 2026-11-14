@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react"
 import { Copy } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
+import { Link, type NavigationState } from "@/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -48,11 +49,13 @@ export function RecordIdentity({
   id,
   icon,
   href,
+  state,
 }: {
   name: string
   id?: string
   icon?: ReactNode
   href?: string
+  state?: NavigationState
 }) {
   return (
     <div className="record-identity">
@@ -63,9 +66,9 @@ export function RecordIdentity({
       )}
       <div className="record-text">
         {href ? (
-          <a className="record-name" href={href}>
+          <Link className="record-name" href={href} state={state}>
             {name}
-          </a>
+          </Link>
         ) : (
           <span className="record-name">{name}</span>
         )}

@@ -53,11 +53,65 @@ Saving a new secret verifies the application credentials before storing an encry
 
 See [Feishu setup](feishu.md) and [DingTalk setup](dingtalk.md) for the required application and runtime settings.
 
+## Page URLs and navigation
+
+The console uses ordinary paths at the root of its dedicated origin. Organization
+and Member IDs identify resources; names do not participate in routing.
+
+| Path | Page |
+| --- | --- |
+| `/organizations` | Organization directory (platform administrators). |
+| `/organizations/{organizationId}` | Organization details. |
+| `/organizations/{organizationId}/members` | Organization Member directory. |
+| `/organizations/{organizationId}/members/{memberId}` | Member details. |
+| `/organizations/{organizationId}/providers` | Organization identity providers. |
+| `/organizations/{organizationId}/events` | Organization operation history. |
+| `/members` | All-organization Member directory (platform administrators). |
+| `/events` | All-organization operation history (platform administrators). |
+| `/providers` | Organization picker for provider management (platform administrators). |
+
+After login, `/` replaces itself with `/organizations` for a platform administrator
+or `/organizations/{organizationId}/members` for an organization administrator.
+Concrete links keep their explicit scope; an unauthorized link displays an access
+error instead of silently substituting another organization. Server-side API
+authorization remains authoritative. The system organization uses the ordinary
+`/organizations/org_system` path.
+
+Member lists use query parameters `q`, `status` (`active` or `blocked`),
+`administrator` (`yes` or `no`), and `after`. Organization directories also use
+`after`. Operation history uses `memberId` to filter to a Member and `before` for
+pagination. For example, `/organizations/{organizationId}/events?memberId={memberId}`
+opens that Member's operation history. Changing filters resets pagination.
+Switching organizations retains the current section and clears resource details,
+filters, and pagination. Hash fragments are not application routes.
+
+Resource links support opening in a new tab, refreshing, and browser back/forward
+navigation. When a Member is opened from a list, browser history state retains the
+list's scope, filters, and cursor for the return link, including through a page
+refresh. A directly opened Member detail defaults to its own organization's list.
+Create/edit dialogs remain page-local; a successful create opens the new resource.
+
+The Go console serves its frontend entry point for the listed page paths, including
+direct deep-link requests. `/assets/` serves files; missing files, unknown paths,
+and unknown API/authentication endpoints do not receive the frontend entry point.
+The reverse proxy only needs the existing hostname routing, without a global
+fallback or rewrite rule.
+
+An unauthenticated deep link displays the login entry at that address.
+`/auth/login?returnTo=...` accepts only a local, supported page path with its query
+string (at most 4096 bytes). The server stores this destination with the expiring,
+browser-bound, single-use login transaction. The registered callback stays
+`/auth/callback`; its query cannot replace the stored destination. Successful login
+returns to the requested page. A failed login returns there with an error so a retry
+retains the target. Expired console sessions offer the same login entry at the
+current page. External URLs and API/authentication endpoints are rejected as return
+targets. Explicit console logout returns to `/`.
+
 ## Build and register the console
 
 Build with `sh scripts/check.sh` or `sh scripts/package.sh VERSION NEW_OUTPUT_DIRECTORY`. Both build the locked frontend before embedding it in Go. Node/npm are build dependencies; the resulting executable needs neither at runtime.
 
-Initialize a protected installation and a new database as described in [operator setup](operations.md). This increment uses fresh schema version **15**. Existing databases are not migrated or erased. Start the OIDC process before starting the console so its discovery and keys are reachable.
+Initialize a protected installation and a new database as described in [operator setup](operations.md). This increment uses fresh schema version **16**. Existing databases are not migrated or erased. Start the OIDC process before starting the console so its discovery and keys are reachable.
 
 Register a dedicated confidential Member client with no organization restriction:
 

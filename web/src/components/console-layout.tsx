@@ -8,6 +8,7 @@ import {
   type LucideIcon,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Link } from "@/navigation"
 import {
   Dialog,
   DialogContent,
@@ -46,7 +47,7 @@ function Navigation({
           {items
             .filter((item) => item.group === group)
             .map(({ label, href, icon: Icon, active }) => (
-              <a
+              <Link
                 className="nav-link"
                 key={label}
                 href={href}
@@ -57,7 +58,7 @@ function Navigation({
               >
                 <Icon aria-hidden="true" />
                 <span className="nav-label">{label}</span>
-              </a>
+              </Link>
             ))}
         </div>
       ))}
@@ -129,9 +130,9 @@ export function ConsoleLayout({
         跳到主要内容
       </a>
       <aside className="sidebar" aria-label="管理导航">
-        <a className="brand" href="#" aria-label="MemberID 管理控制台">
+        <Link className="brand" href="/" aria-label="MemberID 管理控制台">
           {brand}
-        </a>
+        </Link>
         <Navigation items={navigation} />
         {account}
       </aside>
