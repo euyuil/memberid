@@ -20,6 +20,19 @@ type dingTalkAttempt struct {
 	Consumed  bool      `json:"consumed"`
 }
 
+func dingTalkCallbackCode(r *http.Request) (string, bool) {
+	if !accountFields(r, "state", "authCode", "code", "error", "error_description") {
+		return "", false
+	}
+	code := r.Form.Get("code")
+	if !r.Form.Has("authCode") {
+		return code, true
+	}
+	// DingTalk may return the authorization code under both names.
+	authCode := r.Form.Get("authCode")
+	return authCode, !r.Form.Has("code") || code == authCode
+}
+
 func (service *Service) startDingTalk(w http.ResponseWriter, r *http.Request, request *authorizationRequest, registered client) {
 	if service.dingtalk == nil || registered.registration.SubjectKind != "member" || request.Verification != nil || request.ChallengeID != "" || request.externalPending() {
 		http.Error(w, "Cancel the current verification before starting DingTalk login.", http.StatusBadRequest)
@@ -57,14 +70,9 @@ func (service *Service) dingTalkCallback(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	for name := range r.Form {
-		if name != "state" && name != "authCode" && name != "error" && name != "error_description" {
-			http.Error(w, "Invalid DingTalk callback", http.StatusBadRequest)
-			return
-		}
-	}
+	code, valid := dingTalkCallbackCode(r)
 	state := r.Form.Get("state")
-	if len(state) != 43 {
+	if !valid || len(state) != 43 {
 		http.Error(w, "Invalid DingTalk callback", http.StatusBadRequest)
 		return
 	}
@@ -91,11 +99,11 @@ func (service *Service) dingTalkCallback(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "Invalid or expired DingTalk login", http.StatusBadRequest)
 		return
 	}
-	if r.Form.Get("error") != "" || r.Form.Get("authCode") == "" {
+	if r.Form.Get("error") != "" || code == "" {
 		service.renderLogin(w, r, request, registered, "DingTalk login did not complete. Cancel verification to try again.")
 		return
 	}
-	proof, err := service.dingtalk.Verify(r.Context(), attempt.DingTalkLoginContext, r.Form.Get("authCode"))
+	proof, err := service.dingtalk.Verify(r.Context(), attempt.DingTalkLoginContext, code)
 	if err != nil {
 		service.renderLogin(w, r, request, registered, "Unable to verify DingTalk membership. Cancel verification to try again.")
 		return
