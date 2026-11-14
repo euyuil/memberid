@@ -50,6 +50,7 @@ The repository is being bootstrapped. These guidelines define intended implement
 - Keep `README.md` concise: project purpose, getting started, and documentation entry points. Keep repository policy in `AGENTS.md`, contributor procedures in `CONTRIBUTING.md`, and detailed architecture, protocols, deployment, and operations in `docs/`.
 - Document identity boundaries, token lifecycle, configuration, supported client behavior, and operational limitations when they change. Do not present design intentions as verified behavior.
 - For login and management UI, keep fields and action areas stable during validation, requests, and countdowns. Reserve space for feedback or use accessible feedback outside normal layout; do not hide actionable messages to prevent layout shifts.
+- Make UI self-explanatory through clear labels, structure, and interactions. Do not add explanatory subtitles, helper prose, or slogans by default; supplementary explanation should be reserved for important warnings that materially affect the user's decision. Keep routine guidance in documentation, and retain concise state, operation results, and actionable error messages in the UI.
 
 ## Testing and Acceptance
 

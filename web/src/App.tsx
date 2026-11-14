@@ -25,18 +25,8 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import {
-  Empty,
-  EmptyHeader,
-  EmptyTitle,
-  EmptyDescription,
-} from "@/components/ui/empty"
-import {
-  Field,
-  FieldGroup,
-  FieldLabel,
-  FieldDescription,
-} from "@/components/ui/field"
+import { Empty, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import {
   Dialog,
@@ -113,7 +103,7 @@ type Data = {
 }
 type Action = {
   title: string
-  description: string
+  description?: string
   path: string
   method: string
   body: Record<string, unknown>
@@ -276,18 +266,11 @@ function EventDetails({ event, summary }: { event: Event; summary: string[] }) {
   )
 }
 
-function NoRecords({
-  text,
-  description = "新记录会显示在这里。",
-}: {
-  text: string
-  description?: string
-}) {
+function NoRecords({ text }: { text: string }) {
   return (
     <Empty>
       <EmptyHeader>
         <EmptyTitle>{text}</EmptyTitle>
-        <EmptyDescription>{description}</EmptyDescription>
       </EmptyHeader>
     </Empty>
   )
@@ -486,13 +469,7 @@ export default function App() {
         <div className="identity-mark">
           <Fingerprint />
         </div>
-        <p className="eyebrow">MemberID · 管理控制台</p>
-        <h1>管理组织，明确每个身份。</h1>
-        <p className="muted">
-          平台管理员与组织管理员使用同一个入口。
-          <br />
-          登录后，仅显示当前身份有权管理的内容。
-        </p>
+        <h1>MemberID 管理控制台</h1>
         <Button
           size="lg"
           render={
@@ -512,7 +489,6 @@ export default function App() {
             </Alert>
           )}
         </div>
-        <p className="footnote">需要已有的管理员授权才能进入控制台。</p>
       </main>
     )
   }
@@ -531,7 +507,6 @@ export default function App() {
   const rename = (field: string, value: string, path: string, title: string) =>
     setAction({
       title,
-      description: "修改名称不会改变身份 ID 或已有的登录绑定。",
       field,
       value,
       path,
@@ -542,9 +517,6 @@ export default function App() {
   const create = (isOrganization: boolean) =>
     setAction({
       title: isOrganization ? "新建组织" : "新增成员",
-      description: isOrganization
-        ? "创建普通组织，随后指定首位组织管理员。"
-        : "创建成员记录。登录方式需通过现有身份验证与绑定流程配置。",
       path: isOrganization ? "/api/organizations" : `${base}/members`,
       method: "POST",
       body: {},
@@ -621,9 +593,6 @@ export default function App() {
             <strong>{data.organization?.name ?? (org || "本组织")}</strong>
           )}
           {org === "org_system" && <Badge variant="outline">系统组织</Badge>}
-          <span className="scope-note">
-            {actor.platform ? "切换组织不会改变操作者身份" : "仅限本组织"}
-          </span>
         </>
       }
     >
@@ -631,7 +600,9 @@ export default function App() {
         <div>
           <h1>
             {events
-              ? "操作记录"
+              ? historyTarget
+                ? `${data.historyMember?.displayName ?? "成员"}的操作记录`
+                : "操作记录"
               : providers
                 ? "身份提供商"
                 : membersView
@@ -640,28 +611,6 @@ export default function App() {
                     : "成员"
                   : (data.organization?.name ?? "组织")}
           </h1>
-          {!events && (
-            <p className="muted">
-              {providers
-                ? org
-                  ? "管理本组织用于登录的外部应用。"
-                  : "选择组织后管理登录提供商。"
-                : membersView
-                  ? member
-                    ? "查看成员身份、登录方式与管理权限。"
-                    : "管理成员身份、状态与管理员权限。"
-                  : org
-                    ? "管理组织资料与成员访问状态。"
-                    : "管理独立的组织及其成员身份。"}
-            </p>
-          )}
-          {events && (
-            <p className="muted">
-              {historyTarget
-                ? `仅查看成员 ${data.historyMember?.displayName ?? historyTarget} 的操作记录。`
-                : "查看已完成的管理操作及其变更内容。"}
-            </p>
-          )}
         </div>
         <div className="actions">
           <Button
@@ -975,11 +924,6 @@ export default function App() {
                     text={
                       memberSearchActive ? "没有符合条件的成员" : "还没有成员"
                     }
-                    description={
-                      memberSearchActive
-                        ? "修改搜索条件或清除筛选后再试。"
-                        : undefined
-                    }
                   />
                 )}
                 <Pager
@@ -1060,11 +1004,6 @@ export default function App() {
                       ? `此成员是${adminTitle}。`
                       : "此成员没有管理权限。"}
                   </p>
-                  <p className="muted">
-                    {org === "org_system"
-                      ? "平台管理员可以管理整套实例的组织与成员。"
-                      : "组织管理员可以管理本组织成员，并任免本组织管理员。"}
-                  </p>
                   <Button
                     variant={administrator ? "destructive" : "outline"}
                     onClick={() =>
@@ -1109,17 +1048,9 @@ export default function App() {
                         />
                       </div>
                     ))}
-                  <p className="footnote">
-                    {data.detail.bindings.length === 0
-                      ? "请按本组织的身份验证与绑定流程配置登录方式。"
-                      : "登录时还会检查验证因子及提供方当前状态。"}
-                  </p>
                 </section>
                 <section className="detail-section">
                   <h2>管理记录</h2>
-                  <p className="muted">
-                    查看此成员的资料、状态和管理员权限变更。
-                  </p>
                   <Button
                     variant="outline"
                     render={
@@ -1249,7 +1180,6 @@ export default function App() {
           </>
         )}
       </div>
-      <footer className="page-footer">MemberID · 独立的组织成员身份</footer>
       {action && (
         <ActionDialog
           key={`${action.path}:${action.title}`}
@@ -1559,7 +1489,9 @@ function ActionDialog({
       <DialogContent showCloseButton={!pending}>
         <DialogHeader>
           <DialogTitle>{action.title}</DialogTitle>
-          <DialogDescription>{action.description}</DialogDescription>
+          {action.description && (
+            <DialogDescription>{action.description}</DialogDescription>
+          )}
         </DialogHeader>
         <form
           onSubmit={async (e) => {
@@ -1602,7 +1534,6 @@ function ActionDialog({
                   aria-invalid={!!error}
                   onChange={(e) => setValue(e.target.value)}
                 />
-                <FieldDescription>最多 128 个字符。</FieldDescription>
               </Field>
             )}
           </FieldGroup>

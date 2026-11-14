@@ -259,9 +259,6 @@ function ProviderDialog({
           <DialogTitle>
             {item ? "编辑身份提供商" : "添加身份提供商"}
           </DialogTitle>
-          <DialogDescription>
-            将以下回调地址登记到对应应用的 OAuth 设置。
-          </DialogDescription>
         </DialogHeader>
         <form onSubmit={submit} className="flex min-h-0 flex-col">
           <div className="min-h-0 overflow-y-auto px-1 py-1">
