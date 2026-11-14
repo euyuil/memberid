@@ -23,6 +23,8 @@ Fresh database initialization creates the enabled organization `org_system`, nam
 
 A stored administrator assignment plus a currently eligible Member is required for console access. System organization membership alone grants nothing. Assignments are Member-specific; a second Member sharing a phone number or natural person receives no implied access.
 
+The [Member role definitions](roles.md) record the agreed roles. The following matrix describes currently implemented console behavior; scope modeling and the action catalog remain separate design discussions.
+
 | Operation | Platform administrator (`org_system`) | Organization administrator |
 | --- | --- | --- |
 | List/view organizations | All organizations | Own organization only |
