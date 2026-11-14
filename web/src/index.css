@@ -190,40 +190,40 @@ code { font-size: 11px; color: var(--muted-foreground); overflow-wrap: anywhere;
 .filter-select { height: 32px; border: 1px solid var(--input); border-radius: 8px; background: var(--card); padding: 0 28px 0 10px; font-size: 13px; }
 .filter-select:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 .directory th { height: 40px; padding-inline: 16px; background: color-mix(in srgb, var(--muted) 60%, var(--card)); font-size: 12px; font-weight: 500; color: var(--muted-foreground); }
-.directory td { height: 56px; padding: 8px 16px; font-size: 13px; }
-.cell-status { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.directory td { height: 44px; padding: 6px 16px; font-size: 13px; }
+.cell-status { display: flex; align-items: center; flex-wrap: nowrap; gap: 8px; }
 .directory .row-actions { text-align: right; width: 1%; }
 .directory .row-actions [data-slot=button] { color: var(--muted-foreground); }
 .directory tr:hover .row-actions [data-slot=button] { color: var(--primary); }
-.record-identity { display: flex; align-items: center; gap: 10px; }
-.record-avatar { width: 32px; height: 32px; display: grid; place-items: center; flex-shrink: 0; border: 1px solid var(--border); border-radius: 9px; background: var(--background); color: var(--muted-foreground); }
+.record-identity { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.record-avatar { width: 28px; height: 28px; display: grid; place-items: center; flex-shrink: 0; border: 1px solid var(--border); border-radius: 9px; background: var(--background); color: var(--muted-foreground); }
 .record-avatar svg { width: 17px; height: 17px; }
-.record-text { display: grid; gap: 1px; min-width: 0; max-width: 24rem; }
-.record-name { display: block; font-size: 14px; font-weight: 550; white-space: normal; overflow-wrap: anywhere; color: var(--foreground); line-height: 1.6; }
-a.record-name:hover { color: var(--primary); text-decoration: underline; text-underline-offset: 3px; }
-.record-id { display: inline-flex; align-items: center; gap: 5px; width: fit-content; max-width: 100%; border-radius: 3px; color: var(--muted-foreground); cursor: pointer; text-align: left; }
-.record-id code { font-size: 11px; line-height: 1.6; color: inherit; }
-.record-id svg { width: 12px; height: 12px; opacity: .5; flex-shrink: 0; }
-.record-id:hover { color: var(--primary); }
-.record-id:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
-.record-id:hover svg, .record-id:focus-visible svg { opacity: 1; }
-.identifier-feedback { min-height: 40px; font-size: 12px; color: var(--muted-foreground); line-height: 1.6; }
+.record-text { min-width: 0; max-width: 24rem; }
+.record-name { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; font-weight: 550; color: var(--foreground); line-height: 1.5; text-align: left; }
+a.record-name:hover, button.record-name:hover { color: var(--primary); text-decoration: underline; text-underline-offset: 3px; }
+.record-identifier { min-width: 0; }
+.identifier-value { display: flex; align-items: center; gap: 8px; }
+.identifier-value input { min-width: 0; font-family: var(--font-mono); font-size: 12px; }
+.identifier-feedback { min-height: 44px; padding-top: 4px; font-size: 12px; color: var(--muted-foreground); line-height: 1.6; }
 .status-badge { gap: 6px; border-radius: 6px; font-size: 11px; font-weight: 500; padding: 3px 7px; height: 24px; }
 .status-badge[data-tone=positive] { color: #19734d; background: #edf8f2; border-color: #d5eddf; }
 .status-badge[data-tone=negative] { color: #b23838; background: #fff1f0; border-color: #f5d7d4; }
 .status-badge[data-tone=neutral] { color: var(--muted-foreground); background: var(--muted); border-color: var(--border); }
 .status-dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
 .role-badge { background: color-mix(in srgb, var(--primary) 7%, var(--card)); color: var(--primary); border-radius: 6px; height: 24px; gap: 5px; font-size: 11px; font-weight: 500; }
-.record-time { display: grid; gap: 4px; font-size: 12px; font-variant-numeric: tabular-nums; }
-.record-time > span:last-child { color: var(--muted-foreground); font-size: 11px; }
+.record-time { font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .directory-footer { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; min-height: 56px; padding: 12px 16px; border-top: 1px solid var(--border); }
 .directory-count { color: var(--muted-foreground); font-size: 12px; }
 .pagination { display: flex; gap: 8px; }
 .directory-loading { display: grid; gap: 16px; padding: 20px; }
 .directory-empty { text-align: center; color: var(--muted-foreground); padding-block: 48px !important; }
-.event-directory td:last-child { min-width: 260px; max-width: 440px; }
+.event-directory .record-text { max-width: 12rem; }
+.event-summary { display: block; width: 22rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; cursor: pointer; }
+.event-summary:hover { color: var(--primary); }
+.event-summary:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 .organization-summary { padding: 20px; border: 1px solid var(--border); border-radius: 10px; background: var(--card); }
-.organization-summary > div:first-child { display: flex; align-items: center; gap: 16px; }
+.organization-summary > div:first-child { display: flex; align-items: center; gap: 16px; min-width: 0; }
+.organization-summary .record-identifier { width: min(24rem, 100%); }
 .detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border: 1px solid var(--border); border-radius: 10px; padding: 0 24px; background: var(--card); }
 .detail-section { padding: 28px 0; display: flex; flex-direction: column; align-items: flex-start; gap: 20px; border-bottom: 1px solid var(--border); }
 .detail-section:nth-child(odd) { padding-right: 32px; }
@@ -258,7 +258,7 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
  .directory-toolbar, .directory-filters, .directory-footer { padding-inline: 16px; }
  .search-field { flex-basis: 100%; max-width: none; }
  .directory th, .directory td { padding-inline: 16px; }
- .record-text { min-width: 120px; }
+ .record-text { min-width: 120px; max-width: 180px; }
  .detail-grid { grid-template-columns: minmax(0, 1fr); padding-inline: 20px; }
  .detail-section:nth-child(odd) { padding-right: 0; }
  .detail-section:nth-last-child(2) { border-bottom: 1px solid var(--border); }

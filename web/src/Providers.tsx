@@ -68,6 +68,7 @@ export function Providers({
   onComplete: () => void
 }) {
   const [editing, setEditing] = useState<Provider | "new">()
+  const [viewing, setViewing] = useState<Provider>()
   return (
     <section className="directory" aria-label="身份提供商列表">
       <DirectoryToolbar title="已配置的应用">
@@ -81,7 +82,6 @@ export function Providers({
           <TableRow>
             <TableHead>显示名称</TableHead>
             <TableHead>类型</TableHead>
-            <TableHead>应用 ID</TableHead>
             <TableHead>状态</TableHead>
             <TableHead>创建时间</TableHead>
             <TableHead className="row-actions">操作</TableHead>
@@ -91,15 +91,13 @@ export function Providers({
           {directory.items.map((item) => (
             <TableRow key={item.id}>
               <TableCell>
-                <RecordIdentity name={item.displayName} icon={<KeyRound />} />
-              </TableCell>
-              <TableCell>{names[item.type]}</TableCell>
-              <TableCell>
-                <RecordIdentifier
-                  value={item.clientId}
-                  label={`${item.displayName} 应用`}
+                <RecordIdentity
+                  name={item.displayName}
+                  icon={<KeyRound />}
+                  onClick={() => setViewing(item)}
                 />
               </TableCell>
+              <TableCell>{names[item.type]}</TableCell>
               <TableCell>
                 <StatusBadge
                   tone={
@@ -135,7 +133,7 @@ export function Providers({
           ))}
           {directory.items.length === 0 && (
             <TableRow>
-              <TableCell colSpan={6} className="directory-empty">
+              <TableCell colSpan={5} className="directory-empty">
                 本组织尚未配置提供商。
               </TableCell>
             </TableRow>
@@ -143,6 +141,38 @@ export function Providers({
         </TableBody>
       </Table>
       <DirectoryFooter count={directory.items.length} />
+      {viewing && (
+        <Dialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setViewing(undefined)
+          }}
+        >
+          <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-lg">
+            <DialogHeader>
+              <DialogTitle>身份提供商详情</DialogTitle>
+              <DialogDescription className="wrap-anywhere">
+                {viewing.displayName}
+              </DialogDescription>
+            </DialogHeader>
+            <dl>
+              <dt>类型</dt>
+              <dd>{names[viewing.type]}</dd>
+              <dt>应用 ID</dt>
+              <dd>
+                <RecordIdentifier value={viewing.clientId} label="应用 ID" />
+              </dd>
+              <dt>{viewing.type === "feishu" ? "租户标识" : "组织标识"}</dt>
+              <dd>
+                <RecordIdentifier
+                  value={viewing.tenantId}
+                  label={viewing.type === "feishu" ? "租户标识" : "组织标识"}
+                />
+              </dd>
+            </dl>
+          </DialogContent>
+        </Dialog>
+      )}
       {editing && (
         <ProviderDialog
           directory={directory}

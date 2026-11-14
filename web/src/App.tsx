@@ -53,6 +53,7 @@ import {
   DirectoryToolbar,
   DirectoryFooter,
   RecordIdentity,
+  RecordIdentifier,
   RecordTime,
   StatusBadge,
 } from "@/components/directory"
@@ -228,6 +229,51 @@ function operationSummary({ action, changes }: Event) {
     )
   }
   return details
+}
+
+function EventDetails({ event, summary }: { event: Event; summary: string[] }) {
+  const description = summary.join("；") || "查看变更详情"
+  return (
+    <Dialog>
+      <DialogTrigger
+        className="event-summary"
+        title={description}
+        aria-label={`查看操作记录详情：${description}`}
+      >
+        {description}
+      </DialogTrigger>
+      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>操作记录详情</DialogTitle>
+          <DialogDescription>
+            {eventLabels[event.action] ?? event.action} ·{" "}
+            <RecordTime value={event.createdAt} />
+          </DialogDescription>
+        </DialogHeader>
+        <p className="wrap-anywhere">{description}</p>
+        <dl>
+          <dt>操作者</dt>
+          <dd>
+            <RecordIdentifier value={event.actor} label="操作者标识" />
+          </dd>
+          <dt>组织 ID</dt>
+          <dd>
+            <RecordIdentifier value={event.organizationId} label="组织 ID" />
+          </dd>
+          {event.memberId && (
+            <>
+              <dt>成员 ID</dt>
+              <dd>
+                <RecordIdentifier value={event.memberId} label="成员 ID" />
+              </dd>
+            </>
+          )}
+        </dl>
+        <h3>原始变更</h3>
+        <pre>{JSON.stringify(event.changes, null, 2)}</pre>
+      </DialogContent>
+    </Dialog>
+  )
 }
 
 function NoRecords({
@@ -762,7 +808,6 @@ export default function App() {
                         <TableCell>
                           <RecordIdentity
                             name={o.name}
-                            id={o.id}
                             icon={<Building2 />}
                             href={routeURL({ view: activeView, org: o.id })}
                           />
@@ -821,7 +866,7 @@ export default function App() {
               <section className="organization-summary">
                 <div>
                   <Status active={data.organization.status === "enabled"} />
-                  <code>{org}</code>
+                  <RecordIdentifier value={org} label="组织 ID" />
                 </div>
                 <div className="actions">
                   <Button
@@ -889,7 +934,6 @@ export default function App() {
                         <TableCell>
                           <RecordIdentity
                             name={m.displayName}
-                            id={m.id}
                             icon={Array.from(m.displayName)[0] || <Users />}
                             href={routeURL({
                               view: "members",
@@ -902,8 +946,7 @@ export default function App() {
                         {!org && (
                           <TableCell>
                             <RecordIdentity
-                              name={m.organizationName ?? m.organizationId}
-                              id={m.organizationId}
+                              name={m.organizationName ?? "所属组织"}
                             />
                           </TableCell>
                         )}
@@ -954,7 +997,7 @@ export default function App() {
                   <dl>
                     <dt>成员 ID</dt>
                     <dd>
-                      <code>{selected.id}</code>
+                      <RecordIdentifier value={selected.id} label="成员 ID" />
                     </dd>
                     <dt>身份状态</dt>
                     <dd>
@@ -1141,7 +1184,6 @@ export default function App() {
                                       ? `${actor.displayName}（我）`
                                       : "成员"
                                   }
-                                  id={event.actor}
                                 />
                               </>
                             )}
@@ -1154,26 +1196,10 @@ export default function App() {
                               name={
                                 targetName ?? (event.memberId ? "成员" : "组织")
                               }
-                              id={event.memberId || event.organizationId}
                             />
-                            {!org && event.memberId && (
-                              <div>
-                                <code>{event.organizationId}</code>
-                              </div>
-                            )}
                           </TableCell>
-                          <TableCell className="min-w-40 whitespace-normal">
-                            {summary.map((line) => (
-                              <p key={line} className="wrap-anywhere">
-                                {line}
-                              </p>
-                            ))}
-                            <details>
-                              <summary>原始变更</summary>
-                              <pre>
-                                {JSON.stringify(event.changes, null, 2)}
-                              </pre>
-                            </details>
+                          <TableCell>
+                            <EventDetails event={event} summary={summary} />
                           </TableCell>
                         </TableRow>
                       )
@@ -1335,19 +1361,16 @@ function OrganizationChoices({
             <Button
               key={organization.id}
               variant="ghost"
-              className="h-auto min-w-0 justify-between gap-3 py-2 text-left"
+              className="min-w-0 justify-between gap-3 text-left"
               aria-current={
                 organizationId === organization.id ? "true" : undefined
               }
               onClick={() => onSelect(organization.id)}
             >
-              <span className="grid min-w-0 gap-1">
-                <span className="wrap-anywhere whitespace-normal">
-                  {organization.name}
-                  {organization.status !== "enabled" && "（已停用）"}
-                </span>
-                <code>{organization.id}</code>
+              <span className="truncate" title={organization.name}>
+                {organization.name}
               </span>
+              {organization.status !== "enabled" && <span>已停用</span>}
               {organizationId === organization.id && (
                 <Check aria-hidden="true" />
               )}
