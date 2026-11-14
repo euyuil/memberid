@@ -32,7 +32,7 @@ memberid serve --directory .local/memberid --listen 127.0.0.1:8080
 
 Keep `MEMBERID_DATABASE_URL` and optional provider credentials in protected service-manager configuration. Use a dedicated database/application role and validate database TLS according to the deployment's PostgreSQL configuration. The executable does not supply PostgreSQL or initialize its schema during startup.
 
-For production, configure an exact HTTPS issuer and place a TLS proxy in front of the HTTP listener. The proxy must preserve that public origin and avoid logging credentials, codes, cookies, or form bodies. For same-machine local development, explicitly select `http://127.0.0.1:8080` and `--allow-loopback-http` during configuration initialization. Local HTTP does not establish production TLS acceptance.
+For production, configure an exact HTTPS issuer and place a TLS proxy in front of the HTTP listener. When running the browser console, follow the [production hostname layout](console.md#production-hostnames) and point the second hostname at the console listener. The proxy must preserve that public origin and avoid logging credentials, codes, cookies, or form bodies. For same-machine local development, explicitly select `http://127.0.0.1:8080` and `--allow-loopback-http` during configuration initialization. Local HTTP does not establish production TLS acceptance.
 
 ## Build the container from the Linux package
 

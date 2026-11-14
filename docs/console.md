@@ -2,6 +2,21 @@
 
 The console is a separate HTTP process in the same MemberID executable. Its React/shadcn UI and session API share one origin. It signs in through this installation's standard OIDC Authorization Code flow with PKCE S256. The installation management credential is never sent to a browser.
 
+## Production hostnames
+
+Use two HTTPS hostnames for a production deployment that includes the browser console. Run both processes from the same MemberID release. They can share a host, installation directory, and PostgreSQL database.
+
+| Hostname example | Process and internal port | Audience |
+| --- | --- | --- |
+| `auth.example.invalid` | `memberid serve` on port 8080 | Users and OIDC clients. This is the issuer, and it serves sign-in, discovery, and other OIDC endpoints. |
+| `admin.example.invalid` | `memberid serve-console` on port 8082 | Administrators. This serves the console UI, its same-origin API, and the OIDC callback. |
+
+A single HTTPS reverse proxy can listen on port 443 for both hostnames. Route requests by hostname to the corresponding listener and preserve the configured HTTPS origins. Keep the backend ports reachable only on loopback or the private network used by the proxy. Set the console hostname's access policy at the proxy or network layer, such as requiring VPN access for administrators. Keep the issuer reachable by user browsers, relying parties, and the console process. If you use `serve-management` for installation-wide integrations, expose it only to trusted callers on a private listener.
+
+Administrators start at the console hostname. The browser goes to the issuer to authenticate and returns to the console's registered `/auth/callback` URL to establish the console session. Choose the issuer before integrating applications and keep it stable when moving the proxy or console. Changing the console hostname requires updating `console.json` and its registered callback. Changing the issuer also requires coordinating client configuration and existing account associations. See [GitLab account association](gitlab.md#associate-the-intended-gitlab-account).
+
+Both processes currently use the protected installation configuration and the same database. The console's configuration loader reads the OIDC signing key. The two hostnames let operators enforce different network access policies for the login and console endpoints.
+
 ## First-version access model
 
 Fresh database initialization creates the enabled organization `org_system`, named `System organization`. This exact ID is reserved and immutable. It cannot be created by ordinary organization APIs, adopted through enrollment, or disabled. There is no organization-kind field, default customer organization, or organization-less Member.
@@ -59,7 +74,7 @@ memberid serve --directory .local/memberid --listen 127.0.0.1:8080
 memberid serve-console --directory .local/memberid --listen 127.0.0.1:8082
 ```
 
-Expose the two origins through a correctly configured HTTPS reverse proxy. The console origin has no path, trailing slash, query, or fragment. For loopback-only development, explicitly initialize with `--allow-loopback-http`, register `http://127.0.0.1:8082/auth/callback`, and set the console origin to `http://127.0.0.1:8082`. An arbitrary HTTP origin or a `localhost` alias is rejected. `serve-management` remains the independent private integration listener; do not route its installation-wide bearer API through the console.
+For production, set the console origin to the HTTPS origin at the root of its hostname and use the [hostname routing above](#production-hostnames). For loopback-only development, explicitly initialize with `--allow-loopback-http`, register `http://127.0.0.1:8082/auth/callback`, and set the console origin to `http://127.0.0.1:8082`. Use the exact `127.0.0.1` address in the development configuration.
 
 ## Bootstrap and recovery
 
