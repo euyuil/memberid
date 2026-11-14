@@ -5,6 +5,7 @@ import {
   DirectoryToolbar,
   DirectoryFooter,
   RecordIdentity,
+  RecordIdentifier,
   RecordTime,
   StatusBadge,
 } from "@/components/directory"
@@ -94,9 +95,10 @@ export function Providers({
               </TableCell>
               <TableCell>{names[item.type]}</TableCell>
               <TableCell>
-                <code className="record-id" title={item.clientId}>
-                  {item.clientId}
-                </code>
+                <RecordIdentifier
+                  value={item.clientId}
+                  label={`${item.displayName} 应用`}
+                />
               </TableCell>
               <TableCell>
                 <StatusBadge
