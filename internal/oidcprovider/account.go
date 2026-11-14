@@ -267,7 +267,8 @@ func (service *Service) accountDingTalkCallback(w http.ResponseWriter, r *http.R
 		http.Error(w, "Method not allowed", 405)
 		return
 	}
-	if !accountFields(r, "state", "authCode", "error", "error_description") || len(r.Form.Get("state")) != 43 {
+	code, valid := dingTalkCallbackCode(r)
+	if !valid || len(r.Form.Get("state")) != 43 {
 		http.Error(w, "Invalid account callback", 400)
 		return
 	}
@@ -288,11 +289,11 @@ func (service *Service) accountDingTalkCallback(w http.ResponseWriter, r *http.R
 		return
 	}
 	request.State = "consumed"
-	if r.Form.Get("error") != "" || r.Form.Get("authCode") == "" {
+	if r.Form.Get("error") != "" || code == "" {
 		service.renderAccount(w, r, request, session, member, "DingTalk verification did not complete. Cancel verification to try again.")
 		return
 	}
-	proof, err := service.dingtalk.Verify(r.Context(), request.Login, r.Form.Get("authCode"))
+	proof, err := service.dingtalk.Verify(r.Context(), request.Login, code)
 	if err != nil {
 		service.renderAccount(w, r, request, session, member, "Unable to verify DingTalk membership. Cancel verification to try again.")
 		return

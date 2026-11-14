@@ -124,6 +124,12 @@ func TestDingTalkOnlyOIDCLoginRefreshAndIndependentSubjects(t *testing.T) {
 	if !strings.Contains(csp, "form-action 'self' http://127.0.0.1:8484 https://login.dingtalk.com;") || strings.Contains(csp, "unsafe-inline") {
 		t.Fatal("form policy cannot complete controlled OAuth redirects")
 	}
+	// The live provider returns both names. A conflict must leave the state unused.
+	f.status(f.call(f.browser, "GET", callbackPath+"&code=conflicting-code", nil, nil), 400)
+	if provider.calls.Load() != 0 {
+		t.Fatal("conflicting callback reached the provider")
+	}
+	callbackPath += "&code=synthetic-code"
 	response := f.call(f.browser, "GET", callbackPath, nil, nil)
 	f.status(response, 303)
 	f.status(f.call(f.browser, "GET", callbackPath, nil, nil), 400)
@@ -160,6 +166,7 @@ func TestDingTalkOnlyOIDCLoginRefreshAndIndependentSubjects(t *testing.T) {
 		t.Fatal("DingTalk refresh changed original authentication")
 	}
 	page, verifier, callbackPath = beginDingTalk(t, f, "second-web", "openid profile", f.otherMember.OrganizationID)
+	callbackPath = strings.Replace(callbackPath, "authCode=", "code=", 1)
 	response = f.call(f.browser, "GET", callbackPath, nil, nil)
 	f.status(response, 303)
 	page = f.call(f.browser, "GET", response.header.Get("Location"), nil, nil)

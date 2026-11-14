@@ -74,7 +74,7 @@ func TestAccountLinkPreservesMemberSessionAndOIDCSubject(t *testing.T) {
 	if err := f.store.Database().QueryRow(t.Context(), "SELECT id,absolute_expires_at::text,verification::text FROM oidc_sessions").Scan(&beforeSession, &beforeDeadline, &beforeVerification); err != nil {
 		t.Fatal(err)
 	}
-	callbackPath := startAccount(f, page)
+	callbackPath := startAccount(f, page) + "&code=synthetic-code"
 	result := f.call(f.browser, "GET", callbackPath, nil, nil)
 	f.status(result, 200)
 	if !strings.Contains(result.body, "DingTalk is linked to this Member") || !strings.Contains(result.body, `href="`+accountReturn+`"`) || result.header.Get("Set-Cookie") != "" || !strings.Contains(result.header.Get("Content-Security-Policy"), "form-action 'self' https://login.dingtalk.com;") {
