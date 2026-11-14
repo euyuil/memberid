@@ -1,7 +1,8 @@
 # Management scopes and actions
 
 This document records the agreed design for MemberID management scopes, CRUD
-actions, and wildcard matching. It complements the [Member role definitions](roles.md).
+actions, and wildcard matching. It complements the [Member role definitions](roles.md)
+and the [catalog of existing operations](management-operation-catalog.md).
 These rules are not implemented by this documentation change. The [console access
 matrix](console.md#first-version-access-model) and [private management API](management-api.md)
 continue to describe the available interfaces and their current access contracts.
@@ -32,8 +33,8 @@ Platform administrators have installation-wide management responsibility.
 Organization administrators are limited to their own ordinary organization.
 Ordinary Members have no administrative authority; any supported account
 self-service is limited to the authenticated Member and its explicitly allowed
-operations. It does not require a baseline role-assignment record. Exact
-role-to-operation mappings remain a separate design task.
+operations. It does not require a baseline role-assignment record. The operation
+catalog maps existing functionality to these roles without enabling new APIs.
 
 The system organization, `org_system`, is one organization, not the platform
 scope. The selector `organizations/*/**` includes it, along with all ordinary
@@ -64,7 +65,7 @@ A permission description pairs a resource selector with actions:
   "scope": {
     "pattern": "organizations/{organizationId}/roleAssignments/**"
   },
-  "actions": ["create", "read", "update", "delete"]
+  "actions": ["create", "read", "delete"]
 }
 ```
 
@@ -109,7 +110,7 @@ Prefer these four predicates:
 | --- | --- |
 | `create` | Create a resource in its destination collection. |
 | `read` | Read resources; equivalent to allowing both `list` and `get`. |
-| `update` | Modify an existing resource. |
+| `update` | Modify an existing resource's ordinary properties; independently authorized changes use a qualified action. |
 | `delete` | Delete an existing resource. |
 
 Use `read` when both `list` and `get` are allowed. Keep `list` or `get` separately
@@ -119,14 +120,58 @@ Canonical descriptions replace `list` plus `get` with `read` and remove redundan
 same permission description and scope; it must not combine a `list` grant in one
 scope with a `get` grant in another scope.
 
+The same rule applies within an action namespace: `settings.read` expands to
+`settings.list` and `settings.get`, not unqualified `list` or `get`. Expand a
+terminal `read` segment before matching action patterns, so `**.read` permits
+registered `list` and `get` operations at any namespace depth. Normalize a pair
+only when its namespace or namespace pattern and its scope are identical.
+This does not register new namespaced read operations or automatically split
+fields out of an existing response representation.
+
 `read` is an explicit semantic shorthand, not a wildcard or string-matching rule.
 It does not include subscriptions, exports, or other separately defined
 operations. Additional predicates may be introduced for operations that need
 independent authorization and do not fit CRUD. A resource supports only the
 operations defined for it; listing CRUD predicates does not create unsupported
-endpoints or override lifecycle restrictions. Whether a role assignment permits
-in-place `update` or changes through creation and deletion remains part of its
-operation design.
+endpoints or override lifecycle restrictions. Administrator assignment creation
+uses `create`, and revocation uses `delete`; this catalog defines no in-place
+assignment `update`. A semantic deletion need not erase historical records.
+
+## Qualified actions and combined requests
+
+Action names consist of nonempty, case-sensitive segments separated by `.`,
+without a leading or trailing dot. Prefer a CRUD predicate as the final segment;
+an optional namespace identifies a separately authorized operation on the same
+resource. Resource types remain in the scope path: use `status.update` on an
+organization target, not `organization.update` as its authorization action.
+Existing command names and audit event labels need not change.
+
+`status.update` covers organization enable/disable, Member manual block/unblock,
+and identity-provider enable/disable. These remain operations on the organization,
+Member, or provider itself, not separate status resources. Ordinary `update`
+does not include them. Reads retain their documented representations, including
+status fields; this distinction introduces no `status.read` operation.
+
+For an update, derive the required actions from the explicitly submitted mutable
+fields, even when a submitted value equals its current value. An organization
+request containing both `name` and `status` requires both `update` and
+`status.update` on that organization. A Member request containing `displayName`
+and `manualBlocked` has the analogous requirements. Every required target/action
+pair must be allowed; reject the whole operation if any pair is denied. Each
+pair may be satisfied by an applicable permission, without borrowing scope and
+action from unrelated permissions.
+
+Immutable identifiers, concurrency revisions, and server-generated defaults do
+not themselves add update actions. Creation checks `create` on the destination
+collection and the resource's creation constraints; it does not require update
+permission on a nonexistent object. In particular, a provider's accepted initial
+`enabled` value is part of creation. Subsequent changes use `status.update`.
+
+The catalog records which fields belong to each action. It does not automatically
+create an action for every field. The organization administrator's inability to
+change organization status is represented by its permissions, not a separate
+role-name exception after permission evaluation. Identity eligibility, valid
+delegation, and resource lifecycle constraints still apply.
 
 ## Wildcard grammar
 
@@ -156,17 +201,33 @@ The zero-segment case is intentional: `organizations/{organizationId}/**` matche
 the organization itself as well as descendants. `*` and `**` are not synonyms;
 `*` alone matches only a one-segment target.
 
-Actions in this design use single-segment predicates. Literal actions match
-exactly, with the explicit `read` expansion above. The same wildcard meanings
-apply to actions: `*` matches one segment and `**` matches zero or more. Because
-valid actions here have exactly one segment, either selects every supported
-action for the target resource; prefer `*` for this case. Partial action globs
-such as `re*` are invalid.
+Action patterns use the same whole-segment rules, with `.` instead of `/` as the
+separator. A literal matches exactly, `*` matches one nonempty segment, and `**`
+matches zero or more segments. Matching is anchored and case-sensitive, each
+pattern permits at most one `**`, and partial globs such as `re*` or `status*`
+are invalid. Empty segments and alternate separators are invalid.
+
+| Action or pattern | Matches | Does not match |
+| --- | --- | --- |
+| `update` | Ordinary `update`. | `status.update`. |
+| `status.update` | Exactly `status.update`. | Ordinary `update`; other namespaces. |
+| `*.update` | `status.update` and other one-prefix update actions. | Ordinary `update`; actions with two or more prefix segments. |
+| `**.update` | Ordinary `update` and update actions at any namespace depth. | `create`, `delete`, or read operations. |
+| `*` | Every registered single-segment action. | `status.update` or any other multi-segment action. |
+| `**` | Every registered action at any depth. | Unregistered or unsupported operations. |
+
+For grammar illustration, `security.credentials.update` would match
+`**.update`, but not `*.update`; that example does not register an operation.
+The zero-segment case makes `**.update` match ordinary `update` without requiring
+a leading dot. `*` and `**` are no longer interchangeable for actions. Use `**`
+when intentionally granting all actions, including namespaced operations.
 
 Patterns apply dynamically to future matching resources and supported, enabled
-operations. Consequently, action `*` includes future predicates, not only CRUD.
-An explicit action list does not acquire newly named operations. Patterns never
-create resources, enable unsupported operations, or turn arbitrary strings into
+operations. Consequently, action `*` includes future single-segment predicates,
+not only CRUD; `**` also includes future namespaced actions, and `**.update`
+includes future update namespaces. An explicit action list does not acquire
+newly named operations. Patterns never create resources, enable unsupported
+operations, or turn arbitrary strings into
 valid authorization targets. A valid collection can be empty; a selector's
 current lack of resource instances does not prevent it from covering future
 instances.
@@ -174,12 +235,13 @@ instances.
 ## Collections and individual operations
 
 Authorize `create` and `list` against the collection path. Authorize `get`,
-`update`, and `delete` against the individual resource path. For example:
+`update`, `status.update`, and `delete` against the individual resource path.
+For example:
 
 | Operation | Target path |
 | --- | --- |
 | Create or list role assignments | `organizations/{organizationId}/roleAssignments` |
-| Get, update, or delete one role assignment | `organizations/{organizationId}/roleAssignments/{roleAssignmentId}` |
+| Get or delete one role assignment | `organizations/{organizationId}/roleAssignments/{roleAssignmentId}` |
 
 The permission example above covers both targets because its trailing `**`
 matches the collection itself and its descendants. A selector ending in
@@ -219,9 +281,10 @@ a platform role, grant access in another organization, or assign authority to a
 foreign Member. Wildcards do not bypass these restrictions or the existing
 [administrator-availability safeguards](administration.md#availability-and-audit).
 
-The complete resource/operation catalog, per-role mappings, additional
-predicates, assignment mutability, persistence schema, management API changes,
-and enforcement implementation remain follow-up work. This design does not
-introduce custom roles, exclusion or deny rules, an application-authorization
+The [operation catalog](management-operation-catalog.md) supplies mappings for
+existing functionality and identifies operator-only contracts. Assignment IDs
+and API serialization, persistence schema, management API changes, additional
+capabilities, and enforcement implementation remain follow-up work. This design
+does not introduce custom roles, exclusion or deny rules, an application-authorization
 service, or changes to OIDC behavior. No runtime, database, token, or UI change is
 part of this documentation update.
