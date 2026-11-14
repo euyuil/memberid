@@ -58,7 +58,7 @@ The [console access matrix](console.md#first-version-access-model) describes cur
 The [scope, CRUD, and wildcard rules](management-permissions.md) and
 [operation catalog](management-operation-catalog.md) are documented separately.
 Implementation contracts, assignment persistence and API representation, and
-the shared authorization evaluator remain follow-up work. New capabilities
+migration of the remaining operations to the shared authorization evaluator remain follow-up work. New capabilities
 require explicit catalog entries rather than implied access from a role name.
 
-These design documents introduce no runtime permission evaluator, generic role API, custom-role mechanism, new credential type, or application-authorization service. They do not change the existing OIDC profile, database schema, or runtime behavior.
+Built-in role permissions are evaluated in the service; see the [current enforcement status](management-operation-catalog.md#current-enforcement). There is no generic role API, custom-role mechanism, new credential type, or application-authorization service. The OIDC profile and database schema remain unchanged.
