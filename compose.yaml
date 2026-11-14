@@ -75,9 +75,9 @@ services:
     environment:
       MEMBERID_LOCAL_AUTH_HOST: "${MEMBERID_LOCAL_AUTH_HOST:-auth.memberid.localhost}"
       MEMBERID_LOCAL_ADMIN_HOST: "${MEMBERID_LOCAL_ADMIN_HOST:-admin.memberid.localhost}"
-      MEMBERID_LOCAL_HTTPS_PORT: "${MEMBERID_LOCAL_HTTPS_PORT:-8443}"
+      MEMBERID_LOCAL_HTTPS_PORT: "${MEMBERID_LOCAL_HTTPS_PORT:-19000}"
     ports:
-      - "127.0.0.1:${MEMBERID_LOCAL_HTTPS_PORT:-8443}:${MEMBERID_LOCAL_HTTPS_PORT:-8443}"
+      - "127.0.0.1:${MEMBERID_LOCAL_HTTPS_PORT:-19000}:${MEMBERID_LOCAL_HTTPS_PORT:-19000}"
     tmpfs: [/data, /config]
     volumes:
       - ./dev/Caddyfile:/etc/caddy/Caddyfile:ro

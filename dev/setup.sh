@@ -5,6 +5,7 @@ export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' LC_ALL=C
 
 usage() {
   printf 'Usage: sh dev/setup.sh [--name ENVIRONMENT --port HTTPS_PORT]\n'
+  printf 'The persistent preview uses port 19000. Named environments use ports 19001 through 19009.\n'
 }
 
 environment=
@@ -37,26 +38,19 @@ if [ "$#" -ne 0 ]; then
     exit 2
   fi
   case "$https_port" in
-    ''|0*|*[!0-9]*)
-      printf 'Choose an HTTPS port between 1 and 65535, without leading zeros.\n' >&2
+    1900[1-9]) ;;
+    *)
+      printf 'Choose an HTTPS port from 19001 through 19009 for a named environment.\n' >&2
       exit 2
       ;;
   esac
-  if [ "${#https_port}" -gt 5 ] || [ "$https_port" -gt 65535 ]; then
-    printf 'Choose an HTTPS port between 1 and 65535.\n' >&2
-    exit 2
-  fi
 fi
 
-https_port=${https_port:-8443}
+https_port=${https_port:-19000}
 auth_host=auth${environment:+-$environment}.memberid.localhost
 admin_host=admin${environment:+-$environment}.memberid.localhost
-origin_port=:$https_port
-if [ "$https_port" = 443 ]; then
-  origin_port=
-fi
-issuer=https://$auth_host$origin_port
-console_origin=https://$admin_host$origin_port
+issuer=https://$auth_host:$https_port
+console_origin=https://$admin_host:$https_port
 
 if [ ! -f compose.yaml ] || [ ! -f dev/Caddyfile ]; then
   printf 'Run from the MemberID repository root.\n' >&2

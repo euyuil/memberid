@@ -14,7 +14,7 @@ Inspect any existing hooks configuration before changing it. The hooks require G
 
 ## Local development stack
 
-See [local development with Docker Compose](docs/local-development.md) for the two HTTPS hostnames, database setup, and optional integration API.
+See [local development with Docker Compose](docs/local-development.md) for first-time setup, temporary feature deployments and cleanup, and the persistent local preview.
 
 ## Checks
 
