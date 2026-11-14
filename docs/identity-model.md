@@ -22,7 +22,7 @@ Phone authentication and [DingTalk authentication](dingtalk.md) are implemented.
 
 Manual blocking and external departure are independent Member block sources. Clearing one does not clear the other. Organization and factor status remain separate from Member state. Protocol issuance evaluates the complete current eligibility context; a stored binding alone grants no login or application permission.
 
-A configured DingTalk application with confirmed revoked authorization makes its organization's Members ineligible, including those authenticating by phone. An unconfigured organization has no such provider requirement. Unknown provider failures preserve the last observation. Authorization recovery does not remove independent Member blocks or binding revocations. See [application authorization synchronization](dingtalk.md#synchronize-application-authorization).
+Confirmed DingTalk application revocation makes that source ineligible. Other bindings, including phone, continue to use their own eligibility rules. Unknown provider failures preserve the last observation. Authorization recovery does not remove independent Member blocks or binding revocations. See [application authorization synchronization](dingtalk.md#synchronize-application-authorization).
 
 ## Persistence and initialization
 

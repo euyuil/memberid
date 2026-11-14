@@ -48,9 +48,6 @@ func readDirectorySnapshot(ctx context.Context, database queryer, organizationID
 	if errors.Is(err, pgx.ErrNoRows) {
 		return value, ErrIneligible
 	}
-	if err == nil && value.authorizationStatus == "revoked" {
-		return value, ErrIneligible
-	}
 	return value, err
 }
 
@@ -59,6 +56,7 @@ func readDirectorySnapshot(ctx context.Context, database queryer, organizationID
 type DingTalkDirectoryObservation struct {
 	directory                *DingTalkDirectory
 	organizationID, memberID string
+	factorType               string
 	snapshot                 directorySnapshot
 	observedAt               time.Time
 }
@@ -76,7 +74,13 @@ func (directory *DingTalkDirectory) Observe(ctx context.Context, organizationID,
 	if snapshot.manualBlocked || snapshot.externalDeparture {
 		return nil, ErrIneligible
 	}
-	observation := &DingTalkDirectoryObservation{directory, organizationID, memberID, snapshot, directory.now()}
+	observation := &DingTalkDirectoryObservation{directory, organizationID, memberID, factorType, snapshot, directory.now()}
+	if snapshot.authorizationStatus == "revoked" {
+		if factorType == "dingtalk" {
+			return nil, ErrIneligible
+		}
+		return observation, nil
+	}
 	if snapshot.bindingID == "" || snapshot.unionID == "" && snapshot.employeeID == "" {
 		if factorType == "dingtalk" {
 			return nil, ErrIneligible
@@ -103,7 +107,11 @@ func (directory *DingTalkDirectory) Observe(ctx context.Context, organizationID,
 		if _, err := directory.applications.recordAuthorization(ctx, app.DingTalkApplication, snapshot.organizationRevision, "revoked"); err != nil {
 			return nil, err
 		}
-		return nil, ErrIneligible
+		if factorType == "dingtalk" {
+			return nil, ErrIneligible
+		}
+		observation.observedAt = directory.now()
+		return observation, nil
 	}
 	if errors.Is(err, dingtalk.ErrNotMember) || errors.Is(err, dingtalk.ErrIdentityConflict) {
 		return nil, ErrIneligible
@@ -138,6 +146,11 @@ func (observation *DingTalkDirectoryObservation) Validate(ctx context.Context, d
 	}
 	if current.manualBlocked || current.externalDeparture {
 		return ErrIneligible
+	}
+	if current.authorizationStatus == "revoked" && observation.factorType != "dingtalk" &&
+		current.organizationRevision == observation.snapshot.organizationRevision &&
+		current.memberRevision == observation.snapshot.memberRevision {
+		return nil
 	}
 	if current != observation.snapshot {
 		return ErrConflict
