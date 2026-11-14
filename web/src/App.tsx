@@ -57,10 +57,16 @@ type Session = { actor: Actor; csrf: string }
 type Organization = { id: string; name: string; status: string }
 type Member = {
   id: string
+  organizationId: string
   displayName: string
   status: string
   blockSources: string[]
 }
+type DirectoryMember = Member & {
+  organizationName?: string
+  administrator?: boolean
+}
+type MemberPage = Page<DirectoryMember> & { administratorIds?: string[] }
 type Binding = { id: string; factorType: string; status: string }
 type Event = {
   id: number
@@ -80,7 +86,7 @@ type Detail = {
 type Data = {
   organizations?: Page<Organization>
   organization?: Organization
-  members?: Page<Member> & { administratorIds: string[] }
+  members?: MemberPage
   detail?: Detail
   events?: Event[]
   historyMember?: Member
@@ -229,7 +235,7 @@ export default function App() {
   const membersView =
     !events && (view === "members" || (view !== "organization" && !!org))
   const activeView = events ? "events" : membersView ? "members" : "organization"
-  const member = membersView ? (params.get("member") ?? "") : ""
+  const member = membersView && org ? (params.get("member") ?? "") : ""
   const historyTarget = params.get("target") ?? ""
   const after = params.get("after") ?? ""
   const memberFilters = {
@@ -239,11 +245,20 @@ export default function App() {
   }
   const scopeRoute: Record<string, string> = org ? { org } : {}
   const memberDirectoryRoute = { view: "members", ...scopeRoute }
-  const memberListRoute = {
-    ...memberDirectoryRoute,
+  const memberListState = {
     ...memberFilters,
     ...(after ? { after } : {}),
   }
+  const fromAllOrganizations = params.get("from") === "all"
+  const memberListRoute = {
+    ...memberDirectoryRoute,
+    ...memberListState,
+    ...(fromAllOrganizations ? { from: "all" } : {}),
+  }
+  const memberReturnRoute = fromAllOrganizations
+    ? { view: "members", ...memberListState }
+    : memberListRoute
+  const memberQuery = new URLSearchParams({ ...memberFilters, after })
   const memberSearchActive = Object.values(memberFilters).some(Boolean)
 
   useEffect(() => {
@@ -319,11 +334,15 @@ export default function App() {
               ? {
                   organization,
                   members: await request<Data["members"]>(
-                    `/api/organizations/${encodeURIComponent(org)}/members?${new URLSearchParams({ ...memberFilters, after })}`,
+                    `/api/organizations/${encodeURIComponent(org)}/members?${memberQuery}`,
                     options
                   ),
                 }
               : { organization }
+        } else if (membersView) {
+          result = {
+            members: await request<MemberPage>(`/api/members?${memberQuery}`, options),
+          }
         } else
           result = {
             organizations: await request<Page<Organization>>(
@@ -538,9 +557,6 @@ export default function App() {
                     : "查看已完成的管理操作及其变更内容。"}
                 </p>
               )}
-              {membersView && !org && (
-                <p className="muted">选择组织后查看和管理成员。</p>
-              )}
             </div>
             <div className="actions">
               {events && org && historyTarget && (
@@ -568,8 +584,8 @@ export default function App() {
                 </Button>
               )}
               {member && (
-                <Button variant="outline" onClick={() => navigate(memberListRoute)}>
-                  返回成员列表
+                <Button variant="outline" onClick={() => navigate(memberReturnRoute)}>
+                  {fromAllOrganizations ? "返回所有组织的成员" : "返回成员列表"}
                 </Button>
               )}
               {membersView && !member && data.organization && (
@@ -601,7 +617,7 @@ export default function App() {
               </Alert>
             )}
           </div>
-          {membersView && org && !member && (actor.platform || org === actor.organizationId) && (
+          {membersView && !member && (actor.platform || org === actor.organizationId) && (
             <MemberSearch
               key={`${org}:${JSON.stringify(memberFilters)}`}
               filters={memberFilters}
@@ -654,7 +670,7 @@ export default function App() {
                           <TableCell>
                             <Button
                               variant="ghost"
-                              aria-label={membersView ? `查看 ${o.name} 的成员` : `管理 ${o.name}`}
+                              aria-label={`管理 ${o.name}`}
                               onClick={() =>
                                 navigate({ view: activeView, org: o.id })
                               }
@@ -669,7 +685,7 @@ export default function App() {
                   <Pager
                     after={after}
                     next={data.organizations.nextAfter}
-                    route={membersView ? memberDirectoryRoute : {}}
+                    route={{}}
                   />
                 </section>
               )}
@@ -735,6 +751,7 @@ export default function App() {
                     <TableHeader>
                       <TableRow>
                         <TableHead>成员</TableHead>
+                        {!org && <TableHead>所属组织</TableHead>}
                         <TableHead>身份状态</TableHead>
                         <TableHead>管理权限</TableHead>
                         <TableHead>成员 ID</TableHead>
@@ -747,18 +764,31 @@ export default function App() {
                             <Button
                               variant="link"
                               onClick={() =>
-                                navigate({ ...memberListRoute, member: m.id })
+                                navigate({
+                                  ...memberListRoute,
+                                  org: m.organizationId,
+                                  member: m.id,
+                                  ...(!org ? { from: "all" } : {}),
+                                })
                               }
                             >
                               {m.displayName}
                             </Button>
                           </TableCell>
+                          {!org && (
+                            <TableCell>
+                              <div>{m.organizationName}</div>
+                              <code>{m.organizationId}</code>
+                            </TableCell>
+                          )}
                           <TableCell>
                             <MemberStatus member={m} />
                           </TableCell>
                           <TableCell>
-                            {data.members!.administratorIds.includes(m.id) ? (
-                              <Badge variant="secondary">{adminTitle}</Badge>
+                            {(m.administrator ?? data.members?.administratorIds?.includes(m.id)) ? (
+                              <Badge variant="secondary">
+                                {m.organizationId === "org_system" ? "平台管理员" : "组织管理员"}
+                              </Badge>
                             ) : (
                               <span className="muted">普通成员</span>
                             )}

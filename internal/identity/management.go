@@ -48,7 +48,33 @@ func (store *Store) Members(ctx context.Context, organizationID, after string, l
 
 func (store *Store) MemberDirectory(ctx context.Context, organizationID, after string, limit int, filter MemberDirectoryFilter) (Page[Member], error) {
 	page := Page[Member]{Items: []Member{}}
-	if !ValidID(organizationID, OrganizationKind) || limit < 1 || limit > 100 || after != "" && !ValidID(after, MemberKind) {
+	if !ValidID(organizationID, OrganizationKind) {
+		return page, ErrInvalid
+	}
+	entries, err := store.memberDirectory(ctx, organizationID, after, limit, filter)
+	if err != nil {
+		return page, err
+	}
+	page.NextAfter = entries.NextAfter
+	for _, entry := range entries.Items {
+		page.Items = append(page.Items, entry.Member)
+	}
+	return page, nil
+}
+
+type MemberDirectoryEntry struct {
+	Member
+	OrganizationName string `json:"organizationName"`
+	Administrator    bool   `json:"administrator"`
+}
+
+func (store *Store) AllOrganizationMembers(ctx context.Context, after string, limit int, filter MemberDirectoryFilter) (Page[MemberDirectoryEntry], error) {
+	return store.memberDirectory(ctx, "", after, limit, filter)
+}
+
+func (store *Store) memberDirectory(ctx context.Context, organizationID, after string, limit int, filter MemberDirectoryFilter) (Page[MemberDirectoryEntry], error) {
+	page := Page[MemberDirectoryEntry]{Items: []MemberDirectoryEntry{}}
+	if limit < 1 || limit > 100 || after != "" && !ValidID(after, MemberKind) {
 		return page, ErrInvalid
 	}
 	filter.Query = strings.TrimSpace(filter.Query)
@@ -57,24 +83,28 @@ func (store *Store) MemberDirectory(ctx context.Context, organizationID, after s
 		filter.Administrator != "" && filter.Administrator != "yes" && filter.Administrator != "no" {
 		return page, ErrInvalid
 	}
-	if _, err := store.Organization(ctx, organizationID); err != nil {
-		return page, err
+	if organizationID != "" {
+		if _, err := store.Organization(ctx, organizationID); err != nil {
+			return page, err
+		}
 	}
-	rows, err := store.pool.Query(ctx, "SELECT "+memberColumns+` FROM members AS m
- WHERE organization_id=$1 AND id>$2
- AND ($4='' OR strpos(lower(display_name),lower($4))>0 OR strpos(id,lower($4))>0)
- AND ($5='' OR (manual_block OR external_departure)=($5='blocked'))
- AND ($6='' OR EXISTS(
-     SELECT 1 FROM administrators a WHERE a.organization_id=m.organization_id AND a.member_id=m.id
- )=($6='yes'))
- ORDER BY id LIMIT $3`, organizationID, after, limit+1, filter.Query, filter.Status, filter.Administrator)
+	rows, err := store.pool.Query(ctx, `SELECT
+ m.id,m.organization_id,m.display_name,m.manual_block,m.external_departure,m.created_at,m.updated_at,
+ o.name,a.member_id IS NOT NULL
+ FROM members m JOIN organizations o ON o.id=m.organization_id
+ LEFT JOIN administrators a ON a.organization_id=m.organization_id AND a.member_id=m.id
+ WHERE ($1='' OR m.organization_id=$1) AND m.id>$2
+ AND ($4='' OR strpos(lower(m.display_name),lower($4))>0 OR strpos(m.id,lower($4))>0)
+ AND ($5='' OR (m.manual_block OR m.external_departure)=($5='blocked'))
+ AND ($6='' OR (a.member_id IS NOT NULL)=($6='yes'))
+ ORDER BY m.id LIMIT $3`, organizationID, after, limit+1, filter.Query, filter.Status, filter.Administrator)
 	if err != nil {
 		return page, err
 	}
 	defer rows.Close()
 	for rows.Next() {
-		item, err := readMember(rows)
-		if err != nil {
+		var item MemberDirectoryEntry
+		if err := scanMember(rows, &item.Member, &item.OrganizationName, &item.Administrator); err != nil {
 			return page, err
 		}
 		if len(page.Items) == limit {
