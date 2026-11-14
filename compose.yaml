@@ -1,0 +1,94 @@
+name: "${MEMBERID_LOCAL_PROJECT:?Run sh dev/setup.sh and pass --env-file .local/compose/compose.env}"
+
+x-memberid: &memberid
+  image: "memberid:${MEMBERID_LOCAL_PROJECT}"
+  pull_policy: never
+  user: "${MEMBERID_LOCAL_UID}:${MEMBERID_LOCAL_GID}"
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  env_file:
+    - .local/compose/memberid.env
+  environment:
+    SSL_CERT_FILE: /trust/system-ca.pem
+  volumes:
+    - ./.local/compose/installation:/etc/memberid:ro
+    - ./.local/compose/tls/system-ca.pem:/trust/system-ca.pem:ro
+
+services:
+  postgres:
+    image: postgres:18.6@sha256:bd5dfa494a5a259704365813dbfa5fa6b3e69be7348d43b547f540c730478583
+    env_file:
+      - .local/compose/postgres.env
+    volumes:
+      - postgres:/var/lib/postgresql
+    networks: [data]
+    healthcheck:
+      test: [CMD, pg_isready, -h, 127.0.0.1, -U, memberid, -d, memberid]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  auth:
+    <<: *memberid
+    build:
+      context: .
+      dockerfile: dev/Dockerfile
+    command: [serve, --directory, /etc/memberid, --listen, '0.0.0.0:8080']
+    env_file:
+      - .local/compose/memberid.env
+      - .local/compose/auth.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [http, data]
+
+  console:
+    <<: *memberid
+    command: [serve-console, --directory, /etc/memberid, --listen, '0.0.0.0:8082']
+    restart: on-failure
+    depends_on:
+      auth:
+        condition: service_started
+      proxy:
+        condition: service_started
+    environment:
+      SSL_CERT_FILE: /trust/system-ca.pem
+      SSL_CERT_DIR: /development-ca
+    volumes:
+      - ./.local/compose/installation:/etc/memberid:ro
+      - ./.local/compose/tls/system-ca.pem:/trust/system-ca.pem:ro
+      - ./.local/compose/tls/ca.pem:/development-ca/memberid.pem:ro
+    networks: [http, data]
+
+  management:
+    <<: *memberid
+    profiles: [integration]
+    command: [serve-management, --directory, /etc/memberid, --listen, '0.0.0.0:8081', --allow-private-listen]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [data]
+
+  proxy:
+    image: caddy:2.11.9-alpine@sha256:003a97808e781aa9f7e75cc2f43d34d461099031faf5e20faefb9f61126836f0
+    ports:
+      - '127.0.0.1:8443:8443'
+    tmpfs: [/data, /config]
+    volumes:
+      - ./dev/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./.local/compose/tls/server.pem:/tls/server.pem:ro
+      - ./.local/compose/tls/server-key.pem:/tls/server-key.pem:ro
+    networks:
+      http:
+        aliases:
+          - auth.memberid.localhost
+          - admin.memberid.localhost
+
+networks:
+  http:
+  data:
+    internal: true
+
+volumes:
+  postgres:

@@ -12,6 +12,10 @@ git config --local core.hooksPath .githooks
 
 Inspect any existing hooks configuration before changing it. The hooks require Gitleaks on Git's PATH and reject whitespace errors, detected secrets, and known coding-agent attribution patterns. They do not modify the staged content.
 
+## Local development stack
+
+See [local development with Docker Compose](docs/local-development.md) for the two HTTPS hostnames, database setup, and optional integration API.
+
 ## Checks
 
 ```sh

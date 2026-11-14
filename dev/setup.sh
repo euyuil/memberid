@@ -1,0 +1,96 @@
+#!/bin/sh
+set -eu
+umask 077
+export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*'
+
+if [ ! -f compose.yaml ] || [ ! -f dev/Caddyfile ]; then
+  printf 'Run from the MemberID repository root.\n' >&2
+  exit 2
+fi
+
+state=.local/compose
+if ! mkdir -p .local || ! mkdir "$state"; then
+  printf 'Keep any existing %s directory. Setup requires a new one.\n' "$state" >&2
+  exit 1
+fi
+trap 'printf "Setup incomplete. Inspect %s before retrying.\n" "$state" >&2' EXIT
+
+# Keep the editable configuration readable by the host user and the serving processes.
+uid=$(id -u)
+gid=$(id -g)
+project=memberid-local-$(openssl rand -hex 6)
+printf 'MEMBERID_LOCAL_PROJECT=%s\nMEMBERID_LOCAL_UID=%s\nMEMBERID_LOCAL_GID=%s\n' \
+  "$project" "$uid" "$gid" > "$state/compose.env"
+password=$(openssl rand -hex 24)
+printf 'POSTGRES_USER=memberid\nPOSTGRES_DB=memberid\nPOSTGRES_PASSWORD=%s\n' "$password" > "$state/postgres.env"
+printf 'MEMBERID_DATABASE_URL=postgres://memberid:%s@postgres:5432/memberid?sslmode=disable\n' "$password" > "$state/memberid.env"
+printf 'MEMBERID_DINGTALK_ENABLED=true\n' > "$state/auth.env"
+
+mkdir "$state/tls"
+openssl req -x509 -newkey rsa:3072 -nodes -sha256 -days 365 \
+  -subj '/CN=MemberID Local Development CA' \
+  -addext 'basicConstraints=critical,CA:TRUE,pathlen:0' \
+  -addext 'keyUsage=critical,keyCertSign,cRLSign' \
+  -keyout "$state/tls/ca-key.pem" -out "$state/tls/ca.pem" 2>"$state/tls/generation.log"
+openssl req -new -newkey rsa:2048 -nodes -sha256 \
+  -subj '/CN=auth.memberid.localhost' \
+  -keyout "$state/tls/server-key.pem" -out "$state/tls/server.csr" 2>>"$state/tls/generation.log"
+cat > "$state/tls/server.ext" <<'EXT'
+basicConstraints=critical,CA:FALSE
+keyUsage=critical,digitalSignature,keyEncipherment
+extendedKeyUsage=serverAuth
+subjectAltName=DNS:auth.memberid.localhost,DNS:admin.memberid.localhost
+EXT
+openssl x509 -req -sha256 -days 365 -in "$state/tls/server.csr" \
+  -CA "$state/tls/ca.pem" -CAkey "$state/tls/ca-key.pem" \
+  -CAcreateserial -extfile "$state/tls/server.ext" -out "$state/tls/server.pem" 2>>"$state/tls/generation.log"
+# Finished public material and leaf key are the only TLS inputs used by the stack.
+rm "$state/tls/ca-key.pem" "$state/tls/ca.srl" "$state/tls/server.csr" "$state/tls/server.ext" "$state/tls/generation.log"
+
+docker compose --env-file "$state/compose.env" run --no-deps --rm --entrypoint cat \
+  proxy /etc/ssl/certs/ca-certificates.crt > "$state/tls/system-ca.pem"
+test -s "$state/tls/system-ca.pem"
+docker compose --env-file "$state/compose.env" build auth
+
+absolute_state=$(cd "$state" && pwd -P)
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*) absolute_state=$(cygpath -am "$absolute_state") ;;
+esac
+operator() {
+  docker run --rm --network none --user "$uid:$gid" \
+    --mount "type=bind,source=$absolute_state,target=/setup" \
+    "memberid:$project" "$@"
+}
+
+operator config init --directory /setup/installation --issuer https://auth.memberid.localhost:8443
+operator client add --directory /setup/installation --id memberid-console \
+  --redirect https://admin.memberid.localhost:8443/auth/callback --preauthorized > "$state/console-client.json"
+python3 - "$state" <<'PY'
+import json
+from pathlib import Path
+import sys
+
+state = Path(sys.argv[1])
+installation = state / "installation"
+with (state / "console-client.json").open(encoding="utf-8") as source:
+    secret = json.load(source)["client_secret"]
+with (installation / "console-client-secret").open("x", encoding="utf-8") as output:
+    output.write(secret + "\n")
+with (installation / "console.json").open("x", encoding="utf-8") as output:
+    json.dump(
+        {
+            "origin": "https://admin.memberid.localhost:8443",
+            "clientId": "memberid-console",
+            "clientSecretFile": "console-client-secret",
+        },
+        output,
+        indent=2,
+    )
+    output.write("\n")
+(state / "console-client.json").unlink()
+PY
+
+docker compose --env-file "$state/compose.env" up -d --wait postgres
+docker compose --env-file "$state/compose.env" run --rm --no-deps auth database init
+trap - EXIT
+printf 'Local installation ready. Review %s/auth.env, then start the Compose stack.\n' "$state"
