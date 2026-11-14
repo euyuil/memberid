@@ -3,12 +3,12 @@
 	auto_https disable_redirects
 }
 
-https://auth.memberid.localhost:8443 {
+https://{$MEMBERID_LOCAL_AUTH_HOST}:{$MEMBERID_LOCAL_HTTPS_PORT} {
 	tls /tls/server.pem /tls/server-key.pem
 	reverse_proxy auth:8080
 }
 
-https://admin.memberid.localhost:8443 {
+https://{$MEMBERID_LOCAL_ADMIN_HOST}:{$MEMBERID_LOCAL_HTTPS_PORT} {
 	tls /tls/server.pem /tls/server-key.pem
 	reverse_proxy console:8082
 }

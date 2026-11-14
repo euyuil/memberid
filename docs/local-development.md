@@ -8,7 +8,7 @@ Use Docker Compose with Linux containers, a POSIX shell, OpenSSL with `req -adde
 | `https://admin.memberid.localhost:8443` | Administration console and OIDC callback, proxied to `console:8082` |
 | `http://management:8081` | Private integration API on the Compose network, enabled by the `integration` profile |
 
-Caddy publishes TCP port 8443 on host loopback. PostgreSQL and the three MemberID listeners are only available through their respective Compose networks. On the host, browsers that resolve `.localhost` names to loopback can use both URLs without hosts-file entries. On the Compose HTTP network, Caddy has both hostnames as network aliases so the console can use the same issuer URL as the browser.
+Caddy publishes TCP port 8443 on host loopback by default. PostgreSQL and the three MemberID listeners are only available through their respective Compose networks. On the host, browsers that resolve `.localhost` names to loopback can use both URLs without hosts-file entries. On the Compose HTTP network, Caddy has both hostnames as network aliases so the console can use the same issuer URL as the browser.
 
 For external deployments, see [production hostnames](console.md#production-hostnames).
 
@@ -57,6 +57,19 @@ curl --fail --cacert .local/compose/tls/ca.pem \
 ```
 
 After changing code, rebuild the shared local image with `dc build auth`, then apply it with `dc up -d --wait`. If the integration service is running, include `--profile integration` when applying the new image.
+
+## Parallel worktrees
+
+The default worktree uses the two addresses above. From the root of an additional worktree, choose an unused environment name and host port at first-time setup:
+
+```sh
+sh dev/setup.sh --name review --port 8444
+dc up -d --wait
+```
+
+This prints the two URLs and configures `https://auth-review.memberid.localhost:8444` as the OIDC issuer and `https://admin-review.memberid.localhost:8444` as the console origin. Use those addresses for that worktree's sign-in, callbacks, and HTTPS checks. Names can contain lowercase ASCII letters, digits, and internal hyphens, up to 57 characters. Choose a free port and a distinct name for every concurrently running worktree. Ports isolate the local listeners. The separate hostnames keep the browser's authentication cookies isolated even when both consoles are open in the same browser profile.
+
+Each worktree has a separate Compose project, PostgreSQL volume, installation directory, and local CA. Trust the public CA certificate from each worktree and configure its development provider and administrator. Run `dc` from the worktree you want to operate. The names and port are saved at setup and used by later Compose commands. Existing default installations continue to use the two original hostnames and port 8443.
 
 ## Private integration API
 
