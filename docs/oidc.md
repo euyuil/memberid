@@ -50,6 +50,13 @@ ID Tokens authenticate the user to a client. They do not work as UserInfo or app
 
 For a registered evidence scope, the access token includes `authentication` facts (`factorId`, `factorType`, `method`, `authenticatedAt`, `expiresAt`), plus `organizationId`, `memberId`, and `bindingId` when a Member is selected. This is an optional identity-claim extension to the standard access token, not another credential or authorization protocol. No business roles, administrative privileges, or resource grants are issued by MemberID.
 
+The [token and server-side authorization design](authorization-boundaries.md)
+records the agreed management boundary: tokens carry their documented identity
+and OAuth claims, while MemberID evaluates its current management authority on
+the server. Consuming applications own their business authorization. That design
+does not change this token profile or make OIDC tokens valid credentials for the
+existing management interfaces.
+
 Current organization, Member, factor, and binding eligibility is checked during code issuance/redemption, refresh, and online UserInfo/introspection. For admitted DingTalk-linked Members using phone or DingTalk authentication, code redemption and refresh also perform [current directory verification](dingtalk.md#current-directory-verification-at-token-issuance), with distinct policies for unknown provider outages and definitive contradictions. An authorization code is bound to its client, redirect URI, PKCE verifier, and browser transaction. It expires after at most one minute and may be redeemed once. A detected valid code replay revokes the resulting grant, including concurrent duplicate redemption. A failed client or PKCE check does not consume another client's legitimate code.
 
 ## Lifetimes, revocation, and logout
