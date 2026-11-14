@@ -3,15 +3,31 @@
 This catalog maps existing functionality to the agreed [roles](roles.md),
 [scope/action rules](management-permissions.md), and [authorization
 boundaries](authorization-boundaries.md). The mappings are design contracts for
-the future shared evaluator. Current code still uses administrator assignments,
-organization checks, and operation-specific checks. No endpoint, permission,
-token claim, schema, or runtime behavior is added by this documentation change.
+the shared evaluator. Adoption is incremental as recorded below; existing
+administrator assignments, identity eligibility and lifecycle constraints remain
+authoritative. The catalog does not itself add endpoints, token claims, or schema.
 
 The catalog covers the console, account linking, and the corresponding private
 management API and operator commands. Protocol login, token issuance/renewal,
 provider callbacks for ordinary login, process setup, signing keys, and client
 registration keep their separate documented contracts. They are not implicitly
 Member management operations.
+
+## Current enforcement
+
+The scope/action parser supports qualified CRUD actions, read expansion and the
+documented whole-segment wildcards. The evaluator requires every target/action
+pair and rejects unsupported operations even for platform-wide permissions.
+Built-in role permissions live in code; assignments remain in `administrators`.
+
+| Operations | Enforcement status |
+| --- | --- |
+| O5-O6: organization updates | Shared scope/action checks at the existing transactional authorization point, including explicitly submitted unchanged status fields. Private/CLI updates retain their installation-only entry contract. |
+| Remaining catalog operations | Existing operation-specific authorization; migration to the shared evaluator remains follow-up work. |
+
+The pure evaluator has no permission lock or cross-request allow cache. Its
+database-backed tests cover completion after revocation of an admitted bounded
+update and denial of the next decision. Existing lifecycle locks remain in place.
 
 ## Reading the catalog
 
@@ -229,8 +245,10 @@ extra `create` permission that administrators must hold on management history.
 
 ## Implementation and test evidence
 
-These links identify existing code and checks. They do not claim that the new
-action vocabulary or wildcard evaluator is already implemented or tested.
+These links identify existing operation code and checks. [Evaluator tests](../internal/authorization/permissions_test.go)
+cover scope/action semantics; [organization authorization tests](../internal/identity/authorization_integration_test.go)
+cover the first migrated operations and the revocation boundary. Other linked
+tests remain baselines, not proof that every catalog operation is migrated.
 
 | Rows | Implementation | Existing automated checks |
 | --- | --- | --- |
@@ -262,10 +280,10 @@ Documentation review must verify the following against the catalog and sources:
   constraints; manual status actions cannot erase external departure or fabricate
   provider verification. Self-service does not inherit operator privileges.
 
-When enforcement is implemented, add focused tests for these mappings and the
+As each remaining operation is migrated, add focused tests for its mappings and the
 authorization-before/after-revocation boundary alongside each affected operation.
 Existing next-request revocation and last-administrator tests are useful baselines,
-not proof of the new evaluator or all in-flight concurrency behavior. Exact
+not proof of every migrated operation or all in-flight concurrency behavior. Exact
 role-assignment API/ID representation, persistent permission storage, and new
 capabilities remain separate implementation work. No deletion of organizations,
 Members, or provider applications, custom roles, deny rules, or external policy

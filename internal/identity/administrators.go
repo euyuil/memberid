@@ -199,7 +199,15 @@ func (store *Store) Manage(ctx context.Context, principal Principal, action, org
 		if err := managementLock(ctx, tx); err != nil {
 			return err
 		}
-		if err := authorizeManagement(ctx, tx, principal, organizationID, action == "organization.create" || change.Status != nil); err != nil {
+		if action == "organization.update" {
+			requirements, err := organizationUpdateRequirements(organizationID, OrganizationChange{Name: change.Name, Status: change.Status})
+			if err != nil {
+				return err
+			}
+			if err := authorizeAll(ctx, tx, principal, requirements...); err != nil {
+				return err
+			}
+		} else if err := authorizeManagement(ctx, tx, principal, organizationID, action == "organization.create" || change.Status != nil); err != nil {
 			return err
 		}
 		var err error

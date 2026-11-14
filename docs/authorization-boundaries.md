@@ -6,8 +6,9 @@ revocation on operations already in progress. It complements the [Member
 roles](roles.md) and [management scopes and actions](management-permissions.md).
 The [operation catalog](management-operation-catalog.md) maps existing entry
 points to targets, required actions, role coverage, and authorization checkpoints.
-This is a design decision, not a change to token contents, APIs, persistence, or
-runtime enforcement. The [OIDC profile](oidc.md), [console](console.md), and
+The [rollout status](management-operation-catalog.md#current-enforcement) distinguishes
+implemented checks from remaining migrations. Token contents and API credential
+contracts remain unchanged. The [OIDC profile](oidc.md), [console](console.md), and
 [private management API](management-api.md) describe the current interfaces.
 
 ## Token and service responsibilities
@@ -167,10 +168,11 @@ invariants.
   `installation-manager` principal. Trusted operator entry points retain their
   separate access contract; they do not acquire Member roles or begin accepting
   ordinary OIDC tokens through this design.
-- The generic scope/action evaluator and implementation of the catalog's
-  role-to-operation mappings remain follow-up work. No job system,
+- The scope/action evaluator is implemented and enforces organization updates.
+  Migration of the remaining catalog operations is follow-up work. No job system,
   cancellation protocol, or external policy-decision API is added.
 
-The agreed authorization and revocation boundaries require implementation and
-focused concurrency validation when enforcement changes are made. This
-documentation update does not establish new runtime or end-to-end guarantees.
+Each remaining migration requires focused validation of its authorization and
+revocation boundaries. Organization-update tests cover a decision made before
+revocation, completion of the admitted update, and rejection of the next decision;
+they do not establish end-to-end guarantees for unrelated workflows.
