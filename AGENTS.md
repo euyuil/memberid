@@ -54,6 +54,7 @@ The repository is being bootstrapped. These guidelines define intended implement
 ## Testing and Acceptance
 
 - During the demo stage, allow breaking changes and qualify fresh installations and current behavior without upgrade rehearsals, historical-data migrations, or speculative compatibility layers. This does not authorize deleting existing data.
+- Deploy each feature in its own temporary local environment for validation. Use a free HTTPS port from 19001 through 19009, distinct hostnames, and an isolated database. When the work is complete, remove the temporary environment and its data. Port 19000 is reserved for the persistent local development preview. Update the preview version only when explicitly requested by a human.
 - Prioritize implemented business behavior and focused automated checks. Use actual-browser inspection for a concrete UI or browser-specific uncertainty, not as a mandatory gate for every change. Do not repeat passed acceptance without a relevant change, failed assertion, or unresolved gap.
 - Test meaningful behavior and security regressions, not implementation details or coverage counts. Reuse existing helpers before adding new test infrastructure.
 - Use synthetic identities, credentials, organizations, and fixtures. Isolate test databases and state, clean up owned test resources, and never run destructive tests against a user's working database.

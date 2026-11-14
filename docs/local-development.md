@@ -4,17 +4,17 @@ Use Docker Compose with Linux containers, a POSIX shell, OpenSSL with `req -adde
 
 | Local address | Service |
 | --- | --- |
-| `https://auth.memberid.localhost:8443` | OIDC issuer and sign-in, proxied to `auth:8080` |
-| `https://admin.memberid.localhost:8443` | Administration console and OIDC callback, proxied to `console:8082` |
+| `https://auth.memberid.localhost:19000` | OIDC issuer and sign-in, proxied to `auth:8080` |
+| `https://admin.memberid.localhost:19000` | Administration console and OIDC callback, proxied to `console:8082` |
 | `http://management:8081` | Private integration API on the Compose network, enabled by the `integration` profile |
 
-Caddy publishes TCP port 8443 on host loopback by default. PostgreSQL and the three MemberID listeners are only available through their respective Compose networks. On the host, browsers that resolve `.localhost` names to loopback can use both URLs without hosts-file entries. On the Compose HTTP network, Caddy has both hostnames as network aliases so the console can use the same issuer URL as the browser.
+Caddy publishes TCP port 19000 on host loopback for the persistent preview. PostgreSQL and the three MemberID listeners are only available through their respective Compose networks. On the host, browsers that resolve `.localhost` names to loopback can use both URLs without hosts-file entries. On the Compose HTTP network, Caddy has both hostnames as network aliases so the console can use the same issuer URL as the browser.
 
 For external deployments, see [production hostnames](console.md#production-hostnames).
 
 ## First-time setup
 
-Run from the repository root:
+Run from the repository root to create the persistent local development preview. For feature work, use a [temporary deployment](#temporary-feature-deployments).
 
 ```sh
 sh dev/setup.sh
@@ -51,25 +51,37 @@ Open the admin URL, start sign-in, authenticate at the auth URL, and confirm the
 
 ```sh
 curl --fail --cacert .local/compose/tls/ca.pem \
-  https://auth.memberid.localhost:8443/.well-known/openid-configuration
+  https://auth.memberid.localhost:19000/.well-known/openid-configuration
 curl --fail --cacert .local/compose/tls/ca.pem \
-  https://admin.memberid.localhost:8443/
+  https://admin.memberid.localhost:19000/
 ```
 
-After changing code, rebuild the shared local image with `dc build auth`, then apply it with `dc up -d --wait`. If the integration service is running, include `--profile integration` when applying the new image.
+To update a deployment to the code in its checkout, rebuild the local image with `dc build auth`, then apply it with `dc up -d --wait`. If the integration service is running, include `--profile integration` when applying the new image. Keep the persistent preview's installation directory and database volume across updates. Agents update the preview version only when explicitly asked by a human.
 
-## Parallel worktrees
+When changing the port of an existing installation, set `MEMBERID_LOCAL_HTTPS_PORT` in `.local/compose/compose.env` and update the issuer, console origin, and corresponding client redirect URIs in `.local/compose/installation/` together. Update any connected clients' issuer settings and external identity providers' registered callbacks before using the new URLs. Sign in again at the new issuer.
 
-The default worktree uses the two addresses above. From the root of an additional worktree, choose an unused environment name and host port at first-time setup:
+## Temporary feature deployments
+
+Deploy each feature in an isolated local environment for validation. From the feature checkout root, choose an unused environment name and a free HTTPS port from 19001 through 19009:
 
 ```sh
-sh dev/setup.sh --name review --port 8444
+sh dev/setup.sh --name review --port 19001
 dc up -d --wait
 ```
 
-This prints the two URLs and configures `https://auth-review.memberid.localhost:8444` as the OIDC issuer and `https://admin-review.memberid.localhost:8444` as the console origin. Use those addresses for that worktree's sign-in, callbacks, and HTTPS checks. Names can contain lowercase ASCII letters, digits, and internal hyphens, up to 57 characters. Choose a free port and a distinct name for every concurrently running worktree. Ports isolate the local listeners. The separate hostnames keep the browser's authentication cookies isolated even when both consoles are open in the same browser profile.
+This prints the two URLs and configures `https://auth-review.memberid.localhost:19001` as the OIDC issuer and `https://admin-review.memberid.localhost:19001` as the console origin. Use those addresses for that checkout's sign-in, callbacks, and HTTPS checks. Names can contain lowercase ASCII letters, digits, and internal hyphens, up to 57 characters. Choose a free port and a distinct name for every concurrently running environment. The separate hostnames keep the browser's authentication cookies isolated.
 
-Each worktree has a separate Compose project, PostgreSQL volume, installation directory, and local CA. Trust the public CA certificate from each worktree and configure its development provider and administrator. Run `dc` from the worktree you want to operate. The names and port are saved at setup and used by later Compose commands. Existing default installations continue to use the two original hostnames and port 8443.
+Each setup has a separate Compose project, PostgreSQL volume, installation directory, and local CA. Use the public CA certificate from that setup and configure its development provider and administrator as needed. Run `dc` from the checkout you want to operate.
+
+When feature work is complete, run these commands from its checkout to remove the temporary containers, networks, database volume, and local image:
+
+```sh
+project=$(sed -n 's/^MEMBERID_LOCAL_PROJECT=//p' .local/compose/compose.env)
+dc --profile integration down --volumes --remove-orphans
+docker image rm "memberid:$project"
+```
+
+Remove any trust-store entry added for the temporary CA, then delete that checkout's `.local/compose/` directory, including its generated credentials and configuration. Confirm its HTTPS port is no longer listening.
 
 ## Private integration API
 
