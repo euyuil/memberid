@@ -18,6 +18,9 @@ func manage(ctx context.Context, args []string, stdout, stderr io.Writer) error 
 	if args[0] == "factor" || args[0] == "member" && args[1] == "bind-factor" {
 		return manageBinding(ctx, args, stdout, stderr)
 	}
+	if args[0] == "member" && args[1] == "set-password" {
+		return manageMemberPassword(ctx, args[2:], stdout, stderr)
+	}
 	databaseURL := os.Getenv("MEMBERID_DATABASE_URL")
 	if databaseURL == "" {
 		return errors.New("MEMBERID_DATABASE_URL is required")

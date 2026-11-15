@@ -47,11 +47,17 @@ dc up -d --wait
 dc ps
 ```
 
-The default `.local/compose/auth.env` enables the DingTalk adapter with no application registered. Configure a development identity provider before trying to sign in. For phone sign-in, add `MEMBERID_PHONE_ENABLED=true` and the protected test provider settings from [phone verification](phone-authentication.md) to `auth.env`. For DingTalk or Feishu, use a development application that accepts the configured HTTPS callback. Follow the relevant [DingTalk](dingtalk.md) or [Feishu](feishu.md) setup guide.
+Open the admin URL and generate the one-time setup code in your terminal:
 
-After editing `auth.env`, run `dc up -d --wait auth` to apply the new environment. Use phone or DingTalk to provision the first platform administrator as described in [the bootstrap guide](administration.md#bootstrap-and-recovery). Then you can manage organization providers in the console. Run the bootstrap commands through `dc run --rm --no-deps auth`. For example, use `dc run --rm --no-deps auth member create --organization org_system --name "Local administrator"` to create the Member record. The installation directory inside the container is `/etc/memberid`.
+```sh
+dc run --rm --no-deps -T auth setup code
+```
 
-Open the admin URL, start sign-in, authenticate at the auth URL, and confirm the browser returns to the admin URL with the administrator session. For a basic HTTPS check using the generated CA directly:
+Enter the code in the [first-time setup wizard](administration.md#first-time-setup), save the generated password and confirm to proceed. Sign in as `root` in `org_system` at the auth URL and confirm the browser returns to the admin URL with the administrator session. To rotate a lost password, use `dc run --rm --no-deps -T auth setup reset-password` and save the new password from the terminal.
+
+No external providers are enabled by default. For phone sign-in, add `MEMBERID_PHONE_ENABLED=true` and the protected test provider settings from [phone verification](phone-authentication.md) to `auth.env`. Configure a development application and enable its adapter for [DingTalk](dingtalk.md) or [Feishu](feishu.md). After editing `auth.env`, run `dc up -d --wait auth` to apply the new environment. The installation directory inside the container is `/etc/memberid`.
+
+For a basic HTTPS check using the generated CA directly:
 
 ```sh
 curl --fail --cacert .local/compose/tls/ca.pem \

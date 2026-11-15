@@ -400,7 +400,7 @@ events and performs no retention cleanup; configured service cleanup and query
 expiry policy remain authoritative. Repeated operator revocation preserves the
 original revocation timestamp and produces no additional state-change event.
 
-The fresh-install schema is version 18. Existing databases are never migrated or
+The fresh-install schema is version 20. Existing databases are never migrated or
 reset automatically. The new store intentionally has no foreign keys to transient
 sessions, flows, grants, or causal events. Events remain historical evidence after
 business cleanup. Public queries are not available yet; operator database access

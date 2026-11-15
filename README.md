@@ -2,7 +2,7 @@
 
 A self-hosted OpenID Connect provider with independent member identities for each organization.
 
-MemberID is under development. It provides PostgreSQL identity storage, an OIDC Authorization Code profile with PKCE, optional phone, DingTalk, and Feishu authentication, and a shared organization administration console. Platform administrators belong to the reserved `org_system` organization; organization administrators manage their own Members. See the documented limitations before deployment.
+MemberID is under development. It provides PostgreSQL identity storage, OIDC Authorization Code with PKCE, an optional SAML 2.0 Identity Provider, and a shared administration console. Member sign-in supports organization-scoped passwords and optional phone, DingTalk, and Feishu authentication. The [first-time setup wizard](docs/administration.md#first-time-setup) creates the initial platform administrator in the reserved `org_system` organization.
 
 ## Development
 

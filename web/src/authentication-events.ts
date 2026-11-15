@@ -44,6 +44,7 @@ export const eventMethods: Record<string, string> = {
   sms: "短信",
   dingtalk: "钉钉",
   feishu: "飞书",
+  pwd: "密码",
 }
 export const eventFilterKeys = [
   "type",

@@ -67,6 +67,12 @@ export function describeEvent(event: ManagementEvent) {
           typeof value === "boolean" ? (value ? "封禁" : "未封禁") : undefined
       )
       break
+    case "password.create":
+      label = "创建密码凭据"
+      break
+    case "password.reset":
+      label = "重置密码"
+      break
     case "administrator.update":
       label = "管理员任免"
       field(
