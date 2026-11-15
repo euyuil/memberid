@@ -38,7 +38,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Skeleton } from "@/components/ui/skeleton"
-import { ConsoleLayout } from "@/components/console-layout"
+import { ConsoleLayout, type BreadcrumbItem } from "@/components/console-layout"
 import {
   DirectoryToolbar,
   DirectoryFooter,
@@ -458,7 +458,37 @@ export default function App() {
 
   const actor = session.actor
   const base = `/api/organizations/${encodeURIComponent(org)}`
-  const scopeName = org ? (data.organization?.name ?? org) : "所有组织"
+  const scopeName = org ? (data.organization?.name ?? "当前组织") : "所有组织"
+  const breadcrumbs: BreadcrumbItem[] = []
+  if (membersView || (events && historyTarget)) {
+    breadcrumbs.push({
+      label: "成员",
+      href: member || historyTarget ? memberReturnRoute : undefined,
+    })
+    if (member)
+      breadcrumbs.push({ label: data.detail?.member.displayName ?? "成员详情" })
+    if (historyTarget) {
+      breadcrumbs.push(
+        {
+          label: data.historyMember?.displayName ?? "成员详情",
+          href: routeURL({ ...memberDirectoryRoute, member: historyTarget }),
+          state: memberNavigationState,
+        },
+        { label: "操作记录" }
+      )
+    }
+  } else if (providers) {
+    breadcrumbs.push({ label: "身份提供商" })
+  } else if (events) {
+    breadcrumbs.push({ label: "操作记录" })
+  } else {
+    breadcrumbs.push({
+      label: "组织",
+      href:
+        org && actor.platform ? routeURL({ view: "organization" }) : undefined,
+    })
+    if (org) breadcrumbs.push({ label: scopeName })
+  }
   const selected = data.detail?.member
   const administrator =
     !!selected && !!data.detail?.administratorIds.includes(selected.id)
@@ -496,6 +526,7 @@ export default function App() {
   return (
     <ConsoleLayout
       actor={actor}
+      breadcrumbs={breadcrumbs}
       navigation={[
         {
           label: "组织",
@@ -540,7 +571,6 @@ export default function App() {
       }}
       scope={
         <>
-          <span>管理范围</span>
           {actor.platform ? (
             <OrganizationSwitcher
               organizationId={org}
@@ -553,7 +583,7 @@ export default function App() {
               }
             />
           ) : (
-            <strong>{data.organization?.name ?? (org || "本组织")}</strong>
+            <strong title={scopeName}>{scopeName}</strong>
           )}
           {org === "org_system" && <Badge variant="outline">系统组织</Badge>}
         </>
@@ -1161,7 +1191,13 @@ function OrganizationSwitcher({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger
-        render={<Button variant="outline" className="max-w-full min-w-0" />}
+        render={
+          <Button
+            variant="outline"
+            className="max-w-full min-w-0"
+            title={name}
+          />
+        }
         aria-label={`切换组织，当前为${name}`}
       >
         <span className="truncate">{name}</span>
