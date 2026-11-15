@@ -77,26 +77,7 @@ printf 'POSTGRES_USER=memberid\nPOSTGRES_DB=memberid\nPOSTGRES_PASSWORD=%s\n' "$
 printf 'MEMBERID_DATABASE_URL=postgres://memberid:%s@postgres:5432/memberid?sslmode=disable\n' "$password" > "$state/memberid.env"
 printf 'MEMBERID_DINGTALK_ENABLED=true\n' > "$state/auth.env"
 
-mkdir "$state/tls"
-openssl req -x509 -newkey rsa:3072 -nodes -sha256 -days 365 \
-  -subj '/CN=MemberID Local Development CA' \
-  -addext 'basicConstraints=critical,CA:TRUE,pathlen:0' \
-  -addext 'keyUsage=critical,keyCertSign,cRLSign' \
-  -keyout "$state/tls/ca-key.pem" -out "$state/tls/ca.pem" 2>"$state/tls/generation.log"
-openssl req -new -newkey rsa:2048 -nodes -sha256 \
-  -subj "/CN=${auth_host%%.*}" \
-  -keyout "$state/tls/server-key.pem" -out "$state/tls/server.csr" 2>>"$state/tls/generation.log"
-cat > "$state/tls/server.ext" <<EXT
-basicConstraints=critical,CA:FALSE
-keyUsage=critical,digitalSignature,keyEncipherment
-extendedKeyUsage=serverAuth
-subjectAltName=DNS:$auth_host,DNS:$admin_host
-EXT
-openssl x509 -req -sha256 -days 365 -in "$state/tls/server.csr" \
-  -CA "$state/tls/ca.pem" -CAkey "$state/tls/ca-key.pem" \
-  -CAcreateserial -extfile "$state/tls/server.ext" -out "$state/tls/server.pem" 2>>"$state/tls/generation.log"
-# Finished public material and leaf key are the only TLS inputs used by the stack.
-rm "$state/tls/ca-key.pem" "$state/tls/ca.srl" "$state/tls/server.csr" "$state/tls/server.ext" "$state/tls/generation.log"
+python3 dev/tls.py issue
 
 docker compose --env-file "$state/compose.env" run --no-deps --rm --entrypoint cat \
   proxy /etc/ssl/certs/ca-certificates.crt > "$state/tls/system-ca.pem"

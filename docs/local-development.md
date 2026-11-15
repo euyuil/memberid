@@ -14,21 +14,25 @@ For external deployments, see [production hostnames](console.md#production-hostn
 
 ## First-time setup
 
-Run from the repository root to create the persistent local development preview. For feature work, use a [temporary deployment](#temporary-feature-deployments).
+Create the shared development CA once per developer account:
+
+```sh
+python3 dev/tls.py init
+```
+
+The script creates `~/.local/share/memberid/dev-ca/` with the private key `root-ca-key.pem` and the public certificate `root-ca.pem`. Keep the directory at mode `0700` and the key at `0600` on POSIX filesystems. On Windows, restrict the directory ACL to the developer account. Keep this material outside checkouts and container mounts.
+
+Import the public root certificate once into the trust store used by the development browser. On macOS, use Keychain Access to add it to the login keychain and set trust for SSL. On Windows, import it into the current user's Trusted Root Certification Authorities store. The CA certificate contains DNS name constraints for `.memberid.localhost` and excludes IP addresses. A user-level trust entry applies to that user. Verify the name constraints in each target verifier before relying on them.
+
+Run from the repository root to create the persistent preview. For feature work, follow [temporary feature deployments](#temporary-feature-deployments).
 
 ```sh
 sh dev/setup.sh
 ```
 
-Setup builds a local image with the pinned Go and Node versions, generates the installation configuration and console client, and initializes a new PostgreSQL volume. It uses a unique Compose project per setup. Configuration, credentials, the development CA certificate, and the server key are under the ignored `.local/compose/` directory. Keep that directory and its matching PostgreSQL volume together. Setup refuses an existing directory. If setup stops partway, inspect the generated configuration and the project's Compose state before retrying with a fresh directory. The Docker build excludes the local state.
+Setup issues a separate server key and 90-day certificate under the shared root, builds the local image with the pinned Go and Node versions, generates the installation configuration and console client, and initializes a new PostgreSQL volume. Each server certificate has the exact admin and auth hostnames for that environment. Caddy mounts its server certificate and key. The console mounts a copy of the public root to verify the OIDC issuer.
 
-Trust only the public certificate at `.local/compose/tls/ca.pem` in the user or browser trust store used for local development. On macOS, use Keychain Access and set trust for SSL. On Windows, import the certificate into the current user's Trusted Root Certification Authorities store, or use:
-
-```sh
-certutil -user -addstore Root .local/compose/tls/ca.pem
-```
-
-The console container trusts that certificate through a read-only mount. Remove the host trust entry when retiring this local installation. The generated certificate covers both hostnames and is valid for one year. Keep TLS verification enabled.
+The Compose project, installation configuration, credentials, and environment TLS files live under the ignored `.local/compose/` directory. Keep that directory and its matching PostgreSQL volume together. Setup requires a new state directory. If it stops partway through, inspect the generated configuration and Compose state before retrying. The Docker build excludes the local state.
 
 ## Start the stack
 
@@ -71,7 +75,7 @@ dc up -d --wait
 
 This prints the two URLs and configures `https://auth-review.memberid.localhost:19001` as the OIDC issuer and `https://admin-review.memberid.localhost:19001` as the console origin. Use those addresses for that checkout's sign-in, callbacks, and HTTPS checks. Names can contain lowercase ASCII letters, digits, and internal hyphens, up to 57 characters. Choose a free port and a distinct name for every concurrently running environment. The separate hostnames keep the browser's authentication cookies isolated.
 
-Each setup has a separate Compose project, PostgreSQL volume, installation directory, and local CA. Use the public CA certificate from that setup and configure its development provider and administrator as needed. Run `dc` from the checkout you want to operate.
+Each setup has a separate Compose project, PostgreSQL volume, installation directory, and server key. The environments share the developer's CA. Configure a development provider and administrator for the fixture, and run `dc` from the checkout you want to operate.
 
 When feature work is complete, run these commands from its checkout to remove the temporary containers, networks, database volume, and local image:
 
@@ -81,7 +85,24 @@ dc --profile integration down --volumes --remove-orphans
 docker image rm "memberid:$project"
 ```
 
-Remove any trust-store entry added for the temporary CA, then delete that checkout's `.local/compose/` directory, including its generated credentials and configuration. Confirm its HTTPS port is no longer listening.
+Delete that checkout's `.local/compose/` directory, including its generated credentials and server key. Confirm its HTTPS port is no longer listening. Keep the shared CA and its trust entry for the other environments. If the fixture used a separate root from an older setup, remove that fixture's specific trust entry.
+
+## Local TLS and CA changes
+
+Run these commands from the checkout of a running environment to check its certificate or renew it under the configured shared CA:
+
+```sh
+python3 dev/tls.py check
+python3 dev/tls.py renew
+```
+
+The check verifies the live certificate, chain, and hostname for both HTTPS origins. Renewal issues a new server key and certificate, validates both hostnames, and saves the previous `server.pem`, `server-key.pem`, and `ca.pem` in a protected `previous-tls-*` directory under `.local/compose/`. It then recreates `proxy` and `console` so their file mounts pick up the new files. If recreation or the live TLS check fails, the script restores the three files and recreates both services again. The printed backup enables manual recovery after an interruption. Restore the three files together and run `dc up -d --no-deps --force-recreate --wait proxy console`.
+
+Renew before the server certificate expires. The CA has a five-year lifetime. Rotate it through an explicit trust change before it expires. The script fails if the CA key and certificate are missing or inconsistent, or the CA expires before the new leaf. CA initialization, issuance, and renewal leave host trust to the operator.
+
+To adopt or change the shared CA, start on a free temporary port from 19001 through 19009. Using the affected browser, including the Codex in-app browser when relevant, start at the admin URL, follow the redirect to the auth URL, sign in with a development identity, and confirm the console callback succeeds. Renew the leaf, verify that the served fingerprint changed, and repeat sign-in with the existing root trust. On a certificate warning, record the failing hostname and browser error. OpenSSL and `curl --cacert` checks supplement the browser check.
+
+After the temporary checks pass, use `renew` for an authorized cutover of the running 19000 preview. The same command can adopt the shared CA on an existing installation created by the previous setup script. Preserve the issuer URL, console origin, installation directory, and database. Retain the previous TLS materials through browser verification. Report the result of the browser check separately from the script's live TLS check.
 
 ## Private integration API
 
