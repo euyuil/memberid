@@ -105,7 +105,7 @@ func (verifier *DingTalkVerifier) Verify(ctx context.Context, login DingTalkLogi
 
 // Admit participates in the caller's authentication transaction, so Member admission and session creation commit together.
 // Caller cancellation or a superseded authorization request must roll this transaction back.
-func (verifier *DingTalkVerifier) Admit(ctx context.Context, tx pgx.Tx, proof DingTalkLoginProof) (Verification, error) {
+func (verifier *DingTalkVerifier) Admit(ctx context.Context, tx pgx.Tx, proof DingTalkLoginProof) (MemberAdmission, error) {
 	return verifier.admit(ctx, tx, proof, nil)
 }
 
@@ -114,41 +114,41 @@ type dingTalkLinkTarget struct{ memberID, factorID, bindingID string }
 // Link attaches freshly verified DingTalk evidence to an existing eligible Member.
 // The caller must authenticate the source session and commit this operation with
 // its single-use account transaction. It never merges or replaces identities.
-func (verifier *DingTalkVerifier) Link(ctx context.Context, tx pgx.Tx, principal Principal, proof DingTalkLoginProof, memberID string) (Verification, error) {
+func (verifier *DingTalkVerifier) Link(ctx context.Context, tx pgx.Tx, principal Principal, proof DingTalkLoginProof, memberID string) (MemberAdmission, error) {
 	if principal.kind != accountPrincipal {
-		return Verification{}, ErrForbidden
+		return MemberAdmission{}, ErrForbidden
 	}
 	if !ValidID(memberID, MemberKind) {
-		return Verification{}, ErrInvalid
+		return MemberAdmission{}, ErrInvalid
 	}
 	if err := authorizeAll(ctx, tx, principal, bindingsResource.require(actionCreate, proof.application.OrganizationID, memberID)); err != nil {
-		return Verification{}, err
+		return MemberAdmission{}, err
 	}
 	return verifier.admit(ctx, tx, proof, &dingTalkLinkTarget{memberID, principal.factorID, principal.bindingID})
 }
 
-func (verifier *DingTalkVerifier) admit(ctx context.Context, tx pgx.Tx, proof DingTalkLoginProof, target *dingTalkLinkTarget) (Verification, error) {
+func (verifier *DingTalkVerifier) admit(ctx context.Context, tx pgx.Tx, proof DingTalkLoginProof, target *dingTalkLinkTarget) (MemberAdmission, error) {
 	if proof.verifier != verifier || proof.authenticatedAt.IsZero() || proof.authenticatedAt.After(verifier.now()) || !proof.authenticatedAt.Add(5*time.Minute).After(verifier.now()) {
-		return Verification{}, ErrIneligible
+		return MemberAdmission{}, ErrIneligible
 	}
 	app := proof.application
 	organization, err := readOrganization(tx.QueryRow(ctx, "SELECT "+organizationColumns+" FROM organizations WHERE id=$1 FOR UPDATE", app.OrganizationID))
 	if err != nil {
-		return Verification{}, err
+		return MemberAdmission{}, err
 	}
 	if organization.Status != "enabled" || organization.lifecycleRevision != app.organizationRevision {
-		return Verification{}, ErrIneligible
+		return MemberAdmission{}, ErrIneligible
 	}
 	current, _, err := readApplication(tx.QueryRow(ctx, "SELECT "+applicationColumns+" FROM dingtalk_applications WHERE organization_id=$1 AND namespace=$2 FOR UPDATE", app.OrganizationID, app.Namespace))
 	if err != nil {
-		return Verification{}, err
+		return MemberAdmission{}, err
 	}
 	if current.Revision != app.Revision || current.AuthorizationRevision != app.AuthorizationRevision || current.directoryRevision != app.directoryRevision || !current.Enabled || current.AuthorizationStatus != "active" || current.Namespace != app.Namespace || current.CorpID != app.CorpID || current.ClientID != app.ClientID {
-		return Verification{}, ErrConflict
+		return MemberAdmission{}, ErrConflict
 	}
 	rows, err := tx.Query(ctx, "SELECT member_id,union_id FROM dingtalk_identities WHERE namespace=$1 AND (union_id=$2 OR external_member_id=$3) FOR UPDATE", app.Namespace, proof.member.UnionID, proof.member.UserID)
 	if err != nil {
-		return Verification{}, err
+		return MemberAdmission{}, err
 	}
 	var memberID, unionID string
 	count := 0
@@ -160,45 +160,45 @@ func (verifier *DingTalkVerifier) admit(ctx context.Context, tx pgx.Tx, proof Di
 	}
 	rows.Close()
 	if err != nil {
-		return Verification{}, err
+		return MemberAdmission{}, err
 	}
 	if rows.Err() != nil {
-		return Verification{}, rows.Err()
+		return MemberAdmission{}, rows.Err()
 	}
 	if count > 1 || count == 1 && unionID != proof.member.UnionID {
-		return Verification{}, ErrConflict
+		return MemberAdmission{}, ErrConflict
 	}
 	if target != nil {
 		if memberID != "" && memberID != target.memberID {
-			return Verification{}, ErrConflict
+			return MemberAdmission{}, ErrConflict
 		}
 		// Lock the source factor before target factor/binding/member locks. Operator
 		// factor updates and binding revocation cannot race a successful link.
 		var id string
 		if err := tx.QueryRow(ctx, "SELECT id FROM authentication_factors WHERE id=$1 AND status='active' FOR SHARE", target.factorID).Scan(&id); err != nil {
-			return Verification{}, ErrIneligible
+			return MemberAdmission{}, linkEligibilityError(err)
 		}
 		if err := tx.QueryRow(ctx, "SELECT id::text FROM member_auth_factor_bindings WHERE id=$1 AND member_id=$2 AND organization_id=$3 AND authentication_factor_id=$4 AND status='active' FOR SHARE", target.bindingID, target.memberID, app.OrganizationID, target.factorID).Scan(&id); err != nil {
-			return Verification{}, ErrIneligible
+			return MemberAdmission{}, linkEligibilityError(err)
 		}
 	}
 	factor, err := ensureFactor(ctx, tx, "dingtalk", app.Namespace, proof.member.UnionID)
 	if err != nil {
-		return Verification{}, err
+		return MemberAdmission{}, err
 	}
 	bound, err := readBinding(tx.QueryRow(ctx, "SELECT "+bindingColumns+" FROM member_auth_factor_bindings WHERE organization_id=$1 AND authentication_factor_id=$2 FOR UPDATE", app.OrganizationID, factor.ID))
 	if err != nil && !errors.Is(err, ErrNotFound) {
-		return Verification{}, err
+		return MemberAdmission{}, err
 	}
 	if err == nil {
 		if bound.Status != "active" || memberID != "" && memberID != bound.MemberID {
-			return Verification{}, ErrConflict
+			return MemberAdmission{}, ErrConflict
 		}
 		memberID = bound.MemberID
 	}
 	if target != nil {
 		if memberID != "" && memberID != target.memberID {
-			return Verification{}, ErrConflict
+			return MemberAdmission{}, ErrConflict
 		}
 		memberID = target.memberID
 	}
@@ -207,61 +207,64 @@ func (verifier *DingTalkVerifier) admit(ctx context.Context, tx pgx.Tx, proof Di
 		// Consume approval atomically with verified binding and session creation.
 		if err := tx.QueryRow(ctx, "DELETE FROM system_dingtalk_admissions WHERE namespace=$1 AND union_id=$2 AND expires_at>clock_timestamp() RETURNING member_id", app.Namespace, proof.member.UnionID).Scan(&memberID); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
-				return Verification{}, ErrIneligible
+				return MemberAdmission{}, ErrIneligible
 			}
-			return Verification{}, err
+			return MemberAdmission{}, err
 		}
 	}
 	if memberID == "" {
 		if app.OrganizationID == SystemOrganizationID {
-			return Verification{}, ErrIneligible
+			return MemberAdmission{}, ErrIneligible
 		}
 		memberID, err = NewID(MemberKind)
 		if err != nil {
-			return Verification{}, err
+			return MemberAdmission{}, err
 		}
 		name := proof.member.DisplayName
 		if !validText(name, 128) {
 			name = "Member"
 		}
 		if _, err := tx.Exec(ctx, "INSERT INTO members(id,organization_id,display_name) VALUES($1,$2,$3)", memberID, app.OrganizationID, name); err != nil {
-			return Verification{}, storageError(err)
+			return MemberAdmission{}, storageError(err)
 		}
 	} else {
 		member, err := readMember(tx.QueryRow(ctx, "SELECT "+memberColumns+" FROM members WHERE id=$1 AND organization_id=$2 FOR UPDATE", memberID, app.OrganizationID))
 		if err != nil {
-			return Verification{}, err
+			return MemberAdmission{}, err
 		}
 		if target != nil {
 			bindingID, err := MemberEvidence(ctx, tx, target.factorID, memberID, app.OrganizationID)
-			if err != nil || bindingID != target.bindingID {
-				return Verification{}, ErrIneligible
+			if err != nil {
+				return MemberAdmission{}, linkEligibilityError(err)
+			}
+			if bindingID != target.bindingID {
+				return MemberAdmission{}, ErrIneligible
 			}
 		}
 		for _, source := range member.BlockSources {
 			if source == "manual" {
-				return Verification{}, ErrIneligible
+				return MemberAdmission{}, ErrIneligible
 			}
 		}
 		if _, err := tx.Exec(ctx, "UPDATE members SET external_departure=false,eligibility_revision=eligibility_revision+1,updated_at=CASE WHEN external_departure THEN clock_timestamp() ELSE updated_at END WHERE id=$1", memberID); err != nil {
-			return Verification{}, err
+			return MemberAdmission{}, err
 		}
 	}
 	if _, err := tx.Exec(ctx, "INSERT INTO member_auth_factor_bindings(member_id,organization_id,authentication_factor_id,factor_type) VALUES($1,$2,$3,'dingtalk') ON CONFLICT DO NOTHING", memberID, app.OrganizationID, factor.ID); err != nil {
-		return Verification{}, storageError(err)
+		return MemberAdmission{}, storageError(err)
 	}
 	bound, err = readBinding(tx.QueryRow(ctx, "SELECT "+bindingColumns+" FROM member_auth_factor_bindings WHERE member_id=$1 AND factor_type='dingtalk'", memberID))
 	if err != nil {
-		return Verification{}, err
+		return MemberAdmission{}, err
 	}
 	if bound.OrganizationID != app.OrganizationID || bound.FactorID != factor.ID || bound.Status != "active" {
-		return Verification{}, ErrConflict
+		return MemberAdmission{}, ErrConflict
 	}
 	var departments []byte
 	if proof.member.DepartmentIDs != nil {
 		departments, err = json.Marshal(proof.member.DepartmentIDs)
 		if err != nil {
-			return Verification{}, err
+			return MemberAdmission{}, err
 		}
 	}
 	if count == 0 {
@@ -270,7 +273,7 @@ func (verifier *DingTalkVerifier) admit(ctx context.Context, tx pgx.Tx, proof Di
 		_, err = tx.Exec(ctx, "UPDATE dingtalk_identities SET external_member_id=$2,department_ids=COALESCE($3::jsonb,department_ids),verified_at=$4 WHERE member_id=$1", memberID, proof.member.UserID, departments, proof.authenticatedAt)
 	}
 	if err != nil {
-		return Verification{}, storageError(err)
+		return MemberAdmission{}, storageError(err)
 	}
-	return Verification{Factor: factor, AuthenticatedAt: proof.authenticatedAt, Method: "dingtalk"}, nil
+	return MemberAdmission{Verification: Verification{Factor: factor, AuthenticatedAt: proof.authenticatedAt, Method: "dingtalk"}, OrganizationID: app.OrganizationID, MemberID: memberID, BindingID: bound.ID}, nil
 }

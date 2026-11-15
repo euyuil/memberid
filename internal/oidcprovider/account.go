@@ -12,6 +12,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/euyuil/memberid/internal/authevent"
 	"github.com/euyuil/memberid/internal/config"
 	"github.com/euyuil/memberid/internal/identity"
 	"github.com/jackc/pgx/v5"
@@ -275,6 +276,9 @@ func (service *Service) accountDingTalkCallback(w http.ResponseWriter, r *http.R
 		http.Error(w, "Method not allowed", 405)
 		return
 	}
+	event := authevent.Event{Purpose: "accountLinking"}
+	failure := errCallbackRejected
+	defer func() { service.recordVerification(r, event, "dingtalk", failure) }()
 	code, valid := dingTalkCallbackCode(r)
 	if !valid || len(r.Form.Get("state")) != 43 {
 		http.Error(w, "Invalid account callback", 400)
@@ -283,52 +287,81 @@ func (service *Service) accountDingTalkCallback(w http.ResponseWriter, r *http.R
 	request, err := service.readAccount(r, "state_hash", config.SecretHash(r.Form.Get("state")))
 	session, sessionErr := service.accountSession(r, service.store.Database(), false)
 	if err != nil || request.Kind != "dingtalk" || sessionErr != nil || request.SessionID != session.id || request.State != "pending" || !service.freshAccountSession(session) {
+		if err != nil {
+			failure = err
+		} else if sessionErr != nil {
+			failure = sessionErr
+		}
 		http.Error(w, "Invalid or expired account callback", 400)
 		return
 	}
 	member, binding, err := service.accountMember(r, session, request.MemberID)
 	if err != nil || binding != request.BindingID || session.verified.Factor.ID != request.FactorID {
+		if err != nil {
+			failure = err
+		}
 		http.Error(w, "Member identity is no longer eligible", 403)
 		return
 	}
+	event = accountEvent(request, session)
+	event.ProviderID = request.Login.Namespace
+	event.FactorID, event.BindingID = "", ""
 	result, err := service.store.Database().Exec(r.Context(), "UPDATE account_link_requests SET state='consumed' WHERE id=$1 AND state='pending' AND expires_at>$2", request.ID, service.now())
 	if err != nil || result.RowsAffected() != 1 {
+		if err != nil {
+			failure = err
+		}
 		http.Error(w, "Invalid or expired account callback", 400)
 		return
 	}
 	request.State = "consumed"
 	if r.Form.Get("error") != "" || code == "" {
+		if r.Form.Get("error") != "" {
+			failure = callbackFailure(r.Form.Get("error"))
+		}
 		service.renderAccount(w, r, request, session, member, "DingTalk verification did not complete. Cancel verification to try again.")
 		return
 	}
 	proof, err := service.dingtalk.Verify(r.Context(), request.Login, code)
 	if err != nil {
+		failure = err
 		service.renderAccount(w, r, request, session, member, "Unable to verify DingTalk membership. Cancel verification to try again.")
 		return
 	}
+	var admitted identity.MemberAdmission
 	err = pgx.BeginFunc(r.Context(), service.store.Database(), func(tx pgx.Tx) error {
 		current, err := service.accountSession(r, tx, true)
-		if err != nil || current.id != request.SessionID || current.verified.Factor.ID != request.FactorID || !service.freshAccountSession(current) {
+		if err != nil {
+			return accountVerificationError(err)
+		}
+		if current.id != request.SessionID || current.verified.Factor.ID != request.FactorID || !service.freshAccountSession(current) {
 			return identity.ErrIneligible
 		}
 		var state string
-		if err := tx.QueryRow(r.Context(), "SELECT state FROM account_link_requests WHERE id=$1 AND expires_at>$2 FOR UPDATE", request.ID, service.now()).Scan(&state); err != nil || state != "consumed" {
+		if err := tx.QueryRow(r.Context(), "SELECT state FROM account_link_requests WHERE id=$1 AND expires_at>$2 FOR UPDATE", request.ID, service.now()).Scan(&state); err != nil {
+			return accountVerificationError(err)
+		}
+		if state != "consumed" {
 			return identity.ErrConflict
 		}
 		if !service.accountClient(request.accountDetails) {
 			return identity.ErrIneligible
 		}
 		principal := identity.AccountPrincipal(current.id, request.MemberID, current.verified.Factor.ID, request.BindingID)
-		if _, err := service.dingtalk.Link(r.Context(), tx, principal, proof, request.MemberID); err != nil {
+		admitted, err = service.dingtalk.Link(r.Context(), tx, principal, proof, request.MemberID)
+		if err != nil {
 			return err
 		}
 		_, err = tx.Exec(r.Context(), "UPDATE account_link_requests SET state='completed' WHERE id=$1", request.ID)
 		return err
 	})
 	if err != nil {
+		failure = err
 		service.renderAccount(w, r, request, session, member, "Unable to link this identity. It may already belong to another Member or the request is no longer eligible. Cancel verification to try again.")
 		return
 	}
+	failure = nil
+	event.FactorID, event.BindingID = admitted.Factor.ID, admitted.BindingID
 	request.State = "completed"
 	service.renderAccount(w, r, request, session, member, "DingTalk is linked to this Member. Your current session and existing grants keep their original authentication and expiry.")
 }

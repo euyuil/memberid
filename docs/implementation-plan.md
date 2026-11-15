@@ -12,9 +12,8 @@ The [authentication event design](authentication-events.md) defines the next
 audit capability: authentication and OIDC lifecycle events, correlation,
 organization-scoped reads, configurable retention, and delivery that does not
 gate login or revocation. The store, bounded writer, retention cleanup, and SMS
-send and verification events are implemented.
-External authentication and OIDC lifecycle producers, queries, and console views
-remain unimplemented; existing transactional management history is unchanged.
+send and supported-method verification events are implemented.
+OIDC lifecycle producers, queries, and console views remain unimplemented; existing transactional management history is unchanged.
 
 ## Delivery sequence
 

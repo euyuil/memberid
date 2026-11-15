@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/euyuil/memberid/internal/authevent"
 	"github.com/euyuil/memberid/internal/config"
 	"github.com/euyuil/memberid/internal/feishu"
 	"github.com/euyuil/memberid/internal/identity"
@@ -57,6 +58,14 @@ func (service *Service) feishuCallback(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	event := authevent.Event{Purpose: "login"}
+	failure := errCallbackRejected
+	completed := false
+	defer func() {
+		if !completed {
+			service.recordVerification(r, event, "feishu", failure)
+		}
+	}()
 	for name := range r.Form {
 		if name != "state" && name != "code" && name != "error" && name != "error_description" {
 			http.Error(w, "Invalid Feishu callback", http.StatusBadRequest)
@@ -71,10 +80,18 @@ func (service *Service) feishuCallback(w http.ResponseWriter, r *http.Request) {
 	hash := config.SecretHash(state)
 	request, err := service.storage.loadRequest(r.Context(), "data->'feishu'->>'stateHash'", hash)
 	if err != nil || !sameSecret(request.BrowserHash, config.SecretHash(accountBrowser(r))) {
+		if err != nil {
+			failure = err
+		}
 		http.Error(w, "Invalid or expired Feishu login", http.StatusBadRequest)
 		return
 	}
 	attempt := request.Feishu
+	event = service.loginEvent(request)
+	if attempt != nil {
+		event.OrganizationID = attempt.OrganizationID
+		event.ProviderID = attempt.ProviderID
+	}
 	registered, err := service.storage.client(request.ClientID)
 	if err != nil || request.Complete || request.Verification != nil || attempt == nil || attempt.Verifier == "" ||
 		!attempt.ExpiresAt.After(service.now()) || !sameSecret(attempt.StateHash, hash) || registered.registration.SubjectKind != "member" ||
@@ -86,19 +103,25 @@ func (service *Service) feishuCallback(w http.ResponseWriter, r *http.Request) {
 	verifier := attempt.Verifier
 	attempt.Verifier = ""
 	if err := service.storage.saveRequest(r.Context(), request); err != nil {
+		failure = err
 		http.Error(w, "Invalid or expired Feishu login", http.StatusBadRequest)
 		return
 	}
 	if r.Form.Get("error") != "" || r.Form.Get("code") == "" {
+		if r.Form.Get("error") != "" {
+			failure = callbackFailure(r.Form.Get("error"))
+		}
 		service.renderLogin(w, r, request, registered, "Feishu login did not complete. Cancel verification to try again.")
 		return
 	}
 	proof, err := service.feishu.Verify(r.Context(), attempt.FeishuLoginContext, service.configuration.Issuer+feishuCallbackPath, r.Form.Get("code"), verifier)
 	if err != nil {
+		failure = err
 		service.renderLogin(w, r, request, registered, "Unable to verify the Feishu identity. Cancel verification to try again.")
 		return
 	}
-	service.completeExternalLogin(w, r, request, attempt.ExpiresAt, "Feishu", func(ctx context.Context, tx pgx.Tx) (identity.Verification, error) {
+	completed = true
+	service.completeExternalLogin(w, r, request, attempt.ExpiresAt, "Feishu", event, func(ctx context.Context, tx pgx.Tx) (identity.MemberAdmission, error) {
 		return service.feishu.Admit(ctx, tx, proof)
 	})
 }

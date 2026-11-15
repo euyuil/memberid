@@ -33,6 +33,7 @@ type Event struct {
 	BindingID      string    `json:"bindingId,omitempty"`
 	SessionID      string    `json:"sessionId,omitempty"`
 	GrantID        string    `json:"grantId,omitempty"`
+	ProviderID     string    `json:"providerId,omitempty"`
 	Method         string    `json:"method,omitempty"`
 	Purpose        string    `json:"purpose,omitempty"`
 	Trigger        string    `json:"trigger,omitempty"`
@@ -64,7 +65,7 @@ func (event Event) valid() bool {
 	if (event.Actor.Kind == "") != (event.Actor.ID == "") || event.OccurredAt.IsZero() || event.EventID == "" {
 		return false
 	}
-	for _, value := range []string{event.EventID, event.InteractionID, event.RequestID, event.Actor.ID, event.OrganizationID, event.MemberID, event.ClientID, event.FactorID, event.BindingID, event.SessionID, event.GrantID, event.CausationID} {
+	for _, value := range []string{event.EventID, event.InteractionID, event.RequestID, event.Actor.ID, event.OrganizationID, event.MemberID, event.ClientID, event.FactorID, event.BindingID, event.SessionID, event.GrantID, event.CausationID, event.ProviderID} {
 		if len(value) > 128 {
 			return false
 		}

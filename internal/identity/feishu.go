@@ -207,7 +207,13 @@ func (apps *FeishuApplications) Verify(ctx context.Context, login FeishuLoginCon
 		// application-level denial with the self-built application's credentials.
 		apps.checkAuthorization(ctx, app, secret, login.OrganizationRevision)
 	}
-	if err != nil || profile.TenantKey != app.TenantID || !validText(profile.OpenID, 256) {
+	if err != nil {
+		if errors.Is(err, feishu.ErrAuthorizationDenied) {
+			return FeishuProof{}, ErrIneligible
+		}
+		return FeishuProof{}, ErrProviderUnavailable
+	}
+	if profile.TenantKey != app.TenantID || !validText(profile.OpenID, 256) {
 		return FeishuProof{}, ErrIneligible
 	}
 	return FeishuProof{apps, login, profile, time.Now().UTC()}, nil
@@ -280,52 +286,52 @@ func (apps *FeishuApplications) CheckApplications(ctx context.Context) error {
 	return failure
 }
 
-func (apps *FeishuApplications) Admit(ctx context.Context, tx pgx.Tx, proof FeishuProof) (Verification, error) {
+func (apps *FeishuApplications) Admit(ctx context.Context, tx pgx.Tx, proof FeishuProof) (MemberAdmission, error) {
 	login := proof.login
 	if proof.applications != apps || !proof.authenticatedAt.Add(5*time.Minute).After(time.Now()) || login.OrganizationID == SystemOrganizationID {
-		return Verification{}, ErrIneligible
+		return MemberAdmission{}, ErrIneligible
 	}
 	org, err := readOrganization(tx.QueryRow(ctx, "SELECT "+organizationColumns+" FROM organizations WHERE id=$1 FOR UPDATE", login.OrganizationID))
 	if err != nil {
-		return Verification{}, err
+		return MemberAdmission{}, err
 	}
 	app, err := apps.lookup(ctx, tx, org.ID, login.ProviderID)
 	if err != nil {
-		return Verification{}, err
+		return MemberAdmission{}, err
 	}
 	if org.Status != "enabled" || org.lifecycleRevision != login.OrganizationRevision || !app.Enabled ||
 		app.AuthorizationStatus != "active" || app.Revision != login.Revision || app.authorizationRevision != login.AuthorizationRevision {
-		return Verification{}, ErrIneligible
+		return MemberAdmission{}, ErrIneligible
 	}
 	factor, err := ensureFactor(ctx, tx, "feishu", app.ID, proof.profile.OpenID)
 	if err != nil {
-		return Verification{}, err
+		return MemberAdmission{}, err
 	}
 	binding, err := readBinding(tx.QueryRow(ctx, "SELECT "+bindingColumns+" FROM member_auth_factor_bindings WHERE organization_id=$1 AND authentication_factor_id=$2 FOR UPDATE", org.ID, factor.ID))
 	if errors.Is(err, ErrNotFound) {
 		id, err := NewID(MemberKind)
 		if err != nil {
-			return Verification{}, err
+			return MemberAdmission{}, err
 		}
 		name := proof.profile.Name
 		if !validText(name, 128) {
 			name = "Member"
 		}
 		if _, err := tx.Exec(ctx, "INSERT INTO members(id,organization_id,display_name) VALUES($1,$2,$3)", id, org.ID, name); err != nil {
-			return Verification{}, storageError(err)
+			return MemberAdmission{}, storageError(err)
 		}
-		_, err = tx.Exec(ctx, `INSERT INTO member_auth_factor_bindings(member_id,organization_id,authentication_factor_id,factor_type,provider_namespace)
- VALUES($1,$2,$3,'feishu',$4)`, id, org.ID, factor.ID, app.ID)
+		binding, err = readBinding(tx.QueryRow(ctx, `INSERT INTO member_auth_factor_bindings(member_id,organization_id,authentication_factor_id,factor_type,provider_namespace)
+ VALUES($1,$2,$3,'feishu',$4) RETURNING `+bindingColumns, id, org.ID, factor.ID, app.ID))
 		if err != nil {
-			return Verification{}, storageError(err)
+			return MemberAdmission{}, storageError(err)
 		}
 	} else {
 		if err != nil {
-			return Verification{}, err
+			return MemberAdmission{}, err
 		}
 		if _, err := MemberEvidence(ctx, tx, factor.ID, binding.MemberID, org.ID); err != nil {
-			return Verification{}, err
+			return MemberAdmission{}, err
 		}
 	}
-	return Verification{Factor: factor, AuthenticatedAt: proof.authenticatedAt, Method: "feishu"}, nil
+	return MemberAdmission{Verification: Verification{Factor: factor, AuthenticatedAt: proof.authenticatedAt, Method: "feishu"}, OrganizationID: org.ID, MemberID: binding.MemberID, BindingID: binding.ID}, nil
 }

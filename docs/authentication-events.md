@@ -3,8 +3,8 @@
 This document records the agreed design for MemberID authentication events:
 event meaning, correlation, organization visibility, retention, and delivery
 failure behavior. **The store, bounded writer, retention cleanup, `sms.send`,
-and SMS `authentication.verify` events are implemented.** External authentication,
-OIDC issuance/replay/revocation events, authorized queries, and console views remain
+and supported-method `authentication.verify` events are implemented.** OIDC
+issuance/replay/revocation events, authorized queries, and console views remain
 planned. Authentication policy and token claims are unchanged.
 
 The existing [management history](administration.md#availability-and-audit)
@@ -84,7 +84,7 @@ The logical event envelope contains:
 | `actor` | The verified initiator when known: factor, Member, authenticated client, installation operator/manager, or system. Absence of a verified initiator does not prevent a failure event. Actor identity and target identity are distinct. |
 | `organizationId`, `memberId`, `clientId` | Optional authoritative event context. A validated client reference is not proof that its caller authenticated as that client. A Member reference requires an explicitly resolved Member context. |
 | `factorId`, `bindingId`, `sessionId`, `grantId` | Optional references to established internal records relevant to the event. Never record a new identifier whose creation rolled back as an established resource. |
-| `method`, `purpose` | The authentication method and operation purpose, such as login or account linking, when applicable. |
+| `providerId`, `method`, `purpose` | The validated organization provider's internal ID (when applicable), authentication method, and purpose, such as login or account linking. This never contains provider credentials or raw upstream identifiers. |
 | `trigger` | A classified cause such as `browserLogout`, `clientRevocation`, `operatorRequest`, or `replayDetection`, when applicable. It describes why the operation ran, separately from whether it succeeded. |
 | `causationId` | Optional reference to the triggering event, for example a replay detection that caused grant revocation. The reference can outlive or precede delivery of the other event. |
 
@@ -307,6 +307,24 @@ and does not assert rollback. Database errors when recording incorrect-code
 attempts or evaluating binding eligibility remain operational errors, rather than
 being mistaken for invalid credentials or ineligibility.
 
+DingTalk and Feishu login callbacks, and existing DingTalk account linking, use
+the same verification event type. A valid browser-bound provider workflow supplies
+organization/provider ownership. Unknown or wrongly bound callbacks remain
+platform-only with no inferred identity. Provider-reported `access_denied` is
+classified as cancellation; standard server/unavailable errors and provider I/O
+failures are operational failures. Raw callback error descriptions are excluded.
+Reused external callbacks are rejected verification attempts, not confirmed OIDC
+code or Refresh Token reuse events. A local cancellation alone does not invent an
+upstream verification; any later invalid callback is recorded when received.
+
+Successful external admission captures the actual Member, binding, and factor
+from the transaction result, with the committed session for login. These contextual
+Member references are not added to shared SSO evidence or JWT claims. No writer
+looks up a later binding to enrich an old event. Failed login transitions expose
+no newly admitted Member or session; a failed account link can still identify its
+previously authenticated Member actor while omitting the uncommitted target factor.
+Feishu account linking is not introduced.
+
 The fresh-install schema is version 18. Existing databases are never migrated or
 reset automatically. The new store intentionally has no foreign keys to transient
 sessions, flows, grants, or causal events. Events remain historical evidence after
@@ -324,7 +342,11 @@ followed by a business-write failure, and authentication success despite audit
 insert denial. Verification tests additionally cover wrong/expired codes, failed
 attempt writes, login/linking rollback, deferred commit failure, and successful
 login/linking despite audit insert denial. Tests use synthetic provider adapters;
-they do not prove real SMS delivery.
+they do not prove real SMS delivery. External-provider tests cover committed
+Member admission/linking, provider failures versus rejection/cancellation, callback
+replay and browser binding, rollback, lookup failures, and audit insert denial.
+Real DingTalk and Feishu provider verification is separate from these synthetic
+adapter and HTTP checks.
 
 Remaining catalog and query work must demonstrate the following before claiming
 support:
