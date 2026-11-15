@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from "react"
 import {
+  ChevronRight,
   Fingerprint,
   LogOut,
   Menu,
@@ -8,7 +9,7 @@ import {
   type LucideIcon,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Link } from "@/navigation"
+import { Link, type NavigationState } from "@/navigation"
 import {
   Dialog,
   DialogContent,
@@ -24,7 +25,14 @@ type NavigationItem = {
   active: boolean
   group: string
 }
+export type BreadcrumbItem = {
+  label: string
+  href?: string
+  state?: NavigationState
+}
+
 type ConsoleLayoutProps = {
+  breadcrumbs: BreadcrumbItem[]
   navigation: NavigationItem[]
   actor: { displayName: string; memberId: string; platform: boolean }
   scope: ReactNode
@@ -68,6 +76,7 @@ function Navigation({
 
 export function ConsoleLayout({
   navigation,
+  breadcrumbs,
   actor,
   scope,
   children,
@@ -164,9 +173,7 @@ export function ConsoleLayout({
             </DialogTrigger>
             <DialogContent className="navigation-drawer translate-x-0 translate-y-0 data-open:zoom-in-100 data-closed:zoom-out-100">
               <DialogTitle className="brand">{brand}</DialogTitle>
-              <DialogDescription className="sr-only">
-                选择管理页面，当前管理范围保持不变。
-              </DialogDescription>
+              <DialogDescription className="sr-only">主导航</DialogDescription>
               <Navigation
                 items={navigation}
                 onNavigate={() => setMobileOpen(false)}
@@ -174,7 +181,30 @@ export function ConsoleLayout({
               {account}
             </DialogContent>
           </Dialog>
-          {scope}
+          <nav className="console-breadcrumbs" aria-label="面包屑">
+            <ol>
+              {breadcrumbs.map(({ label, href, state }, index) => (
+                <li key={index}>
+                  {index > 0 && <ChevronRight aria-hidden="true" />}
+                  {href ? (
+                    <Link href={href} state={state} title={label}>
+                      {label}
+                    </Link>
+                  ) : (
+                    <span
+                      title={label}
+                      aria-current={
+                        index === breadcrumbs.length - 1 ? "page" : undefined
+                      }
+                    >
+                      {label}
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ol>
+          </nav>
+          <div className="scope-control">{scope}</div>
         </header>
         <main id="console-content" className="page-content" tabIndex={-1}>
           {children}
