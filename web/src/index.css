@@ -135,16 +135,6 @@ h2 { font-size: 15px; font-weight: 600; }
 code { font-size: 11px; color: var(--muted-foreground); overflow-wrap: anywhere; }
 .muted { color: var(--muted-foreground); line-height: 1.7; }
 .scope-bar { display: flex; align-items: center; gap: 12px; min-height: 65px; padding: 12px 28px; border-bottom: 1px solid var(--border); background: var(--card); font-size: 12px; }
-.console-breadcrumbs { flex: 1; min-width: 0; }
-.console-breadcrumbs ol { display: flex; align-items: center; gap: 8px; min-width: 0; margin: 0; padding: 0; list-style: none; }
-.console-breadcrumbs li { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.console-breadcrumbs li:first-child { flex-shrink: 0; }
-.console-breadcrumbs li:last-child { flex: 0 1 auto; }
-.console-breadcrumbs svg { width: 14px; height: 14px; flex-shrink: 0; color: var(--muted-foreground); }
-.console-breadcrumbs a, .console-breadcrumbs span { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted-foreground); }
-.console-breadcrumbs [aria-current=page] { color: var(--foreground); font-weight: 500; }
-.console-breadcrumbs a:hover { color: var(--primary); }
-.console-breadcrumbs a:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; border-radius: 2px; }
 .page-content { padding: 28px 32px 20px; max-width: 1600px; margin: 0 auto; }
 .page-heading, .organization-summary { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-bottom: 24px; }
 .actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
@@ -189,7 +179,6 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
 .skip-link:focus { top: 12px; }
 @media (max-width: 767px) {
  .scope-bar { padding: 12px 16px; }
- .console-breadcrumbs ol { min-height: 20px; }
  .page-content { padding: 24px 16px 20px; }
  .page-heading { gap: 16px; align-items: flex-start; flex-wrap: wrap; }
  .page-heading > div:first-child { flex: 1; min-width: 180px; }
