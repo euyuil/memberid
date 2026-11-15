@@ -1,15 +1,11 @@
 import { useState, type FormEvent } from "react"
-import { KeyRound, Plus } from "lucide-react"
+import { Plus } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import {
-  DirectoryToolbar,
-  DirectoryFooter,
   DirectoryResults,
   DirectoryState,
-  RecordIdentity,
   RecordIdentifier,
   RecordTime,
-  StatusBadge,
 } from "@/components/directory"
 import { Button } from "@/components/ui/button"
 import {
@@ -88,91 +84,88 @@ export function Providers({
     directory.items.find((item) => item.id === selectedId)
   )
   return (
-    <section className="directory" aria-label="身份提供商列表">
-      <DirectoryToolbar title="已配置的应用">
-        {directory.items.length > 0 && (
+    <section aria-label="身份提供商列表">
+      {directory.items.length > 0 && (
+        <div className="flex items-center justify-end pb-4">
           <Button disabled={!enabled} onClick={() => setEditing("new")}>
             <Plus data-icon="inline-start" />
             添加提供商
           </Button>
-        )}
-      </DirectoryToolbar>
-      <DirectoryResults
-        count={directory.items.length}
-        empty={
-          <DirectoryState
-            kind="empty"
-            title="尚未配置身份提供商"
-            action={
-              enabled && (
-                <Button onClick={() => setEditing("new")}>
-                  <Plus data-icon="inline-start" />
-                  添加提供商
-                </Button>
-              )
-            }
-          />
-        }
-      >
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>显示名称</TableHead>
-              <TableHead>类型</TableHead>
-              <TableHead>状态</TableHead>
-              <TableHead>创建时间</TableHead>
-              <TableHead className="row-actions">操作</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {directory.items.map((item) => (
-              <TableRow key={item.id}>
-                <TableCell>
-                  <RecordIdentity
-                    name={item.displayName}
-                    icon={<KeyRound />}
-                    onClick={() => setViewing(item)}
-                  />
-                </TableCell>
-                <TableCell>{names[item.type]}</TableCell>
-                <TableCell>
-                  <StatusBadge
-                    tone={
-                      !item.enabled
-                        ? "neutral"
-                        : item.authorizationStatus === "revoked"
-                          ? "negative"
-                          : "positive"
-                    }
-                  >
+        </div>
+      )}
+      <div className="overflow-hidden rounded-md border">
+        <DirectoryResults
+          count={directory.items.length}
+          empty={
+            <DirectoryState
+              kind="empty"
+              title="尚未配置身份提供商"
+              action={
+                enabled && (
+                  <Button onClick={() => setEditing("new")}>
+                    <Plus data-icon="inline-start" />
+                    添加提供商
+                  </Button>
+                )
+              }
+            />
+          }
+        >
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>显示名称</TableHead>
+                <TableHead>类型</TableHead>
+                <TableHead>状态</TableHead>
+                <TableHead>创建时间</TableHead>
+                <TableHead className="w-0 text-right">操作</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {directory.items.map((item) => (
+                <TableRow key={item.id}>
+                  <TableCell>
+                    <button
+                      type="button"
+                      className="block max-w-64 truncate text-left font-medium hover:underline"
+                      title={item.displayName}
+                      onClick={() => setViewing(item)}
+                    >
+                      {item.displayName}
+                    </button>
+                  </TableCell>
+                  <TableCell>{names[item.type]}</TableCell>
+                  <TableCell>
                     {!item.enabled
                       ? "已停用"
                       : item.authorizationStatus === "revoked"
                         ? "已撤权"
                         : "已启用"}
-                  </StatusBadge>
-                </TableCell>
-                <TableCell>
-                  <RecordTime value={item.createdAt} />
-                </TableCell>
-                <TableCell className="row-actions">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    disabled={!enabled}
-                    aria-label={`编辑 ${item.displayName}`}
-                    onClick={() => setEditing(item)}
-                  >
-                    编辑
-                  </Button>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </DirectoryResults>
+                  </TableCell>
+                  <TableCell>
+                    <RecordTime value={item.createdAt} />
+                  </TableCell>
+                  <TableCell className="w-0 text-right">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={!enabled}
+                      aria-label={`编辑 ${item.displayName}`}
+                      onClick={() => setEditing(item)}
+                    >
+                      编辑
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </DirectoryResults>
+      </div>
       {directory.items.length > 0 && (
-        <DirectoryFooter count={directory.items.length} />
+        <div className="py-4 text-sm text-muted-foreground">
+          {directory.items.length} 个提供商
+        </div>
       )}
       {viewing && (
         <Dialog

@@ -16,21 +16,6 @@ import { Link, type NavigationState } from "@/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 
-export function DirectoryToolbar({
-  title,
-  children,
-}: {
-  title: string
-  children?: ReactNode
-}) {
-  return (
-    <div className="directory-toolbar">
-      <h2>{title}</h2>
-      <div className="actions">{children}</div>
-    </div>
-  )
-}
-
 export function DirectoryFooter({
   count,
   message,
