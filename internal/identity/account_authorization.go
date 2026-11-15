@@ -22,7 +22,7 @@ func accountOrganization(ctx context.Context, db queryer, principal Principal) (
 	var organizationID string
 	err := db.QueryRow(ctx, "SELECT m.organization_id"+eligibleBindings+`
  AND m.id=$1 AND f.id=$2 AND b.id::text=$3
- AND EXISTS(SELECT 1 FROM oidc_sessions s WHERE s.id=$4
+ AND EXISTS(SELECT 1 FROM authentication_sessions s WHERE s.id=$4
  AND s.revoked_at IS NULL AND s.expires_at>clock_timestamp()
  AND s.absolute_expires_at>clock_timestamp()
  AND s.verification->'factor'->>'id'=f.id)`, principal.memberID, principal.factorID, principal.bindingID, principal.sessionID).Scan(&organizationID)

@@ -74,7 +74,7 @@ func TestReconcilePreservesManualBlockAndIndependentIdentity(t *testing.T) {
 		t.Fatal("outage erased stored evidence", err)
 	}
 	var count int
-	for _, table := range []string{"oidc_sessions", "oidc_grants", "oidc_refresh_tokens"} {
+	for _, table := range []string{"authentication_sessions", "oidc_grants", "oidc_refresh_tokens"} {
 		if err := store.pool.QueryRow(t.Context(), "SELECT count(*) FROM "+table).Scan(&count); err != nil || count != 0 {
 			t.Fatal("background synchronization created authentication state", err)
 		}

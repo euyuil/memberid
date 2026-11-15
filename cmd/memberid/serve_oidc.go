@@ -23,8 +23,8 @@ func authenticationHandler(ctx context.Context, directory string) (http.Handler,
 	if err != nil {
 		return nil, nil, err
 	}
-	if len(loaded.Clients) == 0 {
-		return nil, nil, errors.New("register at least one OIDC client before starting authentication")
+	if len(loaded.Clients) == 0 && (loaded.SAML == nil || !loaded.SAML.Enabled) {
+		return nil, nil, errors.New("register an OIDC client or enable SAML before starting authentication")
 	}
 	sender, err := sms.FromEnvironment(os.Getenv)
 	if err != nil {
@@ -39,11 +39,22 @@ func authenticationHandler(ctx context.Context, directory string) (http.Handler,
 		return nil, nil, errors.New("MEMBERID_FEISHU_ENABLED must be true or false")
 	}
 	if sender == nil && dingTalkEnabled != "true" && feishuEnabled != "true" {
-		return nil, nil, errors.New("enable and configure at least one authentication provider before starting OIDC")
+		return nil, nil, errors.New("enable and configure at least one authentication provider before starting authentication")
 	}
 	store, err := identity.Open(ctx, os.Getenv("MEMBERID_DATABASE_URL"))
 	if err != nil {
 		return nil, nil, err
+	}
+	if len(loaded.Clients) == 0 {
+		registrations, err := store.SAMLServiceProviders(ctx)
+		active := false
+		for _, sp := range registrations {
+			active = active || sp.Enabled && !sp.Retired
+		}
+		if err != nil || !active {
+			store.Close()
+			return nil, nil, errors.New("register an enabled SAML service provider before starting SAML-only authentication")
+		}
 	}
 	var phone *identity.PhoneVerifier
 	if sender != nil {

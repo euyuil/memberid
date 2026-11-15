@@ -71,7 +71,7 @@ func TestAccountLinkPreservesMemberSessionAndOIDCSubject(t *testing.T) {
 		t.Fatal(err)
 	}
 	var beforeSession, beforeDeadline, beforeVerification string
-	if err := f.store.Database().QueryRow(t.Context(), "SELECT id,absolute_expires_at::text,verification::text FROM oidc_sessions").Scan(&beforeSession, &beforeDeadline, &beforeVerification); err != nil {
+	if err := f.store.Database().QueryRow(t.Context(), "SELECT id,absolute_expires_at::text,verification::text FROM authentication_sessions").Scan(&beforeSession, &beforeDeadline, &beforeVerification); err != nil {
 		t.Fatal(err)
 	}
 	callbackPath := startAccount(f, page) + "&code=synthetic-code"
@@ -84,11 +84,11 @@ func TestAccountLinkPreservesMemberSessionAndOIDCSubject(t *testing.T) {
 		t.Fatal("link created another Member")
 	}
 	var sessions, members, grants int
-	if err := f.store.Database().QueryRow(t.Context(), "SELECT (SELECT count(*) FROM oidc_sessions),(SELECT count(*) FROM members),(SELECT count(*) FROM oidc_grants)").Scan(&sessions, &members, &grants); err != nil || sessions != 1 || members != 2 || grants != 1 {
+	if err := f.store.Database().QueryRow(t.Context(), "SELECT (SELECT count(*) FROM authentication_sessions),(SELECT count(*) FROM members),(SELECT count(*) FROM oidc_grants)").Scan(&sessions, &members, &grants); err != nil || sessions != 1 || members != 2 || grants != 1 {
 		t.Fatal("link created login state", err)
 	}
 	var afterDeadline, afterVerification string
-	if err := f.store.Database().QueryRow(t.Context(), "SELECT absolute_expires_at::text,verification::text FROM oidc_sessions WHERE id=$1", beforeSession).Scan(&afterDeadline, &afterVerification); err != nil || afterDeadline != beforeDeadline || afterVerification != beforeVerification {
+	if err := f.store.Database().QueryRow(t.Context(), "SELECT absolute_expires_at::text,verification::text FROM authentication_sessions WHERE id=$1", beforeSession).Scan(&afterDeadline, &afterVerification); err != nil || afterDeadline != beforeDeadline || afterVerification != beforeVerification {
 		t.Fatal("link renewed or replaced original session", err)
 	}
 	f.status(f.call(f.browser, "GET", callbackPath, nil, nil), 400)
@@ -207,7 +207,7 @@ func TestAccountRejectsChangesDuringProviderVerification(t *testing.T) {
 				var err error
 				switch kind {
 				case "session revoked":
-					_, err = f.store.Database().Exec(t.Context(), "UPDATE oidc_sessions SET revoked_at=clock_timestamp()")
+					_, err = f.store.Database().Exec(t.Context(), "UPDATE authentication_sessions SET revoked_at=clock_timestamp()")
 				case "member blocked":
 					_, err = f.store.SetManualBlock(t.Context(), identity.OperatorPrincipal(), f.member.OrganizationID, f.member.ID, true)
 				case "departure":
@@ -288,7 +288,7 @@ func TestAccountCleanupDoesNotRenewSession(t *testing.T) {
 		t.Fatal(err)
 	}
 	var requests, sessions int
-	if err := f.store.Database().QueryRow(t.Context(), "SELECT (SELECT count(*) FROM account_link_requests),(SELECT count(*) FROM oidc_sessions)").Scan(&requests, &sessions); err != nil || requests != 0 || sessions != 1 {
+	if err := f.store.Database().QueryRow(t.Context(), "SELECT (SELECT count(*) FROM account_link_requests),(SELECT count(*) FROM authentication_sessions)").Scan(&requests, &sessions); err != nil || requests != 0 || sessions != 1 {
 		t.Fatal("incorrect account cleanup", err)
 	}
 }

@@ -1,7 +1,7 @@
 CREATE TABLE memberid_schema (
-    version integer PRIMARY KEY CHECK (version = 18)
+    version integer PRIMARY KEY CHECK (version = 19)
 );
-INSERT INTO memberid_schema(version) VALUES (18);
+INSERT INTO memberid_schema(version) VALUES (19);
 
 CREATE TABLE organizations (
     id text COLLATE "C" PRIMARY KEY CHECK (id = 'org_system' OR id ~ '^org_[0-9bcdfghjkmnpqrstvwxz]{27}$'),
@@ -77,7 +77,22 @@ CREATE TABLE phone_challenges (
 CREATE INDEX phone_challenge_send_window ON phone_challenges (created_at);
 CREATE INDEX phone_challenge_rate_limit ON phone_challenges (phone_number, created_at);
 
-CREATE TABLE oidc_sessions (
+CREATE TABLE saml_service_providers (
+    id text COLLATE "C" PRIMARY KEY,
+    entity_id text COLLATE "C" NOT NULL UNIQUE,
+    organization_id text COLLATE "C" NOT NULL REFERENCES organizations(id),
+    revision bigint NOT NULL CHECK (revision > 0),
+    data jsonb NOT NULL,
+    retired_at timestamptz
+);
+CREATE TABLE saml_name_ids (
+    service_provider_id text COLLATE "C" NOT NULL REFERENCES saml_service_providers(id),
+    member_id text COLLATE "C" NOT NULL REFERENCES members(id),
+    value text COLLATE "C" NOT NULL,
+    PRIMARY KEY (service_provider_id, member_id),
+    UNIQUE (service_provider_id, value)
+);
+CREATE TABLE authentication_sessions (
     id text COLLATE "C" PRIMARY KEY,
     secret_hash text NOT NULL UNIQUE,
     verification jsonb NOT NULL,
@@ -85,19 +100,25 @@ CREATE TABLE oidc_sessions (
     absolute_expires_at timestamptz NOT NULL,
     revoked_at timestamptz
 );
-CREATE TABLE oidc_authorization_requests (
+CREATE TABLE authentication_requests (
     id text COLLATE "C" PRIMARY KEY,
+    protocol text NOT NULL DEFAULT 'oidc' CHECK (protocol IN ('oidc','saml')),
+    saml_service_provider_id text COLLATE "C" REFERENCES saml_service_providers(id),
+    saml_request_id text COLLATE "C",
     client_id text NOT NULL,
     data jsonb NOT NULL,
     code_hash text UNIQUE,
     revision bigint NOT NULL DEFAULT 1,
     expires_at timestamptz NOT NULL,
-    consumed_at timestamptz
+    consumed_at timestamptz,
+    UNIQUE (saml_service_provider_id, saml_request_id),
+    CHECK ((protocol='saml') = (saml_service_provider_id IS NOT NULL AND saml_request_id IS NOT NULL)),
+    CHECK (protocol='oidc' OR code_hash IS NULL)
 );
 CREATE TABLE oidc_grants (
     id text COLLATE "C" PRIMARY KEY,
     client_id text NOT NULL,
-    session_id text COLLATE "C" NOT NULL REFERENCES oidc_sessions(id) ON DELETE CASCADE,
+    session_id text COLLATE "C" NOT NULL REFERENCES authentication_sessions(id) ON DELETE CASCADE,
     data jsonb NOT NULL,
     expires_at timestamptz NOT NULL,
     absolute_expires_at timestamptz NOT NULL,
@@ -109,8 +130,8 @@ CREATE TABLE oidc_access_tokens (
     data jsonb NOT NULL,
     expires_at timestamptz NOT NULL
 );
-CREATE INDEX oidc_requests_expiry ON oidc_authorization_requests(expires_at);
-CREATE INDEX oidc_sessions_expiry ON oidc_sessions(expires_at);
+CREATE INDEX oidc_requests_expiry ON authentication_requests(expires_at);
+CREATE INDEX authentication_sessions_expiry ON authentication_sessions(expires_at);
 CREATE INDEX oidc_grants_expiry ON oidc_grants(expires_at);
 CREATE INDEX oidc_access_expiry ON oidc_access_tokens(expires_at);
 
@@ -168,7 +189,7 @@ CREATE TABLE dingtalk_identities (
     UNIQUE (namespace,union_id),
     UNIQUE (namespace,external_member_id)
 );
-CREATE UNIQUE INDEX oidc_dingtalk_state ON oidc_authorization_requests ((data->'dingtalk'->>'stateHash')) WHERE data->'dingtalk' IS NOT NULL;
+CREATE UNIQUE INDEX oidc_dingtalk_state ON authentication_requests ((data->'dingtalk'->>'stateHash')) WHERE data->'dingtalk' IS NOT NULL;
 
 CREATE TABLE dingtalk_events (
     namespace text COLLATE "C" NOT NULL REFERENCES dingtalk_applications(namespace),
@@ -193,11 +214,11 @@ CREATE TABLE feishu_applications (
     updated_at timestamptz NOT NULL DEFAULT clock_timestamp()
 );
 CREATE INDEX feishu_applications_organization ON feishu_applications (organization_id, namespace);
-CREATE UNIQUE INDEX oidc_feishu_state ON oidc_authorization_requests ((data->'feishu'->>'stateHash')) WHERE data->'feishu' IS NOT NULL;
+CREATE UNIQUE INDEX oidc_feishu_state ON authentication_requests ((data->'feishu'->>'stateHash')) WHERE data->'feishu' IS NOT NULL;
 
 CREATE TABLE account_link_requests (
     id text COLLATE "C" PRIMARY KEY,
-    session_id text COLLATE "C" NOT NULL REFERENCES oidc_sessions(id) ON DELETE CASCADE,
+    session_id text COLLATE "C" NOT NULL REFERENCES authentication_sessions(id) ON DELETE CASCADE,
     data jsonb NOT NULL,
     state text NOT NULL CHECK (state IN ('ready','pending','consumed','completed','canceled')),
     state_hash text UNIQUE,

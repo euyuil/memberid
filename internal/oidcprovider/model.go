@@ -12,8 +12,10 @@ import (
 	"slices"
 	"time"
 
+	"github.com/euyuil/memberid/internal/browserauth"
 	"github.com/euyuil/memberid/internal/config"
 	"github.com/euyuil/memberid/internal/identity"
+	"github.com/euyuil/memberid/internal/samlprovider"
 	jose "github.com/go-jose/go-jose/v4"
 	"github.com/zitadel/oidc/v3/pkg/oidc"
 	"github.com/zitadel/oidc/v3/pkg/op"
@@ -96,20 +98,11 @@ func (g *grant) GetSubject() string {
 func (g *grant) SetCurrentScopes(scopes []string) { g.Scopes = scopes }
 
 type authorizationRequest struct {
-	Revision int64 `json:"-"`
+	browserauth.Interaction
 	grant
-	Input                  oidc.AuthRequest       `json:"input"`
-	HintSubject            string                 `json:"hintSubject,omitempty"`
-	BrowserHash            string                 `json:"browserHash"`
-	CSRF                   string                 `json:"csrf"`
-	PhoneNumber            string                 `json:"phoneNumber,omitempty"`
-	ChallengeID            string                 `json:"challengeId,omitempty"`
-	Verification           *identity.Verification `json:"verification,omitempty"`
-	DingTalk               *dingTalkAttempt       `json:"dingtalk,omitempty"`
-	Feishu                 *feishuAttempt         `json:"feishu,omitempty"`
-	ProviderOrganizationID string                 `json:"providerOrganizationId,omitempty"`
-	Fresh                  bool                   `json:"fresh"`
-	Complete               bool                   `json:"complete"`
+	Input       oidc.AuthRequest          `json:"input,omitempty"`
+	HintSubject string                    `json:"hintSubject,omitempty"`
+	SAML        *samlprovider.Transaction `json:"saml,omitempty"`
 }
 
 func (r *authorizationRequest) externalPending() bool { return r.DingTalk != nil || r.Feishu != nil }

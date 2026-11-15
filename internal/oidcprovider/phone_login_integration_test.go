@@ -68,7 +68,7 @@ func TestPhoneLoginSendReservation(t *testing.T) {
 }
 
 func TestPhoneLoginRollback(t *testing.T) {
-	for _, table := range []string{"oidc_sessions", "oidc_authorization_requests"} {
+	for _, table := range []string{"authentication_sessions", "authentication_requests"} {
 		t.Run(table, func(t *testing.T) {
 			f := newFixture(t)
 			page, _ := f.loginPage("registration", "openid registration_identity")
@@ -84,7 +84,7 @@ func TestPhoneLoginRollback(t *testing.T) {
 				t.Fatal("failed commit issued cookie")
 			}
 			var sessions, factors, consumed int
-			if err := f.store.Database().QueryRow(t.Context(), "SELECT (SELECT count(*) FROM oidc_sessions),(SELECT count(*) FROM authentication_factors WHERE subject='+8619900000003'),(SELECT count(*) FROM phone_challenges WHERE consumed_at IS NOT NULL)").Scan(&sessions, &factors, &consumed); err != nil || sessions != 0 || factors != 0 || consumed != 0 {
+			if err := f.store.Database().QueryRow(t.Context(), "SELECT (SELECT count(*) FROM authentication_sessions),(SELECT count(*) FROM authentication_factors WHERE subject='+8619900000003'),(SELECT count(*) FROM phone_challenges WHERE consumed_at IS NOT NULL)").Scan(&sessions, &factors, &consumed); err != nil || sessions != 0 || factors != 0 || consumed != 0 {
 				t.Fatal("partial login committed", sessions, factors, consumed, err)
 			}
 			if _, err := f.store.Database().Exec(t.Context(), "ALTER TABLE "+table+" DROP CONSTRAINT fail_login"); err != nil {
@@ -140,7 +140,7 @@ func TestPhoneLoginCancellationWinsBeforeCommit(t *testing.T) {
 		t.Fatal("canceled login issued cookie")
 	}
 	var sessions, consumed int
-	if err := f.store.Database().QueryRow(t.Context(), "SELECT (SELECT count(*) FROM oidc_sessions),(SELECT count(*) FROM phone_challenges WHERE consumed_at IS NOT NULL)").Scan(&sessions, &consumed); err != nil || sessions != 0 || consumed != 0 {
+	if err := f.store.Database().QueryRow(t.Context(), "SELECT (SELECT count(*) FROM authentication_sessions),(SELECT count(*) FROM phone_challenges WHERE consumed_at IS NOT NULL)").Scan(&sessions, &consumed); err != nil || sessions != 0 || consumed != 0 {
 		t.Fatal("canceled login committed", err)
 	}
 }
@@ -165,7 +165,7 @@ func TestPhoneLoginConcurrentVerification(t *testing.T) {
 		}
 	}
 	var sessions int
-	if err := f.store.Database().QueryRow(t.Context(), "SELECT count(*) FROM oidc_sessions").Scan(&sessions); err != nil || sessions != 1 || cookies != 1 {
+	if err := f.store.Database().QueryRow(t.Context(), "SELECT count(*) FROM authentication_sessions").Scan(&sessions); err != nil || sessions != 1 || cookies != 1 {
 		t.Fatal("duplicate login sessions", sessions, cookies, err)
 	}
 }

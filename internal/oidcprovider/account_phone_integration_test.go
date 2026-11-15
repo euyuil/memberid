@@ -64,7 +64,7 @@ func assertPhoneNotLinked(t *testing.T, f *fixture) {
 func loginState(t *testing.T, f *fixture) string {
 	t.Helper()
 	var state string
-	if err := f.store.Database().QueryRow(t.Context(), "SELECT jsonb_build_object('sessions',(SELECT jsonb_agg(to_jsonb(s) ORDER BY id) FROM oidc_sessions s),'grants',(SELECT jsonb_agg(to_jsonb(g) ORDER BY id) FROM oidc_grants g))::text").Scan(&state); err != nil {
+	if err := f.store.Database().QueryRow(t.Context(), "SELECT jsonb_build_object('sessions',(SELECT jsonb_agg(to_jsonb(s) ORDER BY id) FROM authentication_sessions s),'grants',(SELECT jsonb_agg(to_jsonb(g) ORDER BY id) FROM oidc_grants g))::text").Scan(&state); err != nil {
 		t.Fatal(err)
 	}
 	return state
@@ -221,9 +221,9 @@ func TestPhoneAccountRejectsEligibilityChanges(t *testing.T) {
 			query := ""
 			switch change {
 			case "session revoked":
-				query = "UPDATE oidc_sessions SET revoked_at=clock_timestamp()"
+				query = "UPDATE authentication_sessions SET revoked_at=clock_timestamp()"
 			case "stale authentication":
-				query = "UPDATE oidc_sessions SET verification=jsonb_set(verification,'{authenticatedAt}',to_jsonb(clock_timestamp()-interval '6 minutes'))"
+				query = "UPDATE authentication_sessions SET verification=jsonb_set(verification,'{authenticatedAt}',to_jsonb(clock_timestamp()-interval '6 minutes'))"
 			case "member blocked":
 				query = "UPDATE members SET manual_block=true"
 			case "departure":

@@ -12,12 +12,14 @@ import (
 	"github.com/euyuil/memberid/internal/authevent"
 	"github.com/euyuil/memberid/internal/config"
 	"github.com/euyuil/memberid/internal/identity"
+	"github.com/euyuil/memberid/internal/samlprovider"
 	"github.com/rs/cors"
 	"github.com/zitadel/oidc/v3/pkg/oidc"
 	"github.com/zitadel/oidc/v3/pkg/op"
 )
 
 type Service struct {
+	saml          *samlprovider.Provider
 	events        *authevent.Recorder
 	configuration *config.Loaded
 	store         *identity.Store
@@ -47,6 +49,13 @@ func New(configuration *config.Loaded, store *identity.Store, phone *identity.Ph
 	}
 	service := &Service{configuration: configuration, store: store, phone: phone, dingtalk: dingtalk, feishu: feishu, directory: directory, now: time.Now}
 	service.storage = &storage{service: service}
+	if configuration.SAML != nil && configuration.SAML.Enabled {
+		var err error
+		service.saml, err = samlprovider.New(configuration.Issuer, configuration.SAMLSigning)
+		if err != nil {
+			return nil, err
+		}
+	}
 	var key [32]byte
 	decoded, _ := base64.StdEncoding.DecodeString(configuration.Secrets.ProtocolKey)
 	copy(key[:], decoded)
@@ -181,7 +190,7 @@ func (service *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		r.PostForm.Del("token_type_hint")
 	}
 	browser := service.cookieValue(r, "browser")
-	interactive := r.URL.Path == "/account/link/dingtalk" || r.URL.Path == "/login" || r.URL.Path == "/oauth/logout" || strings.HasPrefix(r.URL.Path, "/oauth/authorize")
+	interactive := r.URL.Path == samlprovider.SSOPath || r.URL.Path == "/account/link/dingtalk" || r.URL.Path == "/login" || r.URL.Path == "/oauth/logout" || strings.HasPrefix(r.URL.Path, "/oauth/authorize")
 	if interactive && len(browser) != 43 {
 		browser = config.RandomSecret()
 		service.cookie(w, "browser", browser, sessionIdleLifetime)
@@ -189,6 +198,16 @@ func (service *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx := context.WithValue(r.Context(), browserKey{}, browser)
 	r = r.WithContext(ctx)
 	switch r.URL.Path {
+	case samlprovider.MetadataPath:
+		if service.saml == nil {
+			http.NotFound(w, r)
+		} else {
+			service.saml.Metadata(w, r)
+		}
+		return
+	case samlprovider.SSOPath:
+		service.samlSSO(w, r)
+		return
 	case "/.well-known/openid-configuration":
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {
 			w.Header().Set("Allow", "GET, HEAD")
@@ -269,13 +288,13 @@ func (service *Service) rejectAuthorization(w http.ResponseWriter, r *http.Reque
 }
 
 func (service *Service) Cleanup(ctx context.Context) error {
-	for _, table := range []string{"account_link_requests", "oidc_access_tokens", "oidc_authorization_requests", "oidc_grants"} {
+	for _, table := range []string{"account_link_requests", "oidc_access_tokens", "authentication_requests", "oidc_grants"} {
 		if _, err := service.store.Database().Exec(ctx, "DELETE FROM "+table+" WHERE expires_at<$1", service.now()); err != nil {
 			return err
 		}
 	}
 	// Expired browser SSO does not end an actively renewed client grant.
-	if _, err := service.store.Database().Exec(ctx, "DELETE FROM oidc_sessions s WHERE s.absolute_expires_at<$1 OR (s.expires_at<$1 AND NOT EXISTS(SELECT 1 FROM oidc_grants g WHERE g.session_id=s.id))", service.now()); err != nil {
+	if _, err := service.store.Database().Exec(ctx, "DELETE FROM authentication_sessions s WHERE s.absolute_expires_at<$1 OR (s.expires_at<$1 AND NOT EXISTS(SELECT 1 FROM oidc_grants g WHERE g.session_id=s.id))", service.now()); err != nil {
 		return err
 	}
 	return service.store.CleanupPhoneChallenges(ctx)

@@ -57,7 +57,7 @@ func (service *Service) logout(w http.ResponseWriter, r *http.Request) {
 	}
 	secret := service.cookieValue(r, "session")
 	var sessionID string
-	err = service.store.Database().QueryRow(r.Context(), "SELECT id FROM oidc_sessions WHERE secret_hash=$1 AND revoked_at IS NULL AND expires_at>$2 AND absolute_expires_at>$2", config.SecretHash(secret), service.now()).Scan(&sessionID)
+	err = service.store.Database().QueryRow(r.Context(), "SELECT id FROM authentication_sessions WHERE secret_hash=$1 AND revoked_at IS NULL AND expires_at>$2 AND absolute_expires_at>$2", config.SecretHash(secret), service.now()).Scan(&sessionID)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		op.RequestError(w, r, oidc.ErrServerError(), nil)
 		return

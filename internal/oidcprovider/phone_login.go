@@ -19,6 +19,9 @@ func (service *Service) verifyPhoneLogin(w http.ResponseWriter, r *http.Request,
 	completed := *request
 	var expires time.Time
 	verified, err := service.phone.VerifyAndApply(r.Context(), request.ID, request.ChallengeID, code, func(tx pgx.Tx, verified identity.Verification) error {
+		if err := service.validateLoginPolicy(r.Context(), tx, request); err != nil {
+			return err
+		}
 		completed.SessionID = id
 		setVerification(&completed, verified)
 		data, err := json.Marshal(&completed)
@@ -27,7 +30,7 @@ func (service *Service) verifyPhoneLogin(w http.ResponseWriter, r *http.Request,
 		}
 		// Cancellation and competing transitions advance the revision. This
 		// conditional write participates in the same transaction as consumption.
-		result, err := tx.Exec(r.Context(), "UPDATE oidc_authorization_requests SET data=$2,revision=revision+1 WHERE id=$1 AND revision=$3 AND code_hash IS NULL AND consumed_at IS NULL AND expires_at>$4", request.ID, data, request.Revision, service.now())
+		result, err := tx.Exec(r.Context(), "UPDATE authentication_requests SET data=$2,revision=revision+1 WHERE id=$1 AND revision=$3 AND code_hash IS NULL AND consumed_at IS NULL AND expires_at>$4", request.ID, data, request.Revision, service.now())
 		if err != nil {
 			return err
 		}
@@ -39,7 +42,7 @@ func (service *Service) verifyPhoneLogin(w http.ResponseWriter, r *http.Request,
 			return err
 		}
 		expires = minimum(service.now().Add(sessionIdleLifetime), completed.AbsoluteExpiry)
-		_, err = tx.Exec(r.Context(), "INSERT INTO oidc_sessions(id,secret_hash,verification,expires_at,absolute_expires_at) VALUES($1,$2,$3,$4,$5)", id, config.SecretHash(secret), session, expires, completed.AbsoluteExpiry)
+		_, err = tx.Exec(r.Context(), "INSERT INTO authentication_sessions(id,secret_hash,verification,expires_at,absolute_expires_at) VALUES($1,$2,$3,$4,$5)", id, config.SecretHash(secret), session, expires, completed.AbsoluteExpiry)
 		return err
 	})
 	event := service.loginEvent(request)
