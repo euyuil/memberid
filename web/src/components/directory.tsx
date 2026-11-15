@@ -12,7 +12,6 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty"
-import { Link, type NavigationState } from "@/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 
@@ -80,50 +79,6 @@ export function DirectoryResults({
   children: ReactNode
 }) {
   return count > 0 ? children : empty
-}
-
-export function RecordIdentity({
-  name,
-  icon,
-  href,
-  state,
-  onClick,
-}: {
-  name: string
-  icon?: ReactNode
-  href?: string
-  state?: NavigationState
-  onClick?: () => void
-}) {
-  return (
-    <div className="record-identity">
-      {icon && (
-        <span className="record-avatar" aria-hidden="true">
-          {icon}
-        </span>
-      )}
-      <div className="record-text">
-        {href ? (
-          <Link className="record-name" href={href} state={state} title={name}>
-            {name}
-          </Link>
-        ) : onClick ? (
-          <button
-            type="button"
-            className="record-name"
-            title={name}
-            onClick={onClick}
-          >
-            {name}
-          </button>
-        ) : (
-          <span className="record-name" title={name}>
-            {name}
-          </span>
-        )}
-      </div>
-    </div>
-  )
 }
 
 export function RecordIdentifier({
