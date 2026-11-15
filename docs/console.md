@@ -68,6 +68,8 @@ and Member IDs identify resources; names do not participate in routing.
 | `/organizations/{organizationId}/events` | Organization operation history. |
 | `/members` | All-organization Member directory (platform administrators). |
 | `/events` | All-organization operation history (platform administrators). |
+| `/authentication-events` | Platform authentication events. |
+| `/organizations/{organizationId}/authentication-events` | Organization authentication events. |
 | `/providers` | Organization picker for provider management (platform administrators). |
 
 After login, `/` replaces itself with `/organizations` for a platform administrator
@@ -172,16 +174,37 @@ The Member detail separates identity status from sign-in blockers. It shows disa
 
 From a Member detail page, open the operation history filtered to that Member. The history shows the selected Member and lets administrators return to the detail page or view the full organization history.
 
-Successful console changes and administrator CLI operations write atomic events containing the actor Member ID, target IDs, action, changed fields, and timestamp. Events also preserve the actor, organization, and target display names at the time of the write, along with previous editable values for renames, manual blocks, organization status, administrator assignments, system admission, and provider configuration. Later renames do not rewrite these snapshots. Provider events identify the application and record credential updates only as a boolean. Missing historical names or previous values are not inferred from live entities; known submitted values remain visible without an invented before value. A removed manual block is shown as unblocked, not as proof of overall sign-in eligibility. Selected operator update/revocation operations use `installation-operator`. The console summarizes known changes and retains the raw payload for each record. These are management change records, not a complete authentication/security log; failed attempts, provider reconciliation, and historical operations are not reconstructed. No tokens, codes, provider secrets, or admission union IDs are included. Configure database access, backups, and retention for private identity data; automatic event retention is not implemented.
+Successful console changes and administrator CLI operations write atomic events containing the actor Member ID, target IDs, action, changed fields, and timestamp. Events also preserve the actor, organization, and target display names at the time of the write, along with previous editable values for renames, manual blocks, organization status, administrator assignments, system admission, and provider configuration. Later renames do not rewrite these snapshots. Provider events identify the application and record credential updates only as a boolean. Missing historical names or previous values are not inferred from live entities; known submitted values remain visible without an invented before value. A removed manual block is shown as unblocked, not as proof of overall sign-in eligibility. Selected operator update/revocation operations use `installation-operator`. The console summarizes known changes and retains the raw payload for each record. These are management change records, not a complete authentication/security log; failed attempts, provider reconciliation, and historical operations are not reconstructed. No tokens, codes, provider secrets, or admission union IDs are included. Configure database access, backups, and retention for private identity data; automatic management-history retention is not implemented.
 
 ## Authentication event API
 
 The authorized [authentication-event query API](authentication-events.md#query-api)
 provides platform and organization list/detail endpoints with bounded filtering,
 cursor pagination, retention exclusion and organization-safe fields. It uses this
-console's session and authorization boundary. The event browser is planned separately.
+console's session and authorization boundary. Select **认证记录** (Authentication events) in the activity navigation.
 Authentication events are best-effort evidence and have a default 90-day retention;
 this policy does not change transactional management history.
+
+Filter by event type, outcome, or method. **更多筛选** adds Member/client/grant IDs,
+request/interaction IDs, and a time range. Time controls use the browser's local
+timezone and send explicit UTC instants; start is inclusive and end exclusive.
+Filters and the cursor live in the URL, survive refresh/back/forward, and apply on
+the server before pagination. New filters and organization switching reset the
+cursor. Counts describe only the displayed page. The empty state reports no matching
+records, not proof that authentication did not occur.
+
+Details fetch the record again with current authorization and show occurrence and
+persistence times separately, established actor/target references, and classified
+reasons. Request and interaction links start a new query in the selected view;
+causal links fetch only through that view's endpoint. Expired or inaccessible
+records can disappear between the list and detail request. Organization views do
+not reconstruct missing platform fields. The warning that records may be incomplete
+reflects best-effort delivery, including failures the service cannot observe.
+
+The page supports desktop and narrow-screen navigation, scrollable tables/details,
+keyboard dismissal with focus return, bounded pagination, and retryable loading
+errors. Authentication events and transactional operation history remain separate
+navigation entries.
 
 ## Validation
 

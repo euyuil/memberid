@@ -1,4 +1,5 @@
-export type View = "organization" | "members" | "providers" | "events"
+export type View =
+  "organization" | "members" | "providers" | "events" | "authentication-events"
 
 export type Route = {
   view?: View
@@ -48,7 +49,7 @@ export function parseRoute(location: string) {
       query,
     }
   const match =
-    /^(?:\/(organizations|members|providers|events)|\/organizations\/([A-Za-z0-9_-]+)(?:\/(members|providers|events)(?:\/([A-Za-z0-9_-]+))?)?)$/.exec(
+    /^(?:\/(organizations|members|providers|events|authentication-events)|\/organizations\/([A-Za-z0-9_-]+)(?:\/(members|providers|events|authentication-events)(?:\/([A-Za-z0-9_-]+))?)?)$/.exec(
       path
     )
   if (!match || (match[4] && match[3] !== "members")) return null

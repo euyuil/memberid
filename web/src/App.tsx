@@ -69,6 +69,15 @@ import {
   RecordTime,
   StatusBadge,
 } from "@/components/directory"
+import {
+  AuthenticationEvents,
+  AuthenticationEventFilters,
+} from "@/AuthenticationEvents"
+import {
+  authenticationEventPath,
+  authenticationEventQuery,
+  type AuthenticationEvent,
+} from "@/authentication-events"
 import { Providers, type ProviderDirectory } from "@/Providers"
 import { memberListLocation, parseRoute, routeURL, type Route } from "@/routes"
 import { describeEvent, type ManagementEvent } from "@/operation-history"
@@ -112,6 +121,7 @@ type Data = {
   members?: MemberPage
   detail?: Detail
   events?: ManagementEvent[]
+  authenticationEvents?: Page<AuthenticationEvent>
   historyMember?: Member
   providers?: ProviderDirectory
 }
@@ -307,6 +317,7 @@ export default function App() {
   const org = route?.org ?? ""
   const view = route?.view
   const events = view === "events"
+  const authenticationEvents = view === "authentication-events"
   const providers = view === "providers"
   const membersView = view === "members"
   const activeView = view ?? "organization"
@@ -409,7 +420,16 @@ export default function App() {
       }
       try {
         let result: Data
-        if (events) {
+        if (authenticationEvents) {
+          const [page, organization] = await Promise.all([
+            request<Page<AuthenticationEvent>>(
+              `/api${authenticationEventPath(org)}?${authenticationEventQuery(params)}`,
+              options
+            ),
+            org ? fetchOrganization() : undefined,
+          ])
+          result = { authenticationEvents: page, organization }
+        } else if (events) {
           const query = new URLSearchParams({
             organizationId: org,
             before,
@@ -594,6 +614,8 @@ export default function App() {
     }
   } else if (providers) {
     breadcrumbs.push({ label: "身份提供商" })
+  } else if (authenticationEvents) {
+    breadcrumbs.push({ label: "认证记录" })
   } else if (events) {
     breadcrumbs.push({ label: "操作记录" })
   } else {
@@ -666,6 +688,13 @@ export default function App() {
           group: "身份管理",
         },
         {
+          label: "认证记录",
+          href: routeURL({ view: "authentication-events", ...navigationScope }),
+          icon: Fingerprint,
+          active: authenticationEvents,
+          group: "活动",
+        },
+        {
           label: "操作记录",
           href: routeURL({ view: "events", ...navigationScope }),
           icon: History,
@@ -703,17 +732,19 @@ export default function App() {
       <div className="page-heading">
         <div>
           <h1>
-            {events
-              ? historyTarget
-                ? `${data.historyMember?.displayName ?? "成员"}的操作记录`
-                : "操作记录"
-              : providers
-                ? "身份提供商"
-                : membersView
-                  ? member
-                    ? (selected?.displayName ?? "成员详情")
-                    : "成员"
-                  : (data.organization?.name ?? "组织")}
+            {authenticationEvents
+              ? "认证记录"
+              : events
+                ? historyTarget
+                  ? `${data.historyMember?.displayName ?? "成员"}的操作记录`
+                  : "操作记录"
+                : providers
+                  ? "身份提供商"
+                  : membersView
+                    ? member
+                      ? (selected?.displayName ?? "成员详情")
+                      : "成员"
+                    : (data.organization?.name ?? "组织")}
           </h1>
         </div>
         <div className="actions">
@@ -781,27 +812,31 @@ export default function App() {
               新增成员
             </Button>
           )}
-          {!membersView && !events && !providers && org && (
-            <>
-              {actor.platform && (
-                <Button
-                  variant="outline"
-                  render={<Link href="/organizations" />}
-                  nativeButton={false}
-                >
-                  所有组织
-                </Button>
-              )}
-              {data.organization && (
-                <Button
-                  render={<Link href={routeURL(memberDirectoryRoute)} />}
-                  nativeButton={false}
-                >
-                  查看成员
-                </Button>
-              )}
-            </>
-          )}
+          {!membersView &&
+            !events &&
+            !authenticationEvents &&
+            !providers &&
+            org && (
+              <>
+                {actor.platform && (
+                  <Button
+                    variant="outline"
+                    render={<Link href="/organizations" />}
+                    nativeButton={false}
+                  >
+                    所有组织
+                  </Button>
+                )}
+                {data.organization && (
+                  <Button
+                    render={<Link href={routeURL(memberDirectoryRoute)} />}
+                    nativeButton={false}
+                  >
+                    查看成员
+                  </Button>
+                )}
+              </>
+            )}
         </div>
       </div>
       <div className="console-feedback" aria-live="polite">
@@ -839,6 +874,13 @@ export default function App() {
             showClear={!noMemberMatches}
           />
         )}
+        {authenticationEvents && !unavailableScope && (
+          <AuthenticationEventFilters
+            key={`${org}:${authenticationEventQuery(params)}`}
+            org={org}
+            query={params}
+          />
+        )}
         {unavailableScope ? (
           <DirectoryState
             kind={accessDenied ? "forbidden" : "error"}
@@ -859,17 +901,19 @@ export default function App() {
           <DirectoryState
             kind="error"
             title={
-              events
-                ? "暂时无法加载操作记录"
-                : providers
-                  ? "暂时无法加载身份提供商"
-                  : membersView
-                    ? member
-                      ? "暂时无法加载成员详情"
-                      : "暂时无法加载成员列表"
-                    : org
-                      ? "暂时无法加载组织详情"
-                      : "暂时无法加载组织列表"
+              authenticationEvents
+                ? "暂时无法加载认证记录"
+                : events
+                  ? "暂时无法加载操作记录"
+                  : providers
+                    ? "暂时无法加载身份提供商"
+                    : membersView
+                      ? member
+                        ? "暂时无法加载成员详情"
+                        : "暂时无法加载成员列表"
+                      : org
+                        ? "暂时无法加载组织详情"
+                        : "暂时无法加载组织列表"
             }
             action={
               <Button variant="outline" onClick={refresh}>
@@ -985,63 +1029,68 @@ export default function App() {
                 onComplete={refresh}
               />
             )}
-            {data.organization && !events && !membersView && !providers && (
-              <section className="organization-summary">
-                <div className="organization-identity">
-                  <div className="organization-status">
-                    <Status active={data.organization.status === "enabled"} />
+            {data.organization &&
+              !events &&
+              !authenticationEvents &&
+              !membersView &&
+              !providers && (
+                <section className="organization-summary">
+                  <div className="organization-identity">
+                    <div className="organization-status">
+                      <Status active={data.organization.status === "enabled"} />
+                    </div>
+                    <RecordIdentifier value={org} label="组织 ID" />
                   </div>
-                  <RecordIdentifier value={org} label="组织 ID" />
-                </div>
-                <div className="actions">
-                  <Button
-                    variant="outline"
-                    onClick={() =>
-                      rename(
-                        "name",
-                        data.organization!.name,
-                        base,
-                        "修改组织名称"
-                      )
-                    }
-                  >
-                    修改名称
-                  </Button>
-                  {actor.platform && org !== "org_system" && (
+                  <div className="actions">
                     <Button
-                      variant={
-                        data.organization.status === "enabled"
-                          ? "destructive"
-                          : "outline"
-                      }
+                      variant="outline"
                       onClick={() =>
-                        setAction({
-                          title:
-                            data.organization!.status === "enabled"
-                              ? "停用组织"
-                              : "恢复组织",
-                          description:
-                            "停用后，该组织成员无法通过后续登录和身份有效性检查。已有业务系统会话由各应用管理。",
-                          path: base,
-                          method: "PATCH",
-                          body: {
-                            status:
-                              data.organization!.status === "enabled"
-                                ? "disabled"
-                                : "enabled",
-                          },
-                          destructive: data.organization!.status === "enabled",
-                        })
+                        rename(
+                          "name",
+                          data.organization!.name,
+                          base,
+                          "修改组织名称"
+                        )
                       }
                     >
-                      {data.organization.status === "enabled"
-                        ? "停用组织"
-                        : "恢复组织"}
+                      修改名称
                     </Button>
-                  )}
-                </div>
-              </section>
-            )}
+                    {actor.platform && org !== "org_system" && (
+                      <Button
+                        variant={
+                          data.organization.status === "enabled"
+                            ? "destructive"
+                            : "outline"
+                        }
+                        onClick={() =>
+                          setAction({
+                            title:
+                              data.organization!.status === "enabled"
+                                ? "停用组织"
+                                : "恢复组织",
+                            description:
+                              "停用后，该组织成员无法通过后续登录和身份有效性检查。已有业务系统会话由各应用管理。",
+                            path: base,
+                            method: "PATCH",
+                            body: {
+                              status:
+                                data.organization!.status === "enabled"
+                                  ? "disabled"
+                                  : "enabled",
+                            },
+                            destructive:
+                              data.organization!.status === "enabled",
+                          })
+                        }
+                      >
+                        {data.organization.status === "enabled"
+                          ? "停用组织"
+                          : "恢复组织"}
+                      </Button>
+                    )}
+                  </div>
+                </section>
+              )}
             {data.members && (
               <section aria-label="成员列表">
                 <div className="overflow-hidden rounded-md border">
@@ -1272,6 +1321,14 @@ export default function App() {
                   </Button>
                 </section>
               </div>
+            )}
+            {data.authenticationEvents && (
+              <AuthenticationEvents
+                org={org}
+                query={params}
+                page={data.authenticationEvents}
+                loadEvent={request}
+              />
             )}
             {data.events && (
               <section

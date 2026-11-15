@@ -8,6 +8,13 @@ test("page paths identify resources independently of query parameters", () => {
     ["/members", "members", "", ""],
     ["/providers", "providers", "", ""],
     ["/events", "events", "", ""],
+    ["/authentication-events", "authentication-events", "", ""],
+    [
+      "/organizations/org_example/authentication-events",
+      "authentication-events",
+      "org_example",
+      "",
+    ],
     ["/organizations/org_example", "organization", "org_example", ""],
     ["/organizations/org_example/members", "members", "org_example", ""],
     [
