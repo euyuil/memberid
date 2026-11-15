@@ -1,13 +1,21 @@
-import { useState, type ReactNode } from "react"
+import { Fragment, useState, type ReactNode } from "react"
 import {
-  ChevronRight,
   ChevronsUpDown,
   LogOut,
   UserRound,
   type LucideIcon,
 } from "lucide-react"
+import { cn } from "cn"
 import { Link, type NavigationState } from "@/navigation"
 import { routeURL } from "@/routes"
+import {
+  Breadcrumb,
+  BreadcrumbItem as BreadcrumbListItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import {
   DropdownMenu,
@@ -234,29 +242,39 @@ function ConsoleContents({
             orientation="vertical"
             className="scope-divider h-4! data-vertical:self-center"
           />
-          <nav className="console-breadcrumbs" aria-label="面包屑">
-            <ol>
+          <Breadcrumb className="min-w-0 flex-1" aria-label="面包屑">
+            <BreadcrumbList className="flex-nowrap">
               {breadcrumbs.map(({ label, href, state }, index) => (
-                <li key={index}>
-                  {index > 0 && <ChevronRight aria-hidden="true" />}
-                  {href ? (
-                    <Link href={href} state={state} title={label}>
-                      {label}
-                    </Link>
-                  ) : (
-                    <span
-                      title={label}
-                      aria-current={
-                        index === breadcrumbs.length - 1 ? "page" : undefined
-                      }
-                    >
-                      {label}
-                    </span>
-                  )}
-                </li>
+                <Fragment key={index}>
+                  {index > 0 && <BreadcrumbSeparator className="shrink-0" />}
+                  <BreadcrumbListItem
+                    className={cn(
+                      "min-w-0 first:shrink-0",
+                      index > 1 && "max-w-36 shrink-0"
+                    )}
+                  >
+                    {href ? (
+                      <BreadcrumbLink
+                        render={<Link href={href} state={state} />}
+                        className="truncate"
+                        title={label}
+                      >
+                        {label}
+                      </BreadcrumbLink>
+                    ) : index === breadcrumbs.length - 1 ? (
+                      <BreadcrumbPage className="truncate" title={label}>
+                        {label}
+                      </BreadcrumbPage>
+                    ) : (
+                      <span className="truncate" title={label}>
+                        {label}
+                      </span>
+                    )}
+                  </BreadcrumbListItem>
+                </Fragment>
               ))}
-            </ol>
-          </nav>
+            </BreadcrumbList>
+          </Breadcrumb>
         </header>
         <div id="console-content" className="page-content w-full" tabIndex={-1}>
           {children}

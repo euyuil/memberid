@@ -16,6 +16,8 @@ The organization switcher follows the same version's [Sidebar-07 Team Switcher](
 
 The account menu follows the same version's [Sidebar-07 Nav User](https://github.com/shadcn-ui/ui/blob/shadcn%404.23.0/apps/v4/registry/bases/base/blocks/sidebar-07/components/nav-user.tsx), using the shared Dropdown Menu and official Base Nova Avatar added through the pinned CLI. Adaptations retain MemberID's member profile and asynchronous sign-out actions, show the management role, and use initials without external avatar requests. The dependency graph and retained MIT notice are unchanged.
 
+The console header uses the official Base Nova Breadcrumb from the same pinned CLI and registry. MemberID supplies localized labels and router links with their existing return state. Layout adaptations keep the path on one line and truncate long names; no dependency or license inventory changes are required.
+
 Registry response SHA-256 values, before import/icon transformation:
 
 | Component | SHA-256 |
