@@ -2,10 +2,10 @@
 
 This document records the agreed design for MemberID authentication events:
 event meaning, correlation, organization visibility, retention, and delivery
-failure behavior. **This is a design contract, not an implemented feature.**
-The event store, background writer, query interfaces, retention worker, and
-health indicators described here are not yet available. This document changes
-no runtime behavior, database schema, token claims, or authentication policy.
+failure behavior. **The store, bounded writer, retention cleanup, and `sms.send`
+events are implemented.** SMS verification, external authentication, OIDC
+issuance/replay/revocation events, authorized queries, and console views remain
+planned. Authentication policy and token claims are unchanged.
 
 The existing [management history](administration.md#availability-and-audit)
 records selected successful management changes atomically. It remains a
@@ -176,18 +176,21 @@ separate authority contracts; this design adds no credential or token claim.
 
 ## Storage and retention
 
-Plan a separate PostgreSQL `authentication_events` store. Existing management
-records require an organization and actor and describe different operations;
+A separate PostgreSQL `authentication_events` store is implemented. Existing
+management records require an organization and actor and describe different operations;
 do not force unidentified/global authentication events into that shape. The
 logical fields above do not prescribe a completed schema or JSON API.
 
 Default retention is **90 days from `occurredAt`**, with a positive,
 operator-configurable duration. This is a product default, not a legal retention
-claim. Configuration names and delivery-limit values will be defined with the
-implementation. The policy applies to persisted authentication events, not to
+claim. Set `authenticationEventRetentionDays` in `memberid.json` to 1–36500 days;
+omitting it or using zero selects 90. Restart the authentication process to apply
+a change, and use the same policy for all replicas. The policy applies to persisted
+authentication events, not to
 the existing management history, business session/grant lifetimes, or SMS quotas.
 
-Queries exclude records past their retention deadline. Cleanup removes expired
+The planned query interfaces must exclude records past their retention deadline.
+Cleanup removes expired
 records in bounded batches, scheduled at least daily while the service is
 healthy. Report cleanup failures and lag; a stopped/failing cleaner cannot
 promise physical deletion on schedule. Delayed delivery and retries must not
@@ -203,7 +206,7 @@ settings and must not become an unbounded second archive of identity data.
 
 **An audit failure must not change an authentication decision, undo a completed
 login or revocation, or turn a failed business operation into success.**
-The proposed path is:
+The implemented delivery path is:
 
 ```text
 execute business operation
@@ -255,9 +258,61 @@ in this first design. Shared infrastructure failure can still prevent the
 business writes themselves; best-effort auditing does not make a failed database
 available. No authorization timing or in-flight revocation rule is changed.
 
-## Future implementation validation
+## Current delivery and operations
 
-Implementation must demonstrate the following behavior before claiming support:
+The authentication process uses one background worker, a 256-event in-memory
+queue, and one separate PostgreSQL connection. Each write has a two-second
+timeout and at most three attempts, with 100/200 ms retry delays. Events waiting
+more than 30 seconds in the queue are discarded. No request waits for persistence
+or queue capacity. Graceful shutdown attempts a five-second drain; an abrupt
+crash can lose pending events. Event IDs stay stable across retries and duplicate
+inserts preserve the first `recordedAt`.
+
+Every minute, the same worker deletes at most 1,000 expired rows and reports a
+structured `Authentication event delivery status` diagnostic. It contains queue
+depth, completed writes, write failures, exhausted retries, observed drops, queue
+age expiry, last-write health, cleanup failures, remaining cleanup lag in seconds,
+and the Unix time of the last successful cleanup. Counters reset on restart.
+Cleanup lag describes the oldest still-expired record after that batch; after a
+cleanup failure, the last successful measurement and timestamp remain visible.
+Operators must monitor both lag and timestamp. No identity references, raw database
+errors, or event payloads are included. This diagnostic uses the existing process
+logger, at most once per minute plus shutdown; operators own log collection and
+retention. `/healthz` remains process health and does not fail because audit
+persistence is degraded. A stopped process cannot perform cleanup or report loss.
+
+Current SMS producers cover accepted sends, local number/source validation and
+quota rejection, and provider/backend failures in validated login and account
+linking workflows. `sms.send / succeeded` occurs immediately after provider
+acceptance, even if the later required challenge-readiness update fails. That
+business failure still prevents login normally. A provider timeout produces
+`failed / providerUnavailable` without asserting non-delivery. Repeated form
+submissions refused before starting a send do not invent a second provider call.
+Shared phone login has no Member actor. A registered organization-restricted
+client supplies organization ownership; an arbitrary organization hint or matching
+phone binding does not. Account linking uses the already validated Member context.
+Each HTTP request and stored flow has an independent server-generated correlation
+ID; neither value is a cookie, state parameter, code, or credential hash.
+
+The fresh-install schema is version 18. Existing databases are never migrated or
+reset automatically. The new store intentionally has no foreign keys to transient
+sessions, flows, grants, or causal events. Events remain historical evidence after
+business cleanup. Public queries are not available yet; operator database access
+retains its existing trust boundary. Query expiry and organization-safe projection
+must accompany the future query interfaces.
+
+## Implementation validation
+
+Unit tests cover full/closed queues, bounded shutdown, maximum queue age, immutable
+context, allowlisted fields, and bounded retries with stable event IDs. PostgreSQL
+and HTTP integration tests cover deduplication, occurrence-based expiry, bounded
+cleanup, SMS success/rejection/provider failure, confirmed provider acceptance
+followed by a business-write failure, and authentication success despite audit
+insert denial. Tests use synthetic provider adapters; they do not prove real SMS
+delivery.
+
+Remaining catalog and query work must demonstrate the following before claiming
+support:
 
 - Correct event boundaries for successful verification, grant issuance, rejected
   credentials, uncertain provider delivery, confirmed replay and revocation.
@@ -274,8 +329,7 @@ Implementation must demonstrate the following behavior before claiming support:
   changes and restore; query expiry is enforced even when cleanup is delayed.
 - Records and fallback diagnostics exclude credentials and unrestricted payloads.
 
-These are acceptance requirements, not tests already run or capabilities already
-implemented. [OWASP logging guidance](https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html#event-collection)
+These remaining requirements are not capabilities already implemented. [OWASP logging guidance](https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html#event-collection)
 supports isolating logging failures from application operation; its
 [verification guidance](https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html#verification)
 also covers failure injection and limiting logging-related resource exhaustion.

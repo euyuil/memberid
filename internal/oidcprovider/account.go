@@ -30,6 +30,7 @@ type accountRequest struct {
 	accountDetails
 }
 type accountDetails struct {
+	InteractionID  string                        `json:"interactionId"`
 	Kind           string                        `json:"kind"`
 	PhoneNumber    string                        `json:"phoneNumber,omitempty"`
 	ChallengeID    string                        `json:"challengeId,omitempty"`
@@ -170,7 +171,7 @@ func (service *Service) openAccount(w http.ResponseWriter, r *http.Request, sess
 		http.Error(w, "This Member identity is not available to the current session.", 403)
 		return accountRequest{}, identity.Member{}, false
 	}
-	details := accountDetails{Kind: kind, MemberID: member.ID, OrganizationID: member.OrganizationID, FactorID: session.verified.Factor.ID, BindingID: binding, ClientID: r.Form.Get("client_id"), ReturnURI: r.Form.Get("returnUri"), BrowserHash: config.SecretHash(accountBrowser(r))}
+	details := accountDetails{InteractionID: newID(), Kind: kind, MemberID: member.ID, OrganizationID: member.OrganizationID, FactorID: session.verified.Factor.ID, BindingID: binding, ClientID: r.Form.Get("client_id"), ReturnURI: r.Form.Get("returnUri"), BrowserHash: config.SecretHash(accountBrowser(r))}
 	if !service.accountClient(details) {
 		http.Error(w, "Invalid account return destination or client", 400)
 		return accountRequest{}, identity.Member{}, false

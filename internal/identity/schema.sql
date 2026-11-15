@@ -1,7 +1,7 @@
 CREATE TABLE memberid_schema (
-    version integer PRIMARY KEY CHECK (version = 17)
+    version integer PRIMARY KEY CHECK (version = 18)
 );
-INSERT INTO memberid_schema(version) VALUES (17);
+INSERT INTO memberid_schema(version) VALUES (18);
 
 CREATE TABLE organizations (
     id text COLLATE "C" PRIMARY KEY CHECK (id = 'org_system' OR id ~ '^org_[0-9bcdfghjkmnpqrstvwxz]{27}$'),
@@ -262,3 +262,22 @@ CREATE TABLE console_sessions (
     expires_at timestamptz NOT NULL,
     absolute_expires_at timestamptz NOT NULL
 );
+
+-- Immutable evidence survives deletion of business records. References deliberately
+-- have no foreign keys: delivery can be delayed, reordered, or partially lost.
+CREATE TABLE authentication_events (
+    event_id text COLLATE "C" PRIMARY KEY,
+    event_type text NOT NULL,
+    outcome text NOT NULL,
+    occurred_at timestamptz NOT NULL,
+    recorded_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+    organization_id text COLLATE "C" NOT NULL DEFAULT '',
+    member_id text COLLATE "C" NOT NULL DEFAULT '',
+    client_id text COLLATE "C" NOT NULL DEFAULT '',
+    interaction_id text COLLATE "C" NOT NULL DEFAULT '',
+    request_id text COLLATE "C" NOT NULL DEFAULT '',
+    data jsonb NOT NULL CHECK (octet_length(data::text)<=8192)
+);
+CREATE INDEX authentication_event_time ON authentication_events(occurred_at,event_id);
+CREATE INDEX authentication_event_organization ON authentication_events(organization_id,occurred_at,event_id);
+CREATE INDEX authentication_event_interaction ON authentication_events(interaction_id,occurred_at,event_id);

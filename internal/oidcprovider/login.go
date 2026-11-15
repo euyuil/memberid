@@ -189,6 +189,7 @@ func (service *Service) login(w http.ResponseWriter, r *http.Request) {
 			}
 			phone, err := identity.NormalizePhone(r.PostForm.Get("phone"))
 			if err != nil {
+				service.rejectPhoneSend(r, service.loginEvent(request))
 				message = "Enter a valid supported phone number."
 				service.renderLogin(w, r, request, registered, message)
 				return
@@ -200,7 +201,7 @@ func (service *Service) login(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, "Login transaction expired", http.StatusBadRequest)
 				return
 			}
-			challenge, err := service.startPhone(r, request.ID, phone, request.ClientID)
+			challenge, err := service.startPhone(r, request.ID, phone, request.ClientID, service.loginEvent(request))
 			if err != nil {
 				message = "Unable to send a code. Cancel verification before trying again."
 				if errors.Is(err, identity.ErrRateLimited) {

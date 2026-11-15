@@ -66,6 +66,7 @@ func (c client) IDTokenUserinfoClaimsAssertion() bool { return false }
 func (c client) ClockSkew() time.Duration             { return 0 }
 
 type grant struct {
+	InteractionID  string    `json:"interactionId,omitempty"`
 	ID             string    `json:"id"`
 	ClientID       string    `json:"clientId"`
 	SessionID      string    `json:"sessionId"`

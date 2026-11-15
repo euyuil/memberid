@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/euyuil/memberid/internal/authevent"
 	"github.com/euyuil/memberid/internal/config"
 	"github.com/euyuil/memberid/internal/identity"
 	"github.com/rs/cors"
@@ -17,6 +18,7 @@ import (
 )
 
 type Service struct {
+	events        *authevent.Recorder
 	configuration *config.Loaded
 	store         *identity.Store
 	phone         *identity.PhoneVerifier
@@ -119,6 +121,7 @@ func (w clientAuthWriter) WriteHeader(status int) {
 }
 
 func (service *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	r = r.WithContext(authevent.RequestContext(r.Context()))
 	w.Header().Set("Cache-Control", "no-store")
 	// Preserve Origin on same-origin form POSTs without sending cross-origin referrers.
 	w.Header().Set("Referrer-Policy", "same-origin")
@@ -276,4 +279,12 @@ func (service *Service) Cleanup(ctx context.Context) error {
 		return err
 	}
 	return service.store.CleanupPhoneChallenges(ctx)
+}
+
+// SetEventRecorder must be called before serving requests.
+func (service *Service) SetEventRecorder(recorder *authevent.Recorder) {
+	service.events = recorder
+	if service.phone != nil {
+		service.phone.SetEventRecorder(recorder)
+	}
 }

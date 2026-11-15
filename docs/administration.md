@@ -1,6 +1,6 @@
 # Administrator identities and operator setup
 
-Fresh schema version **17** creates the enabled organization `org_system`, named `System organization`, with no Members or administrator assignments. The exact ID is reserved: ordinary creation and enrollment cannot claim it, and it cannot be disabled. There is no organization-kind field, default customer organization, organization-less Member, or global User.
+Fresh schema version **18** creates the enabled organization `org_system`, named `System organization`, with no Members or administrator assignments. The exact ID is reserved: ordinary creation and enrollment cannot claim it, and it cannot be disabled. There is no organization-kind field, default customer organization, organization-less Member, or global User.
 
 An administrator is an explicitly assigned Member with at least one currently eligible authentication binding. Membership in `org_system` alone grants no privileges. A platform administrator can manage all organizations; an ordinary organization administrator is limited to their own organization. The identity store rechecks a Member administrator's current grant, SSO session, assignment, and eligibility when authorizing mutations. These roles belong to MemberID management and are not added to consuming applications' identity claims. See [Member roles](roles.md) for the agreed definitions, including ordinary system Members and the absence of a system-organization administrator role.
 
@@ -48,10 +48,11 @@ Successful administrator changes, admission preparation, and selected organizati
 
 These events are a limited management change history, not a complete authentication/security log. Historical actions, failed attempts, and provider reconciliation are not reconstructed. Administrators can read events within their scope through the console. Configure database access, backups, and retention for private identity data; automatic retention is not implemented.
 
-The [authentication event design](authentication-events.md) separately defines
-planned authentication/lifecycle events, organization visibility, retention, and
-best-effort delivery. It is not implemented and does not change these existing
-transactional management events.
+The [authentication event contract](authentication-events.md) separately defines
+authentication/lifecycle events, organization visibility, retention, and
+best-effort delivery. Its store, writer, retention cleanup, and SMS send events
+are implemented; other event producers and authorized queries remain planned.
+This does not change the existing transactional management events.
 
 ## Validation boundaries
 

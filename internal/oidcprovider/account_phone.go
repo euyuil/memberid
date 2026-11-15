@@ -81,6 +81,7 @@ func (service *Service) accountPhonePost(w http.ResponseWriter, r *http.Request,
 		}
 		phone, err := identity.NormalizePhone(r.PostForm.Get("phone"))
 		if err != nil {
+			service.rejectPhoneSend(r, accountEvent(request, session))
 			service.renderPhoneAccount(w, r, request, session, member, "Enter a valid supported phone number.")
 			return
 		}
@@ -125,7 +126,7 @@ func (service *Service) accountPhonePost(w http.ResponseWriter, r *http.Request,
 			return
 		}
 		request.State = "pending"
-		challenge, err := service.startPhone(r, request.ID, phone, request.ClientID)
+		challenge, err := service.startPhone(r, request.ID, phone, request.ClientID, accountEvent(request, session))
 		if err != nil {
 			message := "Unable to send a code. Cancel verification before trying again."
 			if errors.Is(err, identity.ErrRateLimited) {
