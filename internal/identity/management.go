@@ -137,12 +137,15 @@ func (store *Store) UpdateOrganization(ctx context.Context, principal Principal,
 		if err := authorizeAll(ctx, tx, principal, requirements...); err != nil {
 			return err
 		}
-		var err error
+		previous, err := managementPrevious(ctx, tx, id, "", "organization.update")
+		if err != nil {
+			return err
+		}
 		result, err = updateOrganization(ctx, tx, id, change)
 		if err != nil {
 			return err
 		}
-		return managementEvent(ctx, tx, principal, id, "", "organization.update", change)
+		return managementEvent(ctx, tx, principal, id, "", "organization.update", change, previous)
 	})
 	return result, err
 }
@@ -179,12 +182,15 @@ func (store *Store) UpdateMember(ctx context.Context, principal Principal, organ
 		if err := authorizeAll(ctx, tx, principal, requirements...); err != nil {
 			return err
 		}
-		var err error
+		previous, err := managementPrevious(ctx, tx, organizationID, memberID, "member.update")
+		if err != nil {
+			return err
+		}
 		result, err = updateMember(ctx, tx, organizationID, memberID, change)
 		if err != nil {
 			return err
 		}
-		return managementEvent(ctx, tx, principal, organizationID, memberID, "member.update", change)
+		return managementEvent(ctx, tx, principal, organizationID, memberID, "member.update", change, previous)
 	})
 	return result, err
 }

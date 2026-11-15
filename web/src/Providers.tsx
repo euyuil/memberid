@@ -52,6 +52,7 @@ const names = { dingtalk: "钉钉", feishu: "飞书" }
 
 export function Providers({
   directory,
+  selectedId,
   enabled,
   base,
   csrf,
@@ -60,6 +61,7 @@ export function Providers({
   onComplete,
 }: {
   directory: ProviderDirectory
+  selectedId?: string
   enabled: boolean
   base: string
   csrf: string
@@ -68,7 +70,9 @@ export function Providers({
   onComplete: () => void
 }) {
   const [editing, setEditing] = useState<Provider | "new">()
-  const [viewing, setViewing] = useState<Provider>()
+  const [viewing, setViewing] = useState<Provider | undefined>(() =>
+    directory.items.find((item) => item.id === selectedId)
+  )
   return (
     <section className="directory" aria-label="身份提供商列表">
       <DirectoryToolbar title="已配置的应用">

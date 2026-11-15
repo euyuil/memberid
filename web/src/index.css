@@ -213,8 +213,8 @@ a.record-name:hover, button.record-name:hover { color: var(--primary); text-deco
 .pagination { display: flex; gap: 8px; }
 .directory-loading { display: grid; gap: 16px; padding: 20px; }
 .directory-empty { text-align: center; color: var(--muted-foreground); padding-block: 48px !important; }
-.event-directory .record-text { max-width: 12rem; }
-.event-summary { display: block; width: 22rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; cursor: pointer; }
+.event-directory .record-text { max-width: 10rem; }
+.event-summary { display: block; width: 18rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; cursor: pointer; }
 .event-summary:hover { color: var(--primary); }
 .event-summary:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 .organization-summary { padding: 20px; border: 1px solid var(--border); border-radius: 10px; background: var(--card); }

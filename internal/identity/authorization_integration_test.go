@@ -86,7 +86,7 @@ func TestScopedAuthorizationRevocationBoundary(t *testing.T) {
 	if _, err := updateOrganization(t.Context(), tx, org.ID, OrganizationChange{Name: &name}); err != nil {
 		t.Fatal(err)
 	}
-	if err := managementEvent(t.Context(), tx, principal, org.ID, "", "organization.update", OrganizationChange{Name: &name}); err != nil {
+	if err := managementEvent(t.Context(), tx, principal, org.ID, "", "organization.update", OrganizationChange{Name: &name}, nil); err != nil {
 		t.Fatal(err)
 	}
 	if err := tx.Commit(t.Context()); err != nil {

@@ -114,6 +114,14 @@ func (apps *FeishuApplications) configure(ctx context.Context, principal Princip
 		}
 	}
 	encrypted := apps.cipher.Seal(nil, nil, []byte(secret), feishuAAD(candidate))
+	credentialsUpdated := false
+	if namespace != "" && checked {
+		previousSecret, err := apps.secret(current)
+		if err != nil {
+			return Provider{}, err
+		}
+		credentialsUpdated = previousSecret != secret
+	}
 	var result feishuApplication
 	err = pgx.BeginFunc(ctx, apps.store.pool, func(tx pgx.Tx) error {
 		before, err := lockProviderManagement(ctx, tx, principal, organization, current.Enabled && !candidate.Enabled, providerWriteRequirements(organizationID, "feishu", namespace, input.Enabled != nil)...)
@@ -137,7 +145,7 @@ func (apps *FeishuApplications) configure(ctx context.Context, principal Princip
 		if err != nil {
 			return err
 		}
-		return finishProviderManagement(ctx, tx, principal, "feishu", organizationID, result.ID, result.DisplayName, result.Enabled, before)
+		return finishProviderManagement(ctx, tx, principal, organizationID, current.Provider, result.Provider, credentialsUpdated, before)
 	})
 	return result.Provider, err
 }

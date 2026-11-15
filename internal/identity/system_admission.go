@@ -32,6 +32,10 @@ func (store *Store) PrepareSystemDingTalkAdmissionForSource(ctx context.Context,
 		if _, err := readMember(tx.QueryRow(ctx, "SELECT "+memberColumns+" FROM members WHERE id=$1 AND organization_id=$2", memberID, SystemOrganizationID)); err != nil {
 			return err
 		}
+		var previouslyEnabled bool
+		if err := tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM system_dingtalk_admissions WHERE member_id=$1 AND expires_at>clock_timestamp())", memberID).Scan(&previouslyEnabled); err != nil {
+			return err
+		}
 		if _, err := tx.Exec(ctx, "DELETE FROM system_dingtalk_admissions WHERE member_id=$1", memberID); err != nil {
 			return err
 		}
@@ -55,6 +59,6 @@ func (store *Store) PrepareSystemDingTalkAdmissionForSource(ctx context.Context,
 				return storageError(err)
 			}
 		}
-		return managementEvent(ctx, tx, principal, SystemOrganizationID, memberID, "dingtalk.admission", map[string]bool{"enabled": unionID != ""})
+		return managementEvent(ctx, tx, principal, SystemOrganizationID, memberID, "dingtalk.admission", map[string]bool{"enabled": unionID != ""}, map[string]any{"enabled": previouslyEnabled})
 	})
 }
