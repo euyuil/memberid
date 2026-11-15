@@ -407,8 +407,8 @@ func TestConsoleInvalidatesExistingSession(t *testing.T) {
 				"factor":           "UPDATE authentication_factors SET status='disabled'",
 				"grant":            "UPDATE oidc_grants SET revoked_at=clock_timestamp()",
 				"grant expiry":     "UPDATE oidc_grants SET expires_at=clock_timestamp()-interval '1 second'",
-				"sso":              "UPDATE oidc_sessions SET revoked_at=clock_timestamp()",
-				"sso expiry":       "UPDATE oidc_sessions SET expires_at=clock_timestamp()-interval '1 second'",
+				"sso":              "UPDATE authentication_sessions SET revoked_at=clock_timestamp()",
+				"sso expiry":       "UPDATE authentication_sessions SET expires_at=clock_timestamp()-interval '1 second'",
 				"console idle":     "UPDATE console_sessions SET expires_at=clock_timestamp()-interval '1 second'",
 				"console absolute": "UPDATE console_sessions SET absolute_expires_at=clock_timestamp()-interval '1 second'",
 			}

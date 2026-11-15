@@ -29,7 +29,7 @@ type pageData struct {
 	Providers                                                      []identity.Provider
 }
 
-func (service *Service) renderLogin(w http.ResponseWriter, r *http.Request, request *authorizationRequest, client client, message string) {
+func (service *Service) renderLogin(w http.ResponseWriter, r *http.Request, request *authorizationRequest, client loginPolicy, message string) {
 	members, err := service.members(r, request, client)
 	if err != nil {
 		http.Error(w, "Login temporarily unavailable", http.StatusServiceUnavailable)
@@ -60,12 +60,12 @@ func (service *Service) renderLogin(w http.ResponseWriter, r *http.Request, requ
 		message = "Phone verification is pending. Cancel verification to start again."
 	}
 	data := pageData{
-		Request: request, ClientID: client.registration.ID, Scopes: strings.Join(request.Scopes, ", "), Message: message,
+		Request: request, ClientID: client.registration.ID, Scopes: client.registration.IdentityInformation, Message: message,
 		Nonce: config.RandomSecret(), Members: choices, Verified: verified,
 		Pending: request.phonePending() || request.externalPending(), PhonePending: request.ChallengeID != "",
 		PhoneEnabled: service.phone != nil, ProviderEnabled: client.registration.SubjectKind == "member" && (service.dingtalk != nil || service.feishu != nil),
 		OrganizationRestricted: client.registration.OrganizationID != "", ProviderOrganizationID: client.registration.OrganizationID,
-		FactorClient: client.registration.SubjectKind == "factor", ConsentRequired: !client.registration.Preauthorized || slices.Contains(request.Input.Prompt, "consent"),
+		FactorClient: client.registration.SubjectKind == "factor", ConsentRequired: !client.registration.Preauthorized || slices.Contains(request.prompts(), "consent"),
 	}
 	if !data.OrganizationRestricted {
 		data.ProviderOrganizationID = request.ProviderOrganizationID
@@ -109,8 +109,8 @@ func (service *Service) renderLogin(w http.ResponseWriter, r *http.Request, requ
 		}
 	}
 	formTargets := []string{"'self'"}
-	if slices.Contains(client.registration.RedirectURIs, request.Input.RedirectURI) {
-		target, err := url.Parse(request.Input.RedirectURI)
+	if client.registration.ReturnURI != "" {
+		target, err := url.Parse(client.registration.ReturnURI)
 		if err == nil {
 			formTargets = append(formTargets, target.Scheme+"://"+target.Host)
 		}

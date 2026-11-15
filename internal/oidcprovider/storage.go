@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/euyuil/memberid/internal/authevent"
+	"github.com/euyuil/memberid/internal/browserauth"
 	"github.com/euyuil/memberid/internal/config"
 	"github.com/euyuil/memberid/internal/identity"
 	"github.com/jackc/pgx/v5"
@@ -56,31 +57,31 @@ func (s *storage) CreateAuthRequest(ctx context.Context, input *oidc.AuthRequest
 	if registered.registration.EvidenceScope != "" && slices.Contains(input.Scopes, registered.registration.EvidenceScope) {
 		audience = registered.registration.EvidenceAudience
 	}
-	request := &authorizationRequest{grant: grant{InteractionID: newID(), ID: newID(), ClientID: input.ClientID, Scopes: input.Scopes, Audience: []string{audience}}, Input: *input, HintSubject: hintSubject, BrowserHash: config.SecretHash(browser), CSRF: config.RandomSecret()}
+	request := &authorizationRequest{grant: grant{InteractionID: newID(), ID: newID(), ClientID: input.ClientID, Scopes: input.Scopes, Audience: []string{audience}}, Input: *input, HintSubject: hintSubject, Interaction: browserauth.Interaction{BrowserHash: config.SecretHash(browser), CSRF: config.RandomSecret()}}
 	data, err := json.Marshal(request)
 	if err != nil {
 		return nil, err
 	}
-	_, err = s.service.store.Database().Exec(ctx, "INSERT INTO oidc_authorization_requests(id,client_id,data,expires_at) VALUES($1,$2,$3,$4)", request.ID, request.ClientID, data, s.service.now().Add(10*time.Minute))
+	_, err = s.service.store.Database().Exec(ctx, "INSERT INTO authentication_requests(id,client_id,data,expires_at) VALUES($1,$2,$3,$4)", request.ID, request.ClientID, data, s.service.now().Add(10*time.Minute))
 	return request, err
 }
 
 func (s *storage) loadRequest(ctx context.Context, column string, value any) (*authorizationRequest, error) {
 	var data []byte
 	var revision int64
-	if err := s.service.store.Database().QueryRow(ctx, "SELECT data,revision FROM oidc_authorization_requests WHERE "+column+"=$1 AND expires_at>$2", value, s.service.now()).Scan(&data, &revision); err != nil {
+	if err := s.service.store.Database().QueryRow(ctx, "SELECT data,revision FROM authentication_requests WHERE "+column+"=$1 AND expires_at>$2", value, s.service.now()).Scan(&data, &revision); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oidc.ErrInvalidGrant()
 		}
 		return nil, oidc.ErrServerError()
 	}
-	result := &authorizationRequest{Revision: revision}
+	result := &authorizationRequest{Interaction: browserauth.Interaction{Revision: revision}}
 	if err := json.Unmarshal(data, result); err != nil {
 		return nil, oidc.ErrServerError()
 	}
 	return result, nil
 }
-func (s *storage) AuthRequestByID(ctx context.Context, id string) (op.AuthRequest, error) {
+func (s *storage) loginRequestByID(ctx context.Context, id string) (*authorizationRequest, error) {
 	request, err := s.loadRequest(ctx, "id", id)
 	if err != nil {
 		return nil, err
@@ -91,11 +92,28 @@ func (s *storage) AuthRequestByID(ctx context.Context, id string) (op.AuthReques
 	}
 	return request, nil
 }
+func (s *storage) AuthRequestByID(ctx context.Context, id string) (op.AuthRequest, error) {
+	request, err := s.loginRequestByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if request.SAML != nil {
+		return nil, oidc.ErrInvalidRequest()
+	}
+	return request, nil
+}
 func (s *storage) AuthRequestByCode(ctx context.Context, code string) (op.AuthRequest, error) {
-	return s.loadRequest(ctx, "code_hash", config.SecretHash(code))
+	request, err := s.loadRequest(ctx, "code_hash", config.SecretHash(code))
+	if err != nil {
+		return nil, err
+	}
+	if request.SAML != nil {
+		return nil, oidc.ErrInvalidGrant()
+	}
+	return request, nil
 }
 func (s *storage) SaveAuthCode(ctx context.Context, id, code string) error {
-	result, err := s.service.store.Database().Exec(ctx, "UPDATE oidc_authorization_requests SET code_hash=$2,expires_at=LEAST(expires_at,$3) WHERE id=$1 AND code_hash IS NULL AND consumed_at IS NULL AND expires_at>$4", id, config.SecretHash(code), s.service.now().Add(time.Minute), s.service.now())
+	result, err := s.service.store.Database().Exec(ctx, "UPDATE authentication_requests SET code_hash=$2,expires_at=LEAST(expires_at,$3) WHERE id=$1 AND protocol='oidc' AND code_hash IS NULL AND consumed_at IS NULL AND expires_at>$4", id, config.SecretHash(code), s.service.now().Add(time.Minute), s.service.now())
 	if err != nil {
 		return err
 	}
@@ -111,7 +129,7 @@ func (s *storage) saveRequest(ctx context.Context, request *authorizationRequest
 	if err != nil {
 		return err
 	}
-	result, err := s.service.store.Database().Exec(ctx, "UPDATE oidc_authorization_requests SET data=$2,revision=revision+1 WHERE id=$1 AND code_hash IS NULL AND consumed_at IS NULL AND expires_at>$3 AND revision=$4", request.ID, data, s.service.now(), request.Revision)
+	result, err := s.service.store.Database().Exec(ctx, "UPDATE authentication_requests SET data=$2,revision=revision+1 WHERE id=$1 AND code_hash IS NULL AND consumed_at IS NULL AND expires_at>$3 AND revision=$4", request.ID, data, s.service.now(), request.Revision)
 	if err != nil {
 		return err
 	}
@@ -201,7 +219,7 @@ func (s *storage) createCodeTokens(ctx context.Context, request *authorizationRe
 		}
 		s.service.events.Offer(operationResult(event, resultErr, commitReady))
 	}()
-	if !request.Complete {
+	if request.SAML != nil || !request.Complete {
 		return "", "", time.Time{}, oidc.ErrInvalidGrant()
 	}
 	now := s.service.now()
@@ -218,18 +236,18 @@ func (s *storage) createCodeTokens(ctx context.Context, request *authorizationRe
 	err := pgx.BeginFunc(ctx, s.service.store.Database(), func(tx pgx.Tx) error {
 		var sessionID string
 		var sessionExpiry time.Time
-		if err := tx.QueryRow(ctx, "SELECT id,expires_at FROM oidc_sessions WHERE id=$1 AND revoked_at IS NULL AND expires_at>$2 AND absolute_expires_at>$2 FOR UPDATE", request.SessionID, now).Scan(&sessionID, &sessionExpiry); err != nil {
+		if err := tx.QueryRow(ctx, "SELECT id,expires_at FROM authentication_sessions WHERE id=$1 AND revoked_at IS NULL AND expires_at>$2 AND absolute_expires_at>$2 FOR UPDATE", request.SessionID, now).Scan(&sessionID, &sessionExpiry); err != nil {
 			return grantEligibilityError(err)
 		}
 		expiry = minimum(expiry, sessionExpiry)
-		consumed, err := tx.Exec(ctx, "UPDATE oidc_authorization_requests SET consumed_at=$2 WHERE id=$1 AND consumed_at IS NULL AND code_hash IS NOT NULL AND expires_at>$2", request.ID, now)
+		consumed, err := tx.Exec(ctx, "UPDATE authentication_requests SET consumed_at=$2 WHERE id=$1 AND consumed_at IS NULL AND code_hash IS NOT NULL AND expires_at>$2", request.ID, now)
 		if err != nil {
 			return err
 		}
 		if consumed.RowsAffected() != 1 {
 			// Expiry or disappearance between lookup and consumption is not reuse.
 			var consumedAt *time.Time
-			if err := tx.QueryRow(ctx, "SELECT consumed_at FROM oidc_authorization_requests WHERE id=$1", request.ID).Scan(&consumedAt); err != nil {
+			if err := tx.QueryRow(ctx, "SELECT consumed_at FROM authentication_requests WHERE id=$1", request.ID).Scan(&consumedAt); err != nil {
 				return grantEligibilityError(err)
 			}
 			if consumedAt == nil {
@@ -275,7 +293,7 @@ func (s *storage) createCodeTokens(ctx context.Context, request *authorizationRe
 
 func (s *storage) accessGrant(ctx context.Context, id, subject string) (*grant, error) {
 	var data []byte
-	err := s.service.store.Database().QueryRow(ctx, `SELECT a.data FROM oidc_access_tokens a JOIN oidc_grants g ON g.id=a.grant_id JOIN oidc_sessions s ON s.id=g.session_id
+	err := s.service.store.Database().QueryRow(ctx, `SELECT a.data FROM oidc_access_tokens a JOIN oidc_grants g ON g.id=a.grant_id JOIN authentication_sessions s ON s.id=g.session_id
         WHERE a.id=$1 AND a.expires_at>$2 AND g.expires_at>$2 AND g.revoked_at IS NULL AND s.revoked_at IS NULL AND s.absolute_expires_at>$2`, id, s.service.now()).Scan(&data)
 	if err != nil {
 		return nil, &oidc.Error{ErrorType: "invalid_token"}
@@ -403,7 +421,7 @@ func (s *storage) endSession(ctx context.Context, sessionID, secret string) erro
 		var expected string
 		var verification []byte
 		var revokedAt *time.Time
-		err := tx.QueryRow(ctx, "SELECT secret_hash,verification,revoked_at FROM oidc_sessions WHERE id=$1 FOR UPDATE", sessionID).Scan(&expected, &verification, &revokedAt)
+		err := tx.QueryRow(ctx, "SELECT secret_hash,verification,revoked_at FROM authentication_sessions WHERE id=$1 FOR UPDATE", sessionID).Scan(&expected, &verification, &revokedAt)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil
 		}
@@ -423,7 +441,7 @@ func (s *storage) endSession(ctx context.Context, sessionID, secret string) erro
 			event.Actor = authevent.Actor{Kind: "factor", ID: verified.Factor.ID}
 		}
 		changed = true
-		if _, err := tx.Exec(ctx, "UPDATE oidc_sessions SET revoked_at=$2 WHERE id=$1", sessionID, s.service.now()); err != nil {
+		if _, err := tx.Exec(ctx, "UPDATE authentication_sessions SET revoked_at=$2 WHERE id=$1", sessionID, s.service.now()); err != nil {
 			return err
 		}
 		rows, err := tx.Query(ctx, "UPDATE oidc_grants SET revoked_at=$2 WHERE session_id=$1 AND revoked_at IS NULL RETURNING id,data", sessionID, s.service.now())

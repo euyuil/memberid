@@ -36,7 +36,7 @@ func TestAccountAuthorityResolvesSessionAndSelectedBinding(t *testing.T) {
 		t.Fatal(err)
 	}
 	const sessionID = "synthetic-account-session"
-	if _, err := s.pool.Exec(t.Context(), "INSERT INTO oidc_sessions(id,secret_hash,verification,expires_at,absolute_expires_at) VALUES($1,$1,$2,clock_timestamp()+interval '1 hour',clock_timestamp()+interval '2 hours')", sessionID, verification); err != nil {
+	if _, err := s.pool.Exec(t.Context(), "INSERT INTO authentication_sessions(id,secret_hash,verification,expires_at,absolute_expires_at) VALUES($1,$1,$2,clock_timestamp()+interval '1 hour',clock_timestamp()+interval '2 hours')", sessionID, verification); err != nil {
 		t.Fatal(err)
 	}
 	principal := AccountPrincipal(sessionID, member.ID, factor.ID, bindings[member.ID].ID)
@@ -85,13 +85,13 @@ func TestAccountAuthorityResolvesSessionAndSelectedBinding(t *testing.T) {
 		"source mismatch": "verification='{}'::jsonb",
 	} {
 		t.Run(name, func(t *testing.T) {
-			if _, err := s.pool.Exec(t.Context(), "UPDATE oidc_sessions SET "+mutation+" WHERE id=$1", sessionID); err != nil {
+			if _, err := s.pool.Exec(t.Context(), "UPDATE authentication_sessions SET "+mutation+" WHERE id=$1", sessionID); err != nil {
 				t.Fatal(err)
 			}
 			if err := s.AuthorizeAccountView(t.Context(), principal, org.ID); !errors.Is(err, ErrForbidden) {
 				t.Fatal("invalid source session retained authority", err)
 			}
-			if _, err := s.pool.Exec(t.Context(), "UPDATE oidc_sessions SET revoked_at=NULL,expires_at=clock_timestamp()+interval '1 hour',absolute_expires_at=clock_timestamp()+interval '2 hours',verification=$2 WHERE id=$1", sessionID, verification); err != nil {
+			if _, err := s.pool.Exec(t.Context(), "UPDATE authentication_sessions SET revoked_at=NULL,expires_at=clock_timestamp()+interval '1 hour',absolute_expires_at=clock_timestamp()+interval '2 hours',verification=$2 WHERE id=$1", sessionID, verification); err != nil {
 				t.Fatal(err)
 			}
 		})

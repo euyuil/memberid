@@ -59,7 +59,7 @@ func (service *Service) accountSession(r *http.Request, database accountQueryer,
 	if len(secret) != 43 {
 		return session, identity.ErrIneligible
 	}
-	query := "SELECT id,verification FROM oidc_sessions WHERE secret_hash=$1 AND revoked_at IS NULL AND expires_at>$2 AND absolute_expires_at>$2"
+	query := "SELECT id,verification FROM authentication_sessions WHERE secret_hash=$1 AND revoked_at IS NULL AND expires_at>$2 AND absolute_expires_at>$2"
 	if lock {
 		query += " FOR UPDATE"
 	}

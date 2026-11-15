@@ -23,6 +23,7 @@ const MaximumFileSize = 1 << 20
 
 // Installation contains references to protected local files, not database credentials.
 type Installation struct {
+	SAML                             *SAML                    `json:"saml,omitempty"`
 	AuthenticationEventRetentionDays int                      `json:"authenticationEventRetentionDays,omitempty"`
 	PhoneSendLimitsPerHour           identity.PhoneSendLimits `json:"phoneSendLimitsPerHour,omitzero"`
 	PhoneTrustedProxyCIDRs           []string                 `json:"phoneTrustedProxyCidrs,omitempty"`
@@ -58,11 +59,12 @@ type Client struct {
 
 type Loaded struct {
 	Installation
-	Secrets    Secrets
-	Clients    []Client
-	SigningKey *rsa.PrivateKey
-	KeyID      string
-	PublicKeys map[string]*rsa.PublicKey
+	SAMLSigning *SAMLSigning
+	Secrets     Secrets
+	Clients     []Client
+	SigningKey  *rsa.PrivateKey
+	KeyID       string
+	PublicKeys  map[string]*rsa.PublicKey
 }
 
 func ReadJSON(file string, target any) error {
@@ -94,6 +96,11 @@ func Load(directory string) (*Loaded, error) {
 	if err := result.Installation.Validate(); err != nil {
 		return nil, err
 	}
+	var signingErr error
+	result.SAMLSigning, signingErr = LoadSAMLSigning(directory, result.SAML)
+	if signingErr != nil {
+		return nil, signingErr
+	}
 	if err := ReadJSON(filepath.Join(directory, result.SecretsFile), &result.Secrets); err != nil {
 		return nil, err
 	}
@@ -116,6 +123,11 @@ func Load(directory string) (*Loaded, error) {
 		return nil, err
 	}
 	result.KeyID = KeyID(&result.SigningKey.PublicKey)
+	if result.SAMLSigning != nil {
+		if _, reused := result.PublicKeys[KeyID(&result.SAMLSigning.Key.PublicKey)]; reused {
+			return nil, errors.New("SAML must use a separate signing key from OIDC")
+		}
+	}
 	retained, ok := result.PublicKeys[result.KeyID]
 	if !ok || !retained.Equal(&result.SigningKey.PublicKey) {
 		return nil, errors.New("public key set must include the active signing key")

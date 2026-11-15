@@ -75,7 +75,7 @@ func TestExternalVerificationEvents(t *testing.T) {
 				path = parsed.String()
 				recorder := enableAuthenticationEvents(t, f)
 				if mode == "request lookup failed" {
-					if _, err := f.store.Database().Exec(t.Context(), "ALTER TABLE oidc_authorization_requests RENAME TO unavailable_authorization_requests"); err != nil {
+					if _, err := f.store.Database().Exec(t.Context(), "ALTER TABLE authentication_requests RENAME TO unavailable_authorization_requests"); err != nil {
 						t.Fatal(err)
 					}
 				}
@@ -85,7 +85,7 @@ func TestExternalVerificationEvents(t *testing.T) {
 					}
 				}
 				if mode == "rollback" {
-					if _, err := f.store.Database().Exec(t.Context(), "ALTER TABLE oidc_sessions ADD CONSTRAINT event_external_failure CHECK(false) NOT VALID"); err != nil {
+					if _, err := f.store.Database().Exec(t.Context(), "ALTER TABLE authentication_sessions ADD CONSTRAINT event_external_failure CHECK(false) NOT VALID"); err != nil {
 						t.Fatal(err)
 					}
 				}
@@ -162,7 +162,7 @@ func TestExternalVerificationEvents(t *testing.T) {
 				if success {
 					var bound, sessionSafe bool
 					if err := f.store.Database().QueryRow(t.Context(), `SELECT EXISTS(SELECT 1 FROM member_auth_factor_bindings WHERE id::text=$1 AND member_id=$2 AND authentication_factor_id=$3 AND organization_id=$4),
-      EXISTS(SELECT 1 FROM oidc_sessions WHERE id=$5 AND verification->'factor'->>'id'=$3 AND NOT (verification?'memberId' OR verification?'MemberID'))`, event.BindingID, event.MemberID, event.FactorID, event.OrganizationID, event.SessionID).Scan(&bound, &sessionSafe); err != nil || !bound || !sessionSafe || event.Actor.Kind != "member" || event.Actor.ID != event.MemberID {
+      EXISTS(SELECT 1 FROM authentication_sessions WHERE id=$5 AND verification->'factor'->>'id'=$3 AND NOT (verification?'memberId' OR verification?'MemberID'))`, event.BindingID, event.MemberID, event.FactorID, event.OrganizationID, event.SessionID).Scan(&bound, &sessionSafe); err != nil || !bound || !sessionSafe || event.Actor.Kind != "member" || event.Actor.ID != event.MemberID {
 						t.Fatal("uncommitted or shared Member authority", err, event)
 					}
 					replay := events[1]

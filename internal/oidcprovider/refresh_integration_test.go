@@ -124,7 +124,7 @@ func TestRefreshSurvivesBrowserExpiryAndPreservesDeadline(t *testing.T) {
 	if err := f.store.Database().QueryRow(t.Context(), "SELECT (data->>'authTime')::timestamptz,absolute_expires_at FROM oidc_grants").Scan(&originalAuth, &originalAbsolute); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.store.Database().Exec(t.Context(), "UPDATE oidc_sessions SET expires_at=clock_timestamp()-interval '1 hour'"); err != nil {
+	if _, err := f.store.Database().Exec(t.Context(), "UPDATE authentication_sessions SET expires_at=clock_timestamp()-interval '1 hour'"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := f.store.Database().Exec(t.Context(), "UPDATE oidc_grants SET expires_at=clock_timestamp()+interval '1 hour'"); err != nil {
@@ -160,7 +160,7 @@ func TestRefreshExpiryEligibilityAndRevocation(t *testing.T) {
 					t.Fatal(err)
 				}
 			case "absolute":
-				if _, err := f.store.Database().Exec(t.Context(), "UPDATE oidc_sessions SET absolute_expires_at=clock_timestamp()-interval '1 second'"); err != nil {
+				if _, err := f.store.Database().Exec(t.Context(), "UPDATE authentication_sessions SET absolute_expires_at=clock_timestamp()-interval '1 second'"); err != nil {
 					t.Fatal(err)
 				}
 			case "blocked":
@@ -214,7 +214,7 @@ func TestRefreshAbsoluteCapAndCoreClaimsAfterNarrowing(t *testing.T) {
 	if _, err := f.store.Database().Exec(t.Context(), "UPDATE oidc_refresh_tokens SET data=jsonb_set(data,'{absoluteExpiry}',to_jsonb($1::timestamptz))", deadline); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.store.Database().Exec(t.Context(), "UPDATE oidc_sessions SET absolute_expires_at=$1", deadline); err != nil {
+	if _, err := f.store.Database().Exec(t.Context(), "UPDATE authentication_sessions SET absolute_expires_at=$1", deadline); err != nil {
 		t.Fatal(err)
 	}
 	response := f.refresh("example-web", tokens["refresh_token"].(string), "profile")

@@ -115,7 +115,7 @@ func rotateMemberPassword(ctx context.Context, tx pgx.Tx, organizationID, member
 	if _, err = tx.Exec(ctx, "UPDATE password_credentials SET salt=$2,digest=$3,iterations=$4 WHERE authentication_factor_id=$1", factorID, hash.salt, hash.digest, hash.iterations); err != nil {
 		return err
 	}
-	if _, err = tx.Exec(ctx, "UPDATE oidc_sessions SET revoked_at=clock_timestamp() WHERE revoked_at IS NULL AND verification->'factor'->>'id'=$1", factorID); err != nil {
+	if _, err = tx.Exec(ctx, "UPDATE authentication_sessions SET revoked_at=clock_timestamp() WHERE revoked_at IS NULL AND verification->'factor'->>'id'=$1", factorID); err != nil {
 		return err
 	}
 	if _, err = tx.Exec(ctx, "UPDATE oidc_grants SET revoked_at=clock_timestamp() WHERE revoked_at IS NULL AND data->>'memberId'=$1", memberID); err != nil {

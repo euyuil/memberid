@@ -44,11 +44,11 @@ func NewID() string { return rand.Text() }
 
 func (event Event) valid() bool {
 	switch event.Type {
-	case "sms.send", "authentication.verify", "oidc.grant.issue", "session.revoke", "grant.revoke":
+	case "sms.send", "authentication.verify", "oidc.grant.issue", "saml.request", "saml.assertion.issue", "session.revoke", "grant.revoke":
 		if !oneOf(event.Outcome, "succeeded", "rejected", "failed") {
 			return false
 		}
-	case "oidc.authorizationCode.reuse", "oidc.refreshToken.reuse":
+	case "oidc.authorizationCode.reuse", "oidc.refreshToken.reuse", "saml.request.reuse":
 		if event.Outcome != "detected" {
 			return false
 		}

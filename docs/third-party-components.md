@@ -81,6 +81,23 @@ The stream adapter links unmodified `github.com/coder/websocket` v1.8.15, the [u
 
 ISC permits use, modification, and redistribution, including commercial use, with its copyright and permission notice retained. It includes a warranty disclaimer and no application source-disclosure obligation. This library is linked into the server executable and used by local WebSocket tests; it is not delivered to browsers. The official DingTalk SDK was consulted as a protocol reference, without copying its implementation or adding it as a dependency. This review does not select MemberID's own license.
 
+## SAML IdP and XML signatures
+
+The restricted IdP links the unmodified upstream stable `github.com/crewjam/saml` v0.6.3 (BSD-2-Clause). The exact downloaded module, its Go 1.25 minimum, dependency manifests, and root/nested license inventory were reviewed. Request validation and XML signing use the maintained IdP implementation; MemberID does not implement its own XML signature algorithm.
+
+| Additional linked module | Version | License |
+| --- | --- | --- |
+| github.com/beevik/etree | v1.8.1 | BSD-2-Clause |
+| github.com/russellhaering/goxmldsig | v1.6.1 | Apache-2.0 |
+| github.com/jonboulle/clockwork | v0.5.0 | Apache-2.0 |
+| golang.org/x/crypto | v0.55.0 | BSD-3-Clause and Go patent grant |
+
+Exact license texts and the applicable patent grant are retained under `third_party/modules/` and included in native/container distributions. No source modifications, browser assets, commercial-use restrictions, or application source-disclosure obligations are introduced. Preserve copyright/disclaimer text and Apache notice/patent terms when redistributing.
+
+The resolved upstream test/helper graph additionally includes `github.com/golang-jwt/jwt/v5` v5.3.1 (MIT), `github.com/google/go-cmp` v0.7.0 (BSD-3-Clause), `gotest.tools/v3` v3.5.2 (Apache-2.0, including nested BSD-3-Clause difflib material), and `golang.org/x/net` v0.57.0 (BSD-3-Clause and Go patent grant). Their actual license files were reviewed; these modules are not linked by `cmd/memberid` or distributed. The `x/net` v0.57.0 checksums supersede the earlier v0.55.0 entries. Other previously inventoried runtime versions remain unchanged.
+
+Security review identified [GO-2026-6909](https://pkg.go.dev/vuln/GO-2026-6909), an upstream SP assertion-parsing advisory with no fixed version listed at review. MemberID uses only the IdP side and does not call the affected `ServiceProvider.ParseResponse`, `ParseXMLResponse`, or `ParseXMLArtifactResponse` APIs. Its tests validate generated signatures directly before decoding typed data. This reachability distinction is not a claim that the module has no vulnerabilities; reassess before adding any SP/assertion-consumer functionality or updating the library.
+
 ## Native and container distributions
 
 The distribution builder uses the existing Go 1.27.4 toolchain with cgo disabled. Native packages retain the complete reviewed `third_party/` directory. The Linux container copies that same statically linked executable and its notices into `FROM scratch`; no base operating-system image, libc, shell, package manager, or extra dependency is incorporated. The image retains notices under `/usr/share/memberid/third_party/` and build metadata under `/usr/share/memberid/BUILDINFO`.

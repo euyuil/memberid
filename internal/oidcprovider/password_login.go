@@ -1,8 +1,6 @@
 package oidcprovider
 
 import (
-	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"slices"
@@ -12,12 +10,11 @@ import (
 	"github.com/euyuil/memberid/internal/config"
 	"github.com/euyuil/memberid/internal/identity"
 	"github.com/jackc/pgx/v5"
-	"github.com/zitadel/oidc/v3/pkg/oidc"
 )
 
-func (service *Service) passwordLogin(w http.ResponseWriter, r *http.Request, request *authorizationRequest, registered client) {
+func (service *Service) passwordLogin(w http.ResponseWriter, r *http.Request, request *authorizationRequest, registered loginPolicy) {
 	if registered.registration.SubjectKind != "member" || request.phonePending() || request.externalPending() || request.Verification != nil ||
-		slices.Contains(request.Input.Prompt, "none") {
+		slices.Contains(request.prompts(), "none") {
 		http.Error(w, "Password login is unavailable for this request", http.StatusBadRequest)
 		return
 	}
@@ -41,7 +38,7 @@ func (service *Service) passwordLogin(w http.ResponseWriter, r *http.Request, re
 		http.Error(w, "Login could not complete. Start a new login.", http.StatusServiceUnavailable)
 		return
 	}
-	if !registered.registration.Preauthorized || slices.Contains(request.Input.Prompt, "consent") {
+	if !registered.registration.Preauthorized || slices.Contains(request.prompts(), "consent") {
 		service.renderLogin(w, r, request, registered, "")
 		return
 	}
@@ -79,29 +76,4 @@ func (service *Service) verifyPasswordLogin(w http.ResponseWriter, r *http.Reque
 	event.FactorID, event.SessionID = admission.Factor.ID, completed.SessionID
 	service.cookie(w, "session", secret, expires.Sub(service.now()))
 	return nil
-}
-
-// Verify the request revision and create a session in the credential
-// verification transaction so retries cannot issue another session.
-func (service *Service) persistVerifiedSession(ctx context.Context, tx pgx.Tx, completed *authorizationRequest, verified identity.Verification, secret string) (time.Time, error) {
-	setVerification(completed, verified)
-	now := service.now()
-	data, err := json.Marshal(completed)
-	if err != nil {
-		return time.Time{}, err
-	}
-	result, err := tx.Exec(ctx, "UPDATE oidc_authorization_requests SET data=$2,revision=revision+1 WHERE id=$1 AND revision=$3 AND code_hash IS NULL AND consumed_at IS NULL AND expires_at>$4", completed.ID, data, completed.Revision, now)
-	if err != nil {
-		return time.Time{}, err
-	}
-	if result.RowsAffected() != 1 {
-		return time.Time{}, oidc.ErrInvalidRequest()
-	}
-	session, err := json.Marshal(completed.Verification)
-	if err != nil {
-		return time.Time{}, err
-	}
-	expires := minimum(now.Add(sessionIdleLifetime), completed.AbsoluteExpiry)
-	_, err = tx.Exec(ctx, "INSERT INTO oidc_sessions(id,secret_hash,verification,expires_at,absolute_expires_at) VALUES($1,$2,$3,$4,$5)", completed.SessionID, config.SecretHash(secret), session, expires, completed.AbsoluteExpiry)
-	return expires, err
 }

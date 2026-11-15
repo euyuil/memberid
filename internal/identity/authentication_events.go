@@ -44,7 +44,7 @@ func (filter AuthenticationEventFilter) validate() (from, to time.Time, cursor e
 		return time.Time{}, time.Time{}, eventCursor{}, ErrInvalid
 	}
 	if filter.Limit < 1 || filter.Limit > 100 ||
-		!slices.Contains([]string{"", "sms.send", "authentication.verify", "oidc.grant.issue", "oidc.authorizationCode.reuse", "oidc.refreshToken.reuse", "session.revoke", "grant.revoke"}, filter.Type) ||
+		!slices.Contains([]string{"", "sms.send", "authentication.verify", "oidc.grant.issue", "saml.request", "saml.assertion.issue", "saml.request.reuse", "oidc.authorizationCode.reuse", "oidc.refreshToken.reuse", "session.revoke", "grant.revoke"}, filter.Type) ||
 		!slices.Contains([]string{"", "succeeded", "rejected", "failed", "detected"}, filter.Outcome) ||
 		!slices.Contains([]string{"", "sms", "dingtalk", "feishu", "pwd"}, filter.Method) ||
 		filter.MemberID != "" && !ValidID(filter.MemberID, MemberKind) {

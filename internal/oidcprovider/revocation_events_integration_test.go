@@ -91,7 +91,7 @@ func TestSharedSessionRevocationEvents(t *testing.T) {
 				eventSQL(t, f, "ALTER TABLE oidc_grants ADD CONSTRAINT event_revoke_failure CHECK(revoked_at IS NULL) NOT VALID")
 			case "commit failed":
 				eventSQL(t, f, `CREATE FUNCTION event_commit_failure() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'synthetic commit failure' USING ERRCODE='23514'; END $$;
- CREATE CONSTRAINT TRIGGER event_commit_failure AFTER UPDATE ON oidc_sessions DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION event_commit_failure()`)
+ CREATE CONSTRAINT TRIGGER event_commit_failure AFTER UPDATE ON authentication_sessions DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION event_commit_failure()`)
 			case "audit failed":
 				eventSQL(t, f, "ALTER TABLE authentication_events ADD CONSTRAINT event_audit_failure CHECK(false) NOT VALID")
 			}
@@ -135,7 +135,7 @@ func TestSharedSessionRevocationEvents(t *testing.T) {
 					t.Fatal("rollback invented committed grant effects", events)
 				}
 				var revoked bool
-				if err := f.store.Database().QueryRow(t.Context(), "SELECT revoked_at IS NOT NULL FROM oidc_sessions").Scan(&revoked); err != nil || revoked {
+				if err := f.store.Database().QueryRow(t.Context(), "SELECT revoked_at IS NOT NULL FROM authentication_sessions").Scan(&revoked); err != nil || revoked {
 					t.Fatal(err, revoked)
 				}
 			} else {
@@ -205,7 +205,7 @@ func TestRepeatedSessionAndOperatorRevocationEvents(t *testing.T) {
 					}
 				}
 				var sessionID string
-				if err := f.store.Database().QueryRow(t.Context(), "SELECT id FROM oidc_sessions").Scan(&sessionID); err != nil {
+				if err := f.store.Database().QueryRow(t.Context(), "SELECT id FROM authentication_sessions").Scan(&sessionID); err != nil {
 					t.Fatal(err)
 				}
 				for range 2 {

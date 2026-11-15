@@ -54,7 +54,7 @@ func TestGrantInspectionAndTargetedRevocation(t *testing.T) {
 			t.Fatal("grant metadata exposed a credential or verifier")
 		}
 	}
-	if _, err := f.store.Database().Exec(t.Context(), "UPDATE oidc_sessions SET expires_at=clock_timestamp()-interval '1 second'"); err != nil {
+	if _, err := f.store.Database().Exec(t.Context(), "UPDATE authentication_sessions SET expires_at=clock_timestamp()-interval '1 second'"); err != nil {
 		t.Fatal(err)
 	}
 	after, err := InspectGrant(t.Context(), f.store, id)
@@ -126,7 +126,7 @@ func TestGrantLifecycleStatus(t *testing.T) {
 	if err != nil || expired.State != "expired" {
 		t.Fatal("expiry not reported", err)
 	}
-	if _, err := f.store.Database().Exec(t.Context(), "UPDATE oidc_sessions SET revoked_at=clock_timestamp()"); err != nil {
+	if _, err := f.store.Database().Exec(t.Context(), "UPDATE authentication_sessions SET revoked_at=clock_timestamp()"); err != nil {
 		t.Fatal(err)
 	}
 	revoked, err := InspectGrant(t.Context(), f.store, id)

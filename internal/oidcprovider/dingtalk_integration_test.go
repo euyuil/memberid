@@ -319,7 +319,7 @@ func TestDingTalkCallbackRejectsInvalidationDuringProviderIO(t *testing.T) {
 				t.Fatal("failed callback installed a session cookie")
 			}
 			var count int
-			for _, table := range []string{"dingtalk_identities", "oidc_sessions"} {
+			for _, table := range []string{"dingtalk_identities", "authentication_sessions"} {
 				if err := f.store.Database().QueryRow(t.Context(), "SELECT count(*) FROM "+table).Scan(&count); err != nil || count != 0 {
 					t.Fatal("invalidated callback left identity or session state", err)
 				}

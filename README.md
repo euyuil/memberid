@@ -2,7 +2,7 @@
 
 A self-hosted OpenID Connect provider with independent member identities for each organization.
 
-MemberID is under development. It provides PostgreSQL identity storage, an OIDC Authorization Code profile with PKCE, organization-scoped password login, optional phone, DingTalk, and Feishu authentication, and a shared organization administration console. The [first-time setup wizard](docs/administration.md#first-time-setup) creates the initial platform administrator in the reserved `org_system` organization.
+MemberID is under development. It provides PostgreSQL identity storage, OIDC Authorization Code with PKCE, an optional SAML 2.0 Identity Provider, and a shared administration console. Member sign-in supports organization-scoped passwords and optional phone, DingTalk, and Feishu authentication. The [first-time setup wizard](docs/administration.md#first-time-setup) creates the initial platform administrator in the reserved `org_system` organization.
 
 ## Development
 
@@ -15,4 +15,4 @@ go run ./cmd/memberid serve --listen 127.0.0.1:8080
 
 `GET http://127.0.0.1:8080/healthz` reports process availability only.
 
-See [operator setup](docs/operations.md), [administration console setup](docs/console.md), the [OIDC profile](docs/oidc.md), the [identity model](docs/identity-model.md), and [third-party component review](docs/third-party-components.md). The project's license has not been selected.
+See [operator setup](docs/operations.md), [administration console setup](docs/console.md), the [OIDC profile](docs/oidc.md), the optional [SAML IdP profile](docs/saml.md), the [identity model](docs/identity-model.md), and [third-party component review](docs/third-party-components.md). The project's license has not been selected.
