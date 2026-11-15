@@ -2,24 +2,33 @@ import { useState, type ReactNode } from "react"
 import { Menu as AccountMenu } from "@base-ui/react/menu"
 import {
   ChevronRight,
-  ChevronsLeft,
-  ChevronsRight,
+  ChevronsUpDown,
   Fingerprint,
   LogOut,
-  Menu,
   UserRound,
   type LucideIcon,
 } from "lucide-react"
-import { Button } from "@/components/ui/button"
 import { Link, type NavigationState } from "@/navigation"
 import { routeURL } from "@/routes"
+import { Separator } from "@/components/ui/separator"
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog"
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarInset,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarProvider,
+  SidebarRail,
+  SidebarTrigger,
+  useSidebar,
+} from "@/components/ui/sidebar"
+import { TooltipProvider } from "@/components/ui/tooltip"
 
 type NavigationItem = {
   label: string
@@ -48,41 +57,51 @@ type ConsoleLayoutProps = {
   onSignOut: () => Promise<void>
 }
 
-function Navigation({
-  items,
-  onNavigate,
-}: {
-  items: NavigationItem[]
-  onNavigate?: () => void
-}) {
+function Navigation({ items }: { items: NavigationItem[] }) {
+  const { setOpenMobile } = useSidebar()
   return (
-    <nav aria-label="主导航" className="console-navigation">
+    <nav aria-label="主导航">
       {[...new Set(items.map((item) => item.group))].map((group) => (
-        <div className="nav-group" key={group} role="group" aria-label={group}>
-          <span className="nav-group-label">{group}</span>
-          {items
-            .filter((item) => item.group === group)
-            .map(({ label, href, icon: Icon, active }) => (
-              <Link
-                className="nav-link"
-                key={label}
-                href={href}
-                aria-current={active ? "page" : undefined}
-                aria-label={label}
-                title={label}
-                onClick={onNavigate}
-              >
-                <Icon aria-hidden="true" />
-                <span className="nav-label">{label}</span>
-              </Link>
-            ))}
-        </div>
+        <SidebarGroup key={group} role="group" aria-label={group}>
+          <SidebarGroupLabel>{group}</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {items
+                .filter((item) => item.group === group)
+                .map(({ label, href, icon: Icon, active }) => (
+                  <SidebarMenuItem key={label}>
+                    <SidebarMenuButton
+                      render={<Link href={href} />}
+                      isActive={active}
+                      aria-current={active ? "page" : undefined}
+                      aria-label={label}
+                      tooltip={label}
+                      onClick={() => setOpenMobile(false)}
+                    >
+                      <Icon aria-hidden="true" />
+                      <span>{label}</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
       ))}
     </nav>
   )
 }
 
-export function ConsoleLayout({
+export function ConsoleLayout(props: ConsoleLayoutProps) {
+  return (
+    <TooltipProvider>
+      <SidebarProvider className="console-shell">
+        <ConsoleContents {...props} />
+      </SidebarProvider>
+    </TooltipProvider>
+  )
+}
+
+function ConsoleContents({
   navigation,
   breadcrumbs,
   actor,
@@ -90,8 +109,7 @@ export function ConsoleLayout({
   children,
   onSignOut,
 }: ConsoleLayoutProps) {
-  const [collapsed, setCollapsed] = useState(false)
-  const [mobileOpen, setMobileOpen] = useState(false)
+  const { isMobile, setOpenMobile } = useSidebar()
   const [signingOut, setSigningOut] = useState(false)
   const role = actor.platform ? "平台管理员" : "组织管理员"
   const signOut = async () => {
@@ -103,80 +121,24 @@ export function ConsoleLayout({
       setSigningOut(false)
     }
   }
-  const brand = (
-    <>
-      <span className="brand-mark">
-        <Fingerprint aria-hidden="true" />
-      </span>
-      <span className="brand-label">
-        MemberID<small>管理控制台</small>
-      </span>
-    </>
-  )
   const accountIdentity = (
     <>
-      <span className="actor-avatar" aria-hidden="true">
+      <span
+        className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted text-sm font-medium"
+        aria-hidden="true"
+      >
         {Array.from(actor.displayName)[0] || "M"}
       </span>
-      <span className="actor-info">
-        <strong title={actor.displayName}>{actor.displayName}</strong>
-        <span>{role}</span>
-      </span>
+      <div className="grid min-w-0 flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden">
+        <span className="truncate font-medium" title={actor.displayName}>
+          {actor.displayName}
+        </span>
+        <span className="truncate text-xs text-muted-foreground">{role}</span>
+      </div>
     </>
   )
-  const account = (onNavigate?: () => void) => (
-    <AccountMenu.Root>
-      <AccountMenu.Trigger
-        className="actor-trigger"
-        aria-label={`账户菜单 · ${actor.displayName}`}
-        title={actor.displayName}
-      >
-        {accountIdentity}
-      </AccountMenu.Trigger>
-      <AccountMenu.Portal>
-        <AccountMenu.Positioner
-          side="top"
-          align="start"
-          sideOffset={8}
-          className="account-menu-positioner"
-        >
-          <AccountMenu.Popup className="account-menu" aria-label="账户菜单">
-            <div className="account-menu-identity">{accountIdentity}</div>
-            <AccountMenu.Separator className="account-menu-separator" />
-            <AccountMenu.LinkItem
-              className="account-menu-item"
-              closeOnClick
-              render={
-                <Link
-                  href={routeURL({
-                    view: "members",
-                    org: actor.organizationId,
-                    member: actor.memberId,
-                  })}
-                  onClick={onNavigate}
-                />
-              }
-            >
-              <UserRound aria-hidden="true" />
-              我的成员资料
-            </AccountMenu.LinkItem>
-            <AccountMenu.Separator className="account-menu-separator" />
-            <AccountMenu.Item
-              className="account-menu-item"
-              disabled={signingOut}
-              closeOnClick={false}
-              onClick={signOut}
-            >
-              <LogOut aria-hidden="true" />
-              {signingOut ? "正在退出…" : "退出后台"}
-            </AccountMenu.Item>
-          </AccountMenu.Popup>
-        </AccountMenu.Positioner>
-      </AccountMenu.Portal>
-    </AccountMenu.Root>
-  )
   return (
-    <div className="console-shell" data-collapsed={collapsed}>
+    <>
       <a
         className="skip-link"
         href="#console-content"
@@ -187,57 +149,102 @@ export function ConsoleLayout({
       >
         跳到主要内容
       </a>
-      <aside id="console-sidebar" className="sidebar" aria-label="管理导航">
-        <Link className="brand" href="/" aria-label="MemberID 管理控制台">
-          {brand}
-        </Link>
-        <Navigation items={navigation} />
-        <div className="sidebar-footer">
-          <Button
-            variant="ghost"
-            className="nav-link sidebar-toggle"
-            aria-label={collapsed ? "展开侧栏" : "收起侧栏"}
-            title={collapsed ? "展开侧栏" : "收起侧栏"}
-            aria-expanded={!collapsed}
-            aria-controls="console-sidebar"
-            onClick={() => setCollapsed(!collapsed)}
-          >
-            {collapsed ? (
-              <ChevronsRight aria-hidden="true" />
-            ) : (
-              <ChevronsLeft aria-hidden="true" />
-            )}
-          </Button>
-          <div className="actor-panel">{account()}</div>
-        </div>
-      </aside>
-      <div className="workspace">
+      <Sidebar id="console-sidebar" collapsible="icon" aria-label="管理导航">
+        <SidebarHeader>
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                size="lg"
+                render={<Link href="/" />}
+                aria-label="MemberID 管理控制台"
+                onClick={() => setOpenMobile(false)}
+              >
+                <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+                  <Fingerprint aria-hidden="true" className="size-5!" />
+                </span>
+                <span className="truncate font-semibold group-data-[collapsible=icon]:hidden">
+                  MemberID
+                </span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarHeader>
+        <SidebarContent>
+          <Navigation items={navigation} />
+        </SidebarContent>
+        <SidebarFooter>
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <AccountMenu.Root>
+                <AccountMenu.Trigger
+                  render={<SidebarMenuButton size="lg" />}
+                  aria-label={`账户菜单 · ${actor.displayName}`}
+                  title={actor.displayName}
+                >
+                  {accountIdentity}
+                  <ChevronsUpDown
+                    aria-hidden="true"
+                    className="ml-auto group-data-[collapsible=icon]:hidden"
+                  />
+                </AccountMenu.Trigger>
+                <AccountMenu.Portal>
+                  <AccountMenu.Positioner
+                    side={isMobile ? "bottom" : "right"}
+                    align="end"
+                    sideOffset={4}
+                    className="account-menu-positioner"
+                  >
+                    <AccountMenu.Popup
+                      className="account-menu"
+                      aria-label="账户菜单"
+                    >
+                      <div className="account-menu-identity">
+                        {accountIdentity}
+                      </div>
+                      <AccountMenu.Separator className="account-menu-separator" />
+                      <AccountMenu.LinkItem
+                        className="account-menu-item"
+                        closeOnClick
+                        render={
+                          <Link
+                            href={routeURL({
+                              view: "members",
+                              org: actor.organizationId,
+                              member: actor.memberId,
+                            })}
+                            onClick={() => setOpenMobile(false)}
+                          />
+                        }
+                      >
+                        <UserRound aria-hidden="true" />
+                        我的成员资料
+                      </AccountMenu.LinkItem>
+                      <AccountMenu.Separator className="account-menu-separator" />
+                      <AccountMenu.Item
+                        className="account-menu-item"
+                        disabled={signingOut}
+                        closeOnClick={false}
+                        onClick={signOut}
+                      >
+                        <LogOut aria-hidden="true" />
+                        {signingOut ? "正在退出…" : "退出后台"}
+                      </AccountMenu.Item>
+                    </AccountMenu.Popup>
+                  </AccountMenu.Positioner>
+                </AccountMenu.Portal>
+              </AccountMenu.Root>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarFooter>
+        <SidebarRail aria-controls="console-sidebar" />
+      </Sidebar>
+      <SidebarInset className="min-w-0">
         <header className="scope-bar">
-          <Dialog open={mobileOpen} onOpenChange={setMobileOpen}>
-            <DialogTrigger
-              render={
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="mobile-navigation-toggle"
-                  aria-label="打开导航"
-                />
-              }
-            >
-              <Menu />
-            </DialogTrigger>
-            <DialogContent className="navigation-drawer translate-x-0 translate-y-0 data-open:zoom-in-100 data-closed:zoom-out-100">
-              <DialogTitle className="brand">{brand}</DialogTitle>
-              <DialogDescription className="sr-only">主导航</DialogDescription>
-              <Navigation
-                items={navigation}
-                onNavigate={() => setMobileOpen(false)}
-              />
-              <div className="actor-panel">
-                {account(() => setMobileOpen(false))}
-              </div>
-            </DialogContent>
-          </Dialog>
+          <SidebarTrigger aria-controls="console-sidebar" />
+          <Separator
+            orientation="vertical"
+            className="scope-divider h-4! data-vertical:self-center"
+          />
           <nav className="console-breadcrumbs" aria-label="面包屑">
             <ol>
               {breadcrumbs.map(({ label, href, state }, index) => (
@@ -263,10 +270,10 @@ export function ConsoleLayout({
           </nav>
           <div className="scope-control">{scope}</div>
         </header>
-        <main id="console-content" className="page-content" tabIndex={-1}>
+        <div id="console-content" className="page-content w-full" tabIndex={-1}>
           {children}
-        </main>
-      </div>
-    </div>
+        </div>
+      </SidebarInset>
+    </>
   )
 }
