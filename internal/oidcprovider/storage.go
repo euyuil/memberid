@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/euyuil/memberid/internal/authevent"
 	"github.com/euyuil/memberid/internal/config"
 	"github.com/euyuil/memberid/internal/identity"
 	"github.com/jackc/pgx/v5"
@@ -148,7 +149,10 @@ func (s *storage) eligible(ctx context.Context, database databaseReader, g *gran
 		return oidc.ErrInvalidGrant()
 	}
 	var factorType string
-	if err := database.QueryRow(ctx, "SELECT type FROM authentication_factors WHERE id=$1 AND status='active'", g.FactorID).Scan(&factorType); err != nil || factorType != g.FactorType {
+	if err := database.QueryRow(ctx, "SELECT type FROM authentication_factors WHERE id=$1 AND status='active'", g.FactorID).Scan(&factorType); err != nil {
+		return grantEligibilityError(err)
+	}
+	if factorType != g.FactorType {
 		return oidc.ErrInvalidGrant()
 	}
 	if g.MemberID == "" {
@@ -161,7 +165,10 @@ func (s *storage) eligible(ctx context.Context, database databaseReader, g *gran
 		return oidc.ErrInvalidGrant()
 	}
 	binding, err := identity.MemberEvidence(ctx, database, g.FactorID, g.MemberID, g.OrganizationID)
-	if err != nil || g.BindingID != "" && binding != g.BindingID {
+	if err != nil {
+		return grantEligibilityError(err)
+	}
+	if g.BindingID != "" && binding != g.BindingID {
 		return oidc.ErrInvalidGrant()
 	}
 	g.BindingID = binding
@@ -176,7 +183,24 @@ func (s *storage) CreateAccessToken(ctx context.Context, input op.TokenRequest) 
 	access, _, expiry, err := s.createCodeTokens(ctx, request, false)
 	return access, expiry, err
 }
-func (s *storage) createCodeTokens(ctx context.Context, request *authorizationRequest, withRefresh bool) (string, string, time.Time, error) {
+func (s *storage) createCodeTokens(ctx context.Context, request *authorizationRequest, withRefresh bool) (access string, refresh string, expiry time.Time, resultErr error) {
+	event := grantEvent(ctx, &request.grant)
+	event.Type, event.GrantID = "oidc.grant.issue", ""
+	// The protocol library authenticates and matches this client before issuance.
+	event.Actor = authevent.Actor{Kind: "client", ID: request.ClientID}
+	replayed, revoked, commitReady := false, false, false
+	var reuse authevent.Event
+	var replayErr error
+	defer func() {
+		if replayed {
+			s.recordReuse(reuse, revoked, replayErr, commitReady)
+			return
+		}
+		if resultErr == nil {
+			event.GrantID = request.ID
+		}
+		s.service.events.Offer(operationResult(event, resultErr, commitReady))
+	}()
 	if !request.Complete {
 		return "", "", time.Time{}, oidc.ErrInvalidGrant()
 	}
@@ -184,19 +208,18 @@ func (s *storage) createCodeTokens(ctx context.Context, request *authorizationRe
 	if !request.AbsoluteExpiry.After(now.Add(5 * time.Minute)) {
 		return "", "", time.Time{}, oidc.ErrInvalidGrant()
 	}
-	expiry := minimum(now.Add(accessLifetime), request.AbsoluteExpiry)
+	expiry = minimum(now.Add(accessLifetime), request.AbsoluteExpiry)
 	tokenID := newID()
 	refreshSecret := ""
 	if withRefresh {
 		refreshSecret = config.RandomSecret()
 	}
-	replayed := false
 	observation, observationErr := s.observeDirectory(ctx, &request.grant)
 	err := pgx.BeginFunc(ctx, s.service.store.Database(), func(tx pgx.Tx) error {
 		var sessionID string
 		var sessionExpiry time.Time
 		if err := tx.QueryRow(ctx, "SELECT id,expires_at FROM oidc_sessions WHERE id=$1 AND revoked_at IS NULL AND expires_at>$2 AND absolute_expires_at>$2 FOR UPDATE", request.SessionID, now).Scan(&sessionID, &sessionExpiry); err != nil {
-			return oidc.ErrInvalidGrant()
+			return grantEligibilityError(err)
 		}
 		expiry = minimum(expiry, sessionExpiry)
 		consumed, err := tx.Exec(ctx, "UPDATE oidc_authorization_requests SET consumed_at=$2 WHERE id=$1 AND consumed_at IS NULL AND code_hash IS NOT NULL AND expires_at>$2", request.ID, now)
@@ -204,8 +227,20 @@ func (s *storage) createCodeTokens(ctx context.Context, request *authorizationRe
 			return err
 		}
 		if consumed.RowsAffected() != 1 {
+			// Expiry or disappearance between lookup and consumption is not reuse.
+			var consumedAt *time.Time
+			if err := tx.QueryRow(ctx, "SELECT consumed_at FROM oidc_authorization_requests WHERE id=$1", request.ID).Scan(&consumedAt); err != nil {
+				return grantEligibilityError(err)
+			}
+			if consumedAt == nil {
+				return oidc.ErrInvalidGrant()
+			}
 			replayed = true
-			_, err := tx.Exec(ctx, "UPDATE oidc_grants SET revoked_at=$2 WHERE id=$1", request.ID, now)
+			reuse = grantEvent(ctx, &request.grant)
+			reuse.EventID, reuse.Type, reuse.Outcome = authevent.NewID(), "oidc.authorizationCode.reuse", "detected"
+			reuse.Actor, reuse.OccurredAt = event.Actor, s.service.now().UTC()
+			changed, err := tx.Exec(ctx, "UPDATE oidc_grants SET revoked_at=$2 WHERE id=$1 AND revoked_at IS NULL", request.ID, now)
+			revoked, commitReady = changed.RowsAffected() == 1, err == nil
 			return err
 		}
 		if err := s.validateDirectory(ctx, tx, observation, observationErr); err != nil {
@@ -224,8 +259,11 @@ func (s *storage) createCodeTokens(ctx context.Context, request *authorizationRe
 		if _, err := tx.Exec(ctx, "INSERT INTO oidc_grants(id,client_id,session_id,data,expires_at,absolute_expires_at) VALUES($1,$2,$3,$4,$5,$6)", request.ID, request.ClientID, request.SessionID, data, minimum(now.Add(sessionIdleLifetime), request.AbsoluteExpiry), request.AbsoluteExpiry); err != nil {
 			return err
 		}
-		return s.persistTokens(ctx, tx, &request.grant, tokenID, refreshSecret, expiry)
+		err = s.persistTokens(ctx, tx, &request.grant, tokenID, refreshSecret, expiry)
+		commitReady = err == nil
+		return err
 	})
+	replayErr = err
 	if err != nil {
 		return "", "", time.Time{}, err
 	}
@@ -371,7 +409,7 @@ func (s *storage) lockFeishuOrganization(ctx context.Context, tx pgx.Tx, g *gran
 	}
 	var id string
 	if err := tx.QueryRow(ctx, "SELECT id FROM organizations WHERE id=$1 FOR SHARE", g.OrganizationID).Scan(&id); err != nil {
-		return oidc.ErrInvalidGrant()
+		return grantEligibilityError(err)
 	}
 	return nil
 }

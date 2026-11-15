@@ -3,9 +3,10 @@
 This document records the agreed design for MemberID authentication events:
 event meaning, correlation, organization visibility, retention, and delivery
 failure behavior. **The store, bounded writer, retention cleanup, `sms.send`,
-and supported-method `authentication.verify` events are implemented.** OIDC
-issuance/replay/revocation events, authorized queries, and console views remain
-planned. Authentication policy and token claims are unchanged.
+supported-method `authentication.verify`, initial grant issuance, and confirmed
+OIDC reuse events with their resulting revocations are implemented.** Other
+revocation triggers, authorized queries, and console views remain planned.
+Authentication policy and token claims are unchanged.
 
 The existing [management history](administration.md#availability-and-audit)
 records selected successful management changes atomically. It remains a
@@ -325,6 +326,23 @@ no newly admitted Member or session; a failed account link can still identify it
 previously authenticated Member actor while omitting the uncommitted target factor.
 Feishu account linking is not introduced.
 
+Initial grant issuance records the result of the code-redemption transaction.
+A code or factor verification alone does not produce an issuance success. Failed
+issuance retains its established subject/session context but omits a new grant ID.
+Client, redirect URI, and PKCE validation remain in the maintained OIDC library;
+requests rejected there never reach this issuance boundary or become confirmed
+reuse events. Normal successful refresh remains outside the event catalog.
+
+Confirmed code/Refresh Token reuse records the authenticated client as actor,
+with the grant's Member or factor as the affected subject. Reuse and any resulting
+revocation have distinct event IDs, linked by `causationId`. Detection remains
+valid when the revocation transaction fails; only a confirmed commit produces a
+successful revocation event. An already-revoked grant does not produce another
+state-change event. Refresh processing still stops at an ineligible/revoked family
+before testing consumption. Code expiry between lookup and consumption is a
+rejected issuance, not evidence of reuse. No code, token, verifier, client secret,
+or credential hash is copied into events.
+
 The fresh-install schema is version 18. Existing databases are never migrated or
 reset automatically. The new store intentionally has no foreign keys to transient
 sessions, flows, grants, or causal events. Events remain historical evidence after
@@ -346,7 +364,10 @@ they do not prove real SMS delivery. External-provider tests cover committed
 Member admission/linking, provider failures versus rejection/cancellation, callback
 replay and browser binding, rollback, lookup failures, and audit insert denial.
 Real DingTalk and Feishu provider verification is separate from these synthetic
-adapter and HTTP checks.
+adapter and HTTP checks. OIDC event tests exercise client/PKCE rejection, Member
+and factor subjects, issuance rollback, eligibility-read failures, deferred commit
+failures, expiry between lookup and consumption, concurrent code exchange, and
+replay revocation despite audit insert denial.
 
 Remaining catalog and query work must demonstrate the following before claiming
 support:
