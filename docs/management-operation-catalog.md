@@ -34,9 +34,10 @@ Built-in role permissions live in code; assignments remain in `administrators`.
 The pure evaluator has no permission lock or cross-request allow cache. Its
 database-backed tests cover completion after revocation of an admitted bounded
 update and denial of the next decision. Existing lifecycle locks remain in place.
-Protected management read services reuse raw store queries that also serve
+The protected `identity.ManagementService` reuses raw store queries that also serve
 protocol flows and installation-only interfaces; those raw queries do not accept
-arbitrary Member authority. The private listener continues to authenticate its
+arbitrary Member authority. Console handlers do not retain the raw store or a
+database connection. The private listener continues to authenticate its
 installation credential for every read.
 
 ## Reading the catalog

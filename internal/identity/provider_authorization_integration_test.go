@@ -38,23 +38,23 @@ func TestProviderSaveAuthorizationAfterVerification(t *testing.T) {
 			}
 			enabled := true
 			input := ProviderInput{DisplayName: "Example provider", TenantID: "example-tenant", ClientID: "cli_example", ClientSecret: "synthetic-provider-secret", Enabled: &enabled}
-			if _, err := ConfigureProvider(t.Context(), principal, otherOrg.ID, kind, "", input, dingTalk, feishuApps); !errors.Is(err, ErrForbidden) || calls != 0 {
+			if _, err := NewManagementService(s, dingTalk, feishuApps).ConfigureProvider(t.Context(), principal, otherOrg.ID, kind, "", input); !errors.Is(err, ErrForbidden) || calls != 0 {
 				t.Fatal("cross-organization provider call", calls, err)
 			}
-			if _, err := s.ManagementProviders(t.Context(), principal, otherOrg.ID); !errors.Is(err, ErrForbidden) {
+			if _, err := NewManagementService(s, nil, nil).Providers(t.Context(), principal, otherOrg.ID); !errors.Is(err, ErrForbidden) {
 				t.Fatal(err)
 			}
-			created, err := ConfigureProvider(t.Context(), principal, org.ID, kind, "", input, dingTalk, feishuApps)
+			created, err := NewManagementService(s, dingTalk, feishuApps).ConfigureProvider(t.Context(), principal, org.ID, kind, "", input)
 			if err != nil || calls != 1 {
 				t.Fatal(created, calls, err)
 			}
 			enabled = false
 			input.DisplayName, input.ClientSecret, input.ExpectedRevision = "Disabled provider", "", created.Revision
-			updated, err := ConfigureProvider(t.Context(), principal, org.ID, kind, created.ID, input, dingTalk, feishuApps)
+			updated, err := NewManagementService(s, dingTalk, feishuApps).ConfigureProvider(t.Context(), principal, org.ID, kind, created.ID, input)
 			if err != nil || updated.Enabled || updated.DisplayName != input.DisplayName {
 				t.Fatal(updated, err)
 			}
-			providers, err := s.ManagementProviders(t.Context(), principal, org.ID)
+			providers, err := NewManagementService(s, nil, nil).Providers(t.Context(), principal, org.ID)
 			if err != nil || len(providers) != 1 || providers[0].ID != created.ID {
 				t.Fatal(providers, err)
 			}
@@ -64,7 +64,7 @@ func TestProviderSaveAuthorizationAfterVerification(t *testing.T) {
 				calls++
 				return s.SetAdministrator(t.Context(), OperatorPrincipal(), org.ID, local.ID, false)
 			}
-			if _, err := ConfigureProvider(t.Context(), principal, org.ID, kind, created.ID, input, dingTalk, feishuApps); !errors.Is(err, ErrForbidden) {
+			if _, err := NewManagementService(s, dingTalk, feishuApps).ConfigureProvider(t.Context(), principal, org.ID, kind, created.ID, input); !errors.Is(err, ErrForbidden) {
 				t.Fatal("revoked during verification but saved", err)
 			}
 			providers, err = s.Providers(t.Context(), org.ID)
@@ -131,7 +131,7 @@ func TestProviderStatusPreservesLastAdministrator(t *testing.T) {
 	principal := administratorActor(t, s, member, factor).Principal()
 	enabled := false
 	input := ProviderInput{DisplayName: "Must remain enabled", TenantID: app.CorpID, ClientID: app.ClientID, Enabled: &enabled, ExpectedRevision: app.Revision}
-	if _, err := ConfigureProvider(t.Context(), principal, org.ID, "dingtalk", app.Namespace, input, apps, nil); !errors.Is(err, ErrLastAdministrator) {
+	if _, err := NewManagementService(s, apps, nil).ConfigureProvider(t.Context(), principal, org.ID, "dingtalk", app.Namespace, input); !errors.Is(err, ErrLastAdministrator) {
 		t.Fatal(err)
 	}
 	current, err := apps.Inspect(t.Context(), org.ID)

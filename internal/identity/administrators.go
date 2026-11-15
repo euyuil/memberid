@@ -28,10 +28,6 @@ type ManagementActor struct {
 	Platform       bool   `json:"platform"`
 }
 
-func (store *Store) ManagementActor(ctx context.Context, memberID, grantID string) (ManagementActor, error) {
-	return managementActor(ctx, store.pool, memberID, grantID)
-}
-
 func managementActor(ctx context.Context, db queryer, memberID, grantID string) (ManagementActor, error) {
 	var actor ManagementActor
 	err := db.QueryRow(ctx, `SELECT m.id,m.organization_id,m.display_name`+eligibleBindings+`
@@ -78,9 +74,13 @@ func preserveAdministrators(ctx context.Context, tx pgx.Tx, organizationID strin
 }
 
 func (store *Store) SetAdministrator(ctx context.Context, principal Principal, organizationID, memberID string, enabled bool) error {
-	if principal.kind != memberPrincipal && principal.kind != operatorPrincipal {
+	if principal.kind != operatorPrincipal {
 		return ErrForbidden
 	}
+	return store.setAdministrator(ctx, principal, organizationID, memberID, enabled)
+}
+
+func (store *Store) setAdministrator(ctx context.Context, principal Principal, organizationID, memberID string, enabled bool) error {
 	if !ValidID(organizationID, OrganizationKind) || !ValidID(memberID, MemberKind) {
 		return ErrInvalid
 	}
@@ -148,7 +148,8 @@ func (store *Store) AdministratorIDs(ctx context.Context, organizationID string)
 
 // Manage performs a bounded console mutation with authorization and audit in
 // the same transaction. Only this fixed action set is available to browsers.
-func (store *Store) Manage(ctx context.Context, principal Principal, action, organizationID, memberID string, change ManagementChange) (any, error) {
+func (service *ManagementService) Manage(ctx context.Context, principal Principal, action, organizationID, memberID string, change ManagementChange) (any, error) {
+	store := service.store
 	if principal.kind != memberPrincipal {
 		return nil, ErrForbidden
 	}

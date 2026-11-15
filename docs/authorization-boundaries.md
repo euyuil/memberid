@@ -159,6 +159,12 @@ invariants.
 - OIDC ID Tokens and access tokens remain JWTs under the current profile;
   Refresh Tokens remain opaque credentials. No claim, issuer, subject,
   audience, or token-lifetime change is introduced here.
+- Console handlers use `identity.ManagementService`, which exposes authorized
+  Member operations without embedding the identity store or exposing raw SQL,
+  unguarded reads, installation operations, or provider credentials. The console
+  constructor wires the dependencies; handlers keep only this service and the
+  bounded login/session methods in `consolestate.Store`. Trusted CLI and private
+  management interfaces retain their separate installation entry contracts.
 - The console authenticates through OIDC and gives the browser an opaque
   server-side session cookie. Request entry resolves the cookie to Member/grant
   references. Resource services read current administrator assignments, identity
