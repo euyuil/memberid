@@ -23,6 +23,14 @@ import {
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import {
   Table,
   TableBody,
   TableCell,
@@ -51,6 +59,10 @@ export type ProviderDirectory = {
 }
 
 const names = { dingtalk: "钉钉", feishu: "飞书" }
+const providerTypes: { value: Kind; label: string }[] = [
+  { value: "feishu", label: names.feishu },
+  { value: "dingtalk", label: names.dingtalk },
+]
 
 export function Providers({
   directory,
@@ -237,6 +249,9 @@ function ProviderDialog({
   )
   const [pending, setPending] = useState(false)
   const [error, setError] = useState("")
+  const availableTypes = system
+    ? providerTypes.filter(({ value }) => value === "dingtalk")
+    : providerTypes
   const callback =
     kind === "feishu" ? directory.feishuCallback : directory.dingTalkCallback
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -286,16 +301,27 @@ function ProviderDialog({
             <FieldGroup className="gap-3">
               <Field>
                 <FieldLabel htmlFor="provider-type">类型</FieldLabel>
-                <select
-                  id="provider-type"
+                <Select<Kind>
+                  items={availableTypes}
                   value={kind}
                   disabled={pending || !!item || system}
-                  className="h-9 rounded-md border border-input bg-background px-2 text-sm"
-                  onChange={(event) => setKind(event.target.value as Kind)}
+                  onValueChange={(value) => {
+                    if (value) setKind(value)
+                  }}
                 >
-                  {!system && <option value="feishu">飞书</option>}
-                  <option value="dingtalk">钉钉</option>
-                </select>
+                  <SelectTrigger id="provider-type" className="h-9 w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      {availableTypes.map(({ value, label }) => (
+                        <SelectItem key={value} value={value}>
+                          {label}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
               </Field>
               <Field>
                 <FieldLabel htmlFor="provider-name">登录页显示名称</FieldLabel>

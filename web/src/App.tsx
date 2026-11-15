@@ -28,6 +28,14 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -1569,6 +1577,17 @@ type MemberFilters = {
   administrator: string
 }
 
+const memberStatusOptions = [
+  { value: "all", label: "全部状态" },
+  { value: "active", label: "未阻断" },
+  { value: "blocked", label: "已阻断" },
+]
+const memberRoleOptions = [
+  { value: "all", label: "全部成员" },
+  { value: "yes", label: "管理员" },
+  { value: "no", label: "普通成员" },
+]
+
 function MemberSearch({
   filters,
   onSubmit,
@@ -1603,30 +1622,46 @@ function MemberSearch({
           onChange={(event) => setQuery(event.target.value)}
         />
       </label>
-      <label className="filter-field">
-        <span className="sr-only">身份状态</span>
-        <select
-          className="filter-select"
-          value={status}
-          onChange={(event) => setStatus(event.target.value)}
-        >
-          <option value="">全部状态</option>
-          <option value="active">未阻断</option>
-          <option value="blocked">已阻断</option>
-        </select>
-      </label>
-      <label className="filter-field">
-        <span className="sr-only">管理权限</span>
-        <select
-          className="filter-select"
-          value={administrator}
-          onChange={(event) => setAdministrator(event.target.value)}
-        >
-          <option value="">全部成员</option>
-          <option value="yes">管理员</option>
-          <option value="no">普通成员</option>
-        </select>
-      </label>
+      <Select
+        items={memberStatusOptions}
+        value={status || "all"}
+        onValueChange={(value) =>
+          setStatus(value === "all" ? "" : (value ?? ""))
+        }
+      >
+        <SelectTrigger aria-label="身份状态" className="min-w-28">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectGroup>
+            {memberStatusOptions.map(({ value, label }) => (
+              <SelectItem key={value} value={value}>
+                {label}
+              </SelectItem>
+            ))}
+          </SelectGroup>
+        </SelectContent>
+      </Select>
+      <Select
+        items={memberRoleOptions}
+        value={administrator || "all"}
+        onValueChange={(value) =>
+          setAdministrator(value === "all" ? "" : (value ?? ""))
+        }
+      >
+        <SelectTrigger aria-label="管理权限" className="min-w-28">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectGroup>
+            {memberRoleOptions.map(({ value, label }) => (
+              <SelectItem key={value} value={value}>
+                {label}
+              </SelectItem>
+            ))}
+          </SelectGroup>
+        </SelectContent>
+      </Select>
       <div className="flex items-center gap-2">
         <Button type="submit" variant="outline">
           搜索

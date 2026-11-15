@@ -188,13 +188,10 @@ code { font-size: 11px; color: var(--muted-foreground); overflow-wrap: anywhere;
 .directory-toolbar h2 { font-size: 14px; }
 .directory-filters { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--border); }
 .directory-filters label { color: var(--muted-foreground); font-size: 11px; }
-.directory-filters input, .directory-filters select { color: var(--foreground); }
+.directory-filters input { color: var(--foreground); }
 .search-field { position: relative; display: block; flex: 1; min-width: 180px; max-width: 320px; }
 .search-field > svg { position: absolute; top: 8px; left: 10px; width: 16px; height: 16px; pointer-events: none; }
 .search-field > input { padding-left: 34px; }
-.filter-field { display: flex; align-items: center; }
-.filter-select { height: 32px; border: 1px solid var(--input); border-radius: 8px; background: var(--card); padding: 0 28px 0 10px; font-size: 13px; }
-.filter-select:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 .directory th { height: 40px; padding-inline: 16px; background: color-mix(in srgb, var(--muted) 60%, var(--card)); font-size: 12px; font-weight: 500; color: var(--muted-foreground); }
 .directory td { height: 44px; padding: 6px 16px; font-size: 13px; }
 .cell-status { display: flex; align-items: center; flex-wrap: nowrap; gap: 8px; }
