@@ -47,7 +47,7 @@ func authenticationHandler(ctx context.Context, directory string) (http.Handler,
 	var phone *identity.PhoneVerifier
 	if sender != nil {
 		key, _ := base64.StdEncoding.DecodeString(loaded.Secrets.PhoneCodeKey)
-		phone, err = identity.NewPhoneVerifier(store, key, sender)
+		phone, err = identity.NewPhoneVerifier(store, key, sender, loaded.PhoneSendLimitsPerHour)
 		if err != nil {
 			store.Close()
 			return nil, nil, err

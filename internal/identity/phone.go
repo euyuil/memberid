@@ -43,13 +43,18 @@ type PhoneVerifier struct {
 	key    []byte
 	sender SMSSender
 	now    func() time.Time
+	limits PhoneSendLimits
 }
 
-func NewPhoneVerifier(store *Store, key []byte, sender SMSSender) (*PhoneVerifier, error) {
+func NewPhoneVerifier(store *Store, key []byte, sender SMSSender, limits PhoneSendLimits) (*PhoneVerifier, error) {
 	if store == nil || len(key) != 32 || sender == nil {
 		return nil, ErrInvalid
 	}
-	return &PhoneVerifier{store: store, key: append([]byte(nil), key...), sender: sender, now: time.Now}, nil
+	limits, err := limits.WithDefaults()
+	if err != nil {
+		return nil, err
+	}
+	return &PhoneVerifier{limits: limits, store: store, key: append([]byte(nil), key...), sender: sender, now: time.Now}, nil
 }
 
 func NormalizePhone(number string) (string, error) {
@@ -71,10 +76,14 @@ func (verifier *PhoneVerifier) codeMAC(id, phone, binding, code string) []byte {
 	return mac.Sum(nil)
 }
 
-func (verifier *PhoneVerifier) Start(ctx context.Context, binding, number string) (PhoneChallenge, error) {
+func (verifier *PhoneVerifier) Start(ctx context.Context, binding, number string, source PhoneSendSource) (PhoneChallenge, error) {
 	phone, err := NormalizePhone(number)
 	if err != nil || !validText(binding, 256) || len(binding) < 32 {
 		return PhoneChallenge{}, ErrInvalid
+	}
+	hashes, err := verifier.sendHashes(source)
+	if err != nil {
+		return PhoneChallenge{}, err
 	}
 	var entropy [32]byte
 	if _, err := rand.Read(entropy[:]); err != nil {
@@ -86,25 +95,22 @@ func (verifier *PhoneVerifier) Start(ctx context.Context, binding, number string
 		return PhoneChallenge{}, err
 	}
 	code := fmt.Sprintf("%06d", value.Int64())
-	now := verifier.now().UTC()
-	challenge := PhoneChallenge{ID: id, ExpiresAt: now.Add(5 * time.Minute), RetryAfter: time.Minute}
+	var challenge PhoneChallenge
 	bindingHash := sha256.Sum256([]byte(binding))
 	err = pgx.BeginFunc(ctx, verifier.store.pool, func(tx pgx.Tx) error {
-		if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtextextended($1,0))", "phone:"+phone); err != nil {
+		// Serialize quota admission across replicas, releasing before provider I/O.
+		if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtextextended('phone-send-budget',0))"); err != nil {
 			return err
 		}
-		var count int
-		var recent bool
-		if err := tx.QueryRow(ctx, "SELECT count(*),COALESCE(bool_or(created_at>$2::timestamptz-interval '60 seconds'),false) FROM phone_challenges WHERE phone_number=$1 AND created_at>$2::timestamptz-interval '1 hour'", phone, now).Scan(&count, &recent); err != nil {
+		now := verifier.now().UTC()
+		challenge = PhoneChallenge{ID: id, ExpiresAt: now.Add(5 * time.Minute), RetryAfter: time.Minute}
+		if err := verifier.checkSendLimits(ctx, tx, phone, bindingHash[:], hashes, now); err != nil {
 			return err
-		}
-		if recent || count >= 6 {
-			return ErrRateLimited
 		}
 		if _, err := tx.Exec(ctx, "UPDATE phone_challenges SET consumed_at=$2 WHERE phone_number=$1 AND consumed_at IS NULL", phone, now); err != nil {
 			return err
 		}
-		_, err := tx.Exec(ctx, "INSERT INTO phone_challenges(id,phone_number,binding_hash,code_mac,created_at,expires_at) VALUES($1,$2,$3,$4,$5,$6)", id, phone, bindingHash[:], verifier.codeMAC(id, phone, binding, code), now, challenge.ExpiresAt)
+		_, err := tx.Exec(ctx, "INSERT INTO phone_challenges(id,phone_number,binding_hash,code_mac,created_at,expires_at,browser_hash,source_hash,client_hash) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)", id, phone, bindingHash[:], verifier.codeMAC(id, phone, binding, code), now, challenge.ExpiresAt, hashes.browser, hashes.source, hashes.client)
 		return err
 	})
 	if err != nil {
