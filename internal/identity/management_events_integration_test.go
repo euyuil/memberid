@@ -17,7 +17,7 @@ func TestManagementEventSnapshotsSurviveRenaming(t *testing.T) {
 	administrator, factor := administratorMember(t, s, SystemOrganizationID, 81)
 	principal := administratorActor(t, s, administrator, factor).Principal()
 	name, blocked := "Historical member", true
-	if _, err := s.Manage(t.Context(), principal, "member.update", org.ID, member.ID, ManagementChange{DisplayName: &name, ManualBlocked: &blocked}); err != nil {
+	if _, err := NewManagementService(s, nil, nil).Manage(t.Context(), principal, "member.update", org.ID, member.ID, ManagementChange{DisplayName: &name, ManualBlocked: &blocked}); err != nil {
 		t.Fatal(err)
 	}
 	events, err := s.ManagementEvents(t.Context(), org.ID, member.ID, 0)
@@ -110,12 +110,12 @@ func TestProviderHistoryRecordsCredentialRotationWithoutSecrets(t *testing.T) {
 			}
 			enabled := true
 			input := ProviderInput{DisplayName: "Employee login", TenantID: "example-tenant", ClientID: "cli_example", ClientSecret: "synthetic-original-credential", Enabled: &enabled}
-			created, err := ConfigureProvider(t.Context(), principal, org.ID, kind, "", input, dingTalk, feishuApps)
+			created, err := NewManagementService(s, dingTalk, feishuApps).ConfigureProvider(t.Context(), principal, org.ID, kind, "", input)
 			if err != nil {
 				t.Fatal(err)
 			}
 			input.ClientSecret, input.ExpectedRevision = "synthetic-rotated-credential", created.Revision
-			if _, err := ConfigureProvider(t.Context(), principal, org.ID, kind, created.ID, input, dingTalk, feishuApps); err != nil {
+			if _, err := NewManagementService(s, dingTalk, feishuApps).ConfigureProvider(t.Context(), principal, org.ID, kind, created.ID, input); err != nil {
 				t.Fatal(err)
 			}
 			events, err := s.ManagementEvents(t.Context(), org.ID, "", 0)

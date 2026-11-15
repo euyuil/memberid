@@ -7,8 +7,6 @@ import (
 	"embed"
 	"encoding/json"
 	"errors"
-	"io/fs"
-	"net"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -16,6 +14,7 @@ import (
 	"time"
 
 	"github.com/euyuil/memberid/internal/config"
+	"github.com/euyuil/memberid/internal/consolestate"
 	"github.com/euyuil/memberid/internal/identity"
 	"github.com/euyuil/memberid/internal/management"
 	"github.com/zitadel/oidc/v3/pkg/client/rp"
@@ -39,11 +38,12 @@ type Settings struct {
 }
 
 type Service struct {
-	store    *identity.Store
-	origin   string
-	clientID string
-	party    rp.RelyingParty
-	routes   *http.ServeMux
+	management *identity.ManagementService
+	sessions   *consolestate.Store
+	origin     string
+	clientID   string
+	party      rp.RelyingParty
+	routes     *http.ServeMux
 }
 
 type nonceKey struct{}
@@ -55,62 +55,6 @@ type session struct {
 
 func (v session) principal() identity.Principal {
 	return identity.ManagementPrincipal(v.memberID, v.grantID)
-}
-
-func New(ctx context.Context, store *identity.Store, installation *config.Loaded, settings Settings, secret string, dingTalk identity.DingTalkAuthorizationChecker, feishu identity.FeishuProvider) (*Service, error) {
-	u, err := url.Parse(settings.Origin)
-	if err != nil || u.Host == "" || u.User != nil || u.Path != "" || u.RawQuery != "" || u.Fragment != "" || u.ForceQuery {
-		return nil, errors.New("console origin must be an exact HTTPS origin")
-	}
-	if u.Scheme != "https" && !(installation.AllowLoopbackHTTP && u.Scheme == "http" && net.ParseIP(u.Hostname()).IsLoopback()) {
-		return nil, errors.New("console HTTP requires explicit loopback development configuration")
-	}
-	registered := false
-	for _, c := range installation.Clients {
-		if c.ID == settings.ClientID && c.SubjectKind == "member" && c.OrganizationID == "" && c.SecretSHA256 == config.SecretHash(secret) {
-			for _, redirect := range c.RedirectURIs {
-				if redirect == settings.Origin+"/auth/callback" {
-					registered = true
-				}
-			}
-		}
-	}
-	if !registered {
-		return nil, errors.New("console requires its own registered all-organization Member client and exact callback")
-	}
-	party, err := rp.NewRelyingPartyOIDC(ctx, installation.Issuer, settings.ClientID, secret, settings.Origin+"/auth/callback", []string{"openid", "profile"}, rp.WithHTTPClient(&http.Client{Timeout: 15 * time.Second}), rp.WithAuthStyle(oauth2.AuthStyleInHeader), rp.WithVerifierOpts(rp.WithNonce(func(ctx context.Context) string { value, _ := ctx.Value(nonceKey{}).(string); return value }), rp.WithSupportedSigningAlgorithms("RS256")))
-	if err != nil {
-		return nil, err
-	}
-	s := &Service{store: store, origin: settings.Origin, clientID: settings.ClientID, party: party, routes: http.NewServeMux()}
-	s.routes.HandleFunc("GET /auth/login", s.login)
-	s.routes.HandleFunc("GET /auth/callback", s.callback)
-	s.routes.HandleFunc("POST /api/logout", s.logout)
-	s.routes.HandleFunc("GET /api/session", func(w http.ResponseWriter, r *http.Request) {
-		v := r.Context().Value(sessionKey{}).(session)
-		actor, err := s.store.ManagementActor(r.Context(), v.memberID, v.grantID)
-		respond(w, map[string]any{"actor": actor, "csrf": v.csrf}, err)
-	})
-	s.routes.HandleFunc("GET /api/organizations", s.organizations)
-	s.routes.HandleFunc("POST /api/organizations", s.mutate)
-	s.routes.HandleFunc("GET /api/organizations/{organizationId}", func(w http.ResponseWriter, r *http.Request) {
-		v, e := s.store.ManagementOrganization(r.Context(), r.Context().Value(sessionKey{}).(session).principal(), r.PathValue("organizationId"))
-		respond(w, v, e)
-	})
-	s.routes.HandleFunc("PATCH /api/organizations/{organizationId}", s.mutate)
-	s.routes.HandleFunc("GET /api/members", s.allOrganizationMembers)
-	s.routes.HandleFunc("GET /api/organizations/{organizationId}/members", s.members)
-	s.routes.HandleFunc("POST /api/organizations/{organizationId}/members", s.mutate)
-	s.routes.HandleFunc("GET /api/organizations/{organizationId}/members/{memberId}", s.member)
-	s.routes.HandleFunc("PATCH /api/organizations/{organizationId}/members/{memberId}", s.mutate)
-	s.routes.HandleFunc("PUT /api/organizations/{organizationId}/members/{memberId}/administrator", s.administrator)
-	s.routes.HandleFunc("GET /api/events", s.events)
-	if err := s.registerProviderRoutes(installation, dingTalk, feishu); err != nil {
-		return nil, err
-	}
-	static, _ := fs.Sub(assets, "static")
-	registerPages(s.routes, static)
-	return s, nil
 }
 
 func (s *Service) cookieName(kind string) string {
@@ -164,8 +108,8 @@ func (s *Service) session(r *http.Request) (session, error) {
 	if len(v.secret) != 43 {
 		return v, identity.ErrForbidden
 	}
-	err := s.store.Database().QueryRow(r.Context(), `UPDATE console_sessions SET expires_at=LEAST(absolute_expires_at,clock_timestamp()+interval '30 minutes')
- WHERE secret_hash=$1 AND expires_at>clock_timestamp() AND absolute_expires_at>clock_timestamp() RETURNING member_id,grant_id,csrf`, config.SecretHash(v.secret)).Scan(&v.memberID, &v.grantID, &v.csrf)
+	stored, err := s.sessions.Session(r.Context(), v.secret)
+	v.memberID, v.grantID, v.csrf = stored.MemberID, stored.GrantID, stored.CSRF
 	// The cookie identifies the caller. Resource services resolve current
 	// administrator authority once, at the operation's authorization boundary.
 	return v, err
@@ -182,13 +126,7 @@ func (s *Service) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	state, browser, nonce, verifier := config.RandomSecret(), config.RandomSecret(), config.RandomSecret(), oauth2.GenerateVerifier()
-	_, err = s.store.Database().Exec(r.Context(), "DELETE FROM console_logins WHERE expires_at<clock_timestamp()")
-	if err == nil {
-		_, err = s.store.Database().Exec(r.Context(), "DELETE FROM console_sessions WHERE expires_at<clock_timestamp() OR absolute_expires_at<clock_timestamp()")
-	}
-	if err == nil {
-		_, err = s.store.Database().Exec(r.Context(), "INSERT INTO console_logins(state_hash,browser_hash,verifier,nonce,return_to,expires_at) VALUES($1,$2,$3,$4,$5,clock_timestamp()+interval '5 minutes')", config.SecretHash(state), config.SecretHash(browser), verifier, nonce, returnTo)
-	}
+	err = s.sessions.BeginLogin(r.Context(), state, browser, consolestate.Login{Verifier: verifier, Nonce: nonce, ReturnTo: returnTo})
 	if err != nil {
 		problem(w, 503, "login_unavailable")
 		return
@@ -210,8 +148,8 @@ func (s *Service) callback(w http.ResponseWriter, r *http.Request) {
 		problem(w, 400, "invalid_callback")
 		return
 	}
-	var verifier, nonce, returnTo string
-	err := s.store.Database().QueryRow(r.Context(), "DELETE FROM console_logins WHERE state_hash=$1 AND browser_hash=$2 AND expires_at>clock_timestamp() RETURNING verifier,nonce,return_to", config.SecretHash(state), config.SecretHash(browser)).Scan(&verifier, &nonce, &returnTo)
+	login, err := s.sessions.ConsumeLogin(r.Context(), state, browser)
+	verifier, nonce, returnTo := login.Verifier, login.Nonce, login.ReturnTo
 	if err != nil {
 		problem(w, 400, "invalid_callback")
 		return
@@ -238,15 +176,12 @@ func (s *Service) callback(w http.ResponseWriter, r *http.Request) {
 		loginFailure(w, r, returnTo, "login_failed")
 		return
 	}
-	var grantID string
-	err = s.store.Database().QueryRow(r.Context(), `SELECT g.id FROM oidc_grants g JOIN oidc_access_tokens a ON a.grant_id=g.id
- WHERE a.id=$4 AND a.expires_at>clock_timestamp() AND g.session_id=$1 AND g.client_id=$2
- AND g.data->>'memberId'=$3 AND g.revoked_at IS NULL AND g.expires_at>clock_timestamp()`, claims.SessionID, s.clientID, claims.Subject, access.JWTID).Scan(&grantID)
+	grantID, err := s.sessions.Grant(r.Context(), claims.SessionID, s.clientID, claims.Subject, access.JWTID)
 	if err != nil {
 		loginFailure(w, r, returnTo, "login_failed")
 		return
 	}
-	if _, err = s.store.ManagementActor(r.Context(), claims.Subject, grantID); err != nil {
+	if _, err = s.management.Actor(r.Context(), claims.Subject, grantID); err != nil {
 		loginFailure(w, r, returnTo, "not_administrator")
 		return
 	}
@@ -256,14 +191,14 @@ func (s *Service) callback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	secret, csrf := config.RandomSecret(), config.RandomSecret()
-	_, err = s.store.Database().Exec(r.Context(), `INSERT INTO console_sessions(secret_hash,grant_id,member_id,csrf,expires_at,absolute_expires_at) VALUES($1,$2,$3,$4,LEAST($5,clock_timestamp()+interval '30 minutes'),$5)`, config.SecretHash(secret), grantID, claims.Subject, csrf, absolute)
+	err = s.sessions.CreateSession(r.Context(), secret, consolestate.Session{MemberID: claims.Subject, GrantID: grantID, CSRF: csrf}, absolute)
 	if err != nil {
 		problem(w, 503, "login_unavailable")
 		return
 	}
 	// Rotate the browser's console session without retaining bearer tokens.
 	if old := s.cookieValue(r, "session"); old != "" {
-		_, _ = s.store.Database().Exec(r.Context(), "DELETE FROM console_sessions WHERE secret_hash=$1", config.SecretHash(old))
+		_ = s.sessions.DeleteSession(r.Context(), old)
 	}
 	s.cookie(w, "session", secret, int(time.Until(absolute).Seconds()))
 	http.Redirect(w, r, returnTo, 303)
@@ -271,16 +206,16 @@ func (s *Service) callback(w http.ResponseWriter, r *http.Request) {
 
 func (s *Service) logout(w http.ResponseWriter, r *http.Request) {
 	v := r.Context().Value(sessionKey{}).(session)
-	if _, err := s.store.ManagementActor(r.Context(), v.memberID, v.grantID); err != nil {
+	if _, err := s.management.Actor(r.Context(), v.memberID, v.grantID); err != nil {
 		respond(w, nil, err)
 		return
 	}
-	_, err := s.store.Database().Exec(r.Context(), "DELETE FROM console_sessions WHERE secret_hash=$1", config.SecretHash(v.secret))
+	err := s.sessions.DeleteSession(r.Context(), v.secret)
 	s.cookie(w, "session", "", -1)
 	respond(w, map[string]bool{"signedOut": true}, err)
 }
 func (s *Service) organizations(w http.ResponseWriter, r *http.Request) {
-	v, e := s.store.ManagementOrganizations(r.Context(), r.Context().Value(sessionKey{}).(session).principal(), r.URL.Query().Get("after"), 50)
+	v, e := s.management.Organizations(r.Context(), r.Context().Value(sessionKey{}).(session).principal(), r.URL.Query().Get("after"), 50)
 	respond(w, v, e)
 }
 func memberDirectoryFilter(q url.Values) identity.MemberDirectoryFilter {
@@ -292,16 +227,16 @@ func memberDirectoryFilter(q url.Values) identity.MemberDirectoryFilter {
 }
 func (s *Service) allOrganizationMembers(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	page, err := s.store.ManagementMemberDirectory(r.Context(), r.Context().Value(sessionKey{}).(session).principal(), q.Get("after"), 50, memberDirectoryFilter(q))
+	page, err := s.management.MemberDirectory(r.Context(), r.Context().Value(sessionKey{}).(session).principal(), q.Get("after"), 50, memberDirectoryFilter(q))
 	respond(w, page, err)
 }
 func (s *Service) members(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	page, err := s.store.ManagementMembers(r.Context(), r.Context().Value(sessionKey{}).(session).principal(), r.PathValue("organizationId"), q.Get("after"), 50, memberDirectoryFilter(q))
+	page, err := s.management.Members(r.Context(), r.Context().Value(sessionKey{}).(session).principal(), r.PathValue("organizationId"), q.Get("after"), 50, memberDirectoryFilter(q))
 	respond(w, page, err)
 }
 func (s *Service) member(w http.ResponseWriter, r *http.Request) {
-	detail, err := s.store.ManagementMember(r.Context(), r.Context().Value(sessionKey{}).(session).principal(), r.PathValue("organizationId"), r.PathValue("memberId"))
+	detail, err := s.management.Member(r.Context(), r.Context().Value(sessionKey{}).(session).principal(), r.PathValue("organizationId"), r.PathValue("memberId"))
 	respond(w, detail, err)
 }
 func (s *Service) mutate(w http.ResponseWriter, r *http.Request) {
@@ -345,7 +280,7 @@ func (s *Service) mutate(w http.ResponseWriter, r *http.Request) {
 		change.Status = v.Status
 		action = "organization.update"
 	}
-	v, e := s.store.Manage(r.Context(), r.Context().Value(sessionKey{}).(session).principal(), action, org, id, change)
+	v, e := s.management.Manage(r.Context(), r.Context().Value(sessionKey{}).(session).principal(), action, org, id, change)
 	respond(w, v, e)
 }
 func (s *Service) administrator(w http.ResponseWriter, r *http.Request) {
@@ -359,7 +294,7 @@ func (s *Service) administrator(w http.ResponseWriter, r *http.Request) {
 		problem(w, 400, "invalid_request")
 		return
 	}
-	e := s.store.SetAdministrator(r.Context(), r.Context().Value(sessionKey{}).(session).principal(), r.PathValue("organizationId"), r.PathValue("memberId"), *v.Enabled)
+	e := s.management.SetAdministrator(r.Context(), r.Context().Value(sessionKey{}).(session).principal(), r.PathValue("organizationId"), r.PathValue("memberId"), *v.Enabled)
 	respond(w, map[string]bool{"enabled": *v.Enabled}, e)
 }
 func (s *Service) events(w http.ResponseWriter, r *http.Request) {
@@ -375,7 +310,7 @@ func (s *Service) events(w http.ResponseWriter, r *http.Request) {
 		}
 		before = v
 	}
-	items, err := s.store.ManagementHistory(r.Context(), v.principal(), org, q.Get("memberId"), before)
+	items, err := s.management.History(r.Context(), v.principal(), org, q.Get("memberId"), before)
 	respond(w, map[string]any{"items": items}, err)
 }
 func problem(w http.ResponseWriter, status int, code string) {

@@ -30,15 +30,22 @@ type ProviderInput struct {
 	ExpectedRevision int64  `json:"expectedRevision"`
 }
 
-func ConfigureProvider(ctx context.Context, principal Principal, organizationID, kind, id string, input ProviderInput, dingTalk *DingTalkApplications, feishu *FeishuApplications) (Provider, error) {
+func (service *ManagementService) ConfigureProvider(ctx context.Context, principal Principal, organizationID, kind, id string, input ProviderInput) (Provider, error) {
 	if principal.kind != memberPrincipal {
 		return Provider{}, ErrForbidden
 	}
+	dingTalk, feishu := service.dingTalk, service.feishu
 	var store *Store
 	switch kind {
 	case "dingtalk":
+		if dingTalk == nil {
+			return Provider{}, ErrProviderUnavailable
+		}
 		store = dingTalk.store
 	case "feishu":
+		if feishu == nil {
+			return Provider{}, ErrProviderUnavailable
+		}
 		store = feishu.store
 	default:
 		return Provider{}, ErrInvalid
@@ -69,7 +76,8 @@ func (app DingTalkApplication) Provider() Provider {
 	return Provider{app.Namespace, "dingtalk", app.DisplayName, app.CorpID, app.ClientID, app.Enabled, app.AuthorizationStatus, app.Revision, app.CreatedAt}
 }
 
-func (store *Store) ManagementProviders(ctx context.Context, principal Principal, organizationID string) ([]Provider, error) {
+func (service *ManagementService) Providers(ctx context.Context, principal Principal, organizationID string) ([]Provider, error) {
+	store := service.store
 	if err := store.authorizeManagementRead(ctx, principal, authorization.Requirement{Target: "organizations/" + organizationID + "/providers", Action: "list"}); err != nil {
 		return nil, err
 	}

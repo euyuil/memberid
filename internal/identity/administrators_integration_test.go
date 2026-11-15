@@ -26,21 +26,21 @@ func TestAdministratorActorScopeAndRevocation(t *testing.T) {
 	}
 	name := "Renamed organization"
 	change := ManagementChange{Name: &name}
-	if _, err = s.Manage(t.Context(), localActor.Principal(), "organization.update", org.ID, "", change); err != nil {
+	if _, err = NewManagementService(s, nil, nil).Manage(t.Context(), localActor.Principal(), "organization.update", org.ID, "", change); err != nil {
 		t.Fatal("own organization update", err)
 	}
 	localActor.Platform = true
 	localActor.OrganizationID = SystemOrganizationID
-	if _, err = s.Manage(t.Context(), localActor.Principal(), "organization.update", SystemOrganizationID, "", change); !errors.Is(err, ErrForbidden) {
+	if _, err = NewManagementService(s, nil, nil).Manage(t.Context(), localActor.Principal(), "organization.update", SystemOrganizationID, "", change); !errors.Is(err, ErrForbidden) {
 		t.Fatal("actor fields bypassed stored scope", err)
 	}
-	if _, err = s.Manage(t.Context(), localActor.Principal(), "organization.create", "", "", change); !errors.Is(err, ErrForbidden) {
+	if _, err = NewManagementService(s, nil, nil).Manage(t.Context(), localActor.Principal(), "organization.create", "", "", change); !errors.Is(err, ErrForbidden) {
 		t.Fatal("organization administrator created an organization", err)
 	}
-	if err = s.SetAdministrator(t.Context(), localActor.Principal(), SystemOrganizationID, platform.ID, false); !errors.Is(err, ErrForbidden) {
+	if err = NewManagementService(s, nil, nil).SetAdministrator(t.Context(), localActor.Principal(), SystemOrganizationID, platform.ID, false); !errors.Is(err, ErrForbidden) {
 		t.Fatal("organization administrator changed platform access", err)
 	}
-	if _, err = s.Manage(t.Context(), platformActor.Principal(), "organization.update", org.ID, "", change); err != nil {
+	if _, err = NewManagementService(s, nil, nil).Manage(t.Context(), platformActor.Principal(), "organization.update", org.ID, "", change); err != nil {
 		t.Fatal("platform organization update", err)
 	}
 	events, err := s.ManagementEvents(t.Context(), org.ID, "", 0)
@@ -50,7 +50,7 @@ func TestAdministratorActorScopeAndRevocation(t *testing.T) {
 	if _, err = s.pool.Exec(t.Context(), "UPDATE oidc_grants SET revoked_at=clock_timestamp() WHERE id=$1", local.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = s.Manage(t.Context(), localActor.Principal(), "organization.update", org.ID, "", change); !errors.Is(err, ErrForbidden) {
+	if _, err = NewManagementService(s, nil, nil).Manage(t.Context(), localActor.Principal(), "organization.update", org.ID, "", change); !errors.Is(err, ErrForbidden) {
 		t.Fatal("revoked grant retained access", err)
 	}
 }
@@ -229,7 +229,7 @@ func administratorActor(t *testing.T, s *Store, member Member, factor Factor) Ma
 	if _, err = s.pool.Exec(t.Context(), "INSERT INTO oidc_grants(id,client_id,session_id,data,expires_at,absolute_expires_at) VALUES($1,'synthetic-management',$1,$2,clock_timestamp()+interval '1 hour',clock_timestamp()+interval '2 hours')", member.ID, data); err != nil {
 		t.Fatal(err)
 	}
-	actor, err := s.ManagementActor(t.Context(), member.ID, member.ID)
+	actor, err := NewManagementService(s, nil, nil).Actor(t.Context(), member.ID, member.ID)
 	if err != nil {
 		t.Fatal(err)
 	}

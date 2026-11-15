@@ -50,7 +50,7 @@ func TestAccountAuthorityResolvesSessionAndSelectedBinding(t *testing.T) {
 	if err := authorizeAll(t.Context(), s.pool, principal, authorization.Requirement{Target: "organizations/" + otherOrg.ID + "/members/" + other.ID, Action: "get"}); !errors.Is(err, ErrForbidden) {
 		t.Fatal("shared factor expanded selected identity", err)
 	}
-	if _, err := s.ManagementMember(t.Context(), principal, org.ID, member.ID); !errors.Is(err, ErrForbidden) {
+	if _, err := NewManagementService(s, nil, nil).Member(t.Context(), principal, org.ID, member.ID); !errors.Is(err, ErrForbidden) {
 		t.Fatal("account context acquired console detail", err)
 	}
 	wrong := AccountPrincipal(sessionID, member.ID, factor.ID, bindings[other.ID].ID)

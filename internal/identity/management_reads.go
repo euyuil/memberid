@@ -24,7 +24,8 @@ func (store *Store) authorizeManagementRead(ctx context.Context, principal Princ
 	return checkManagementPermissions(managementPermissions(actor), requirements...)
 }
 
-func (store *Store) ManagementOrganizations(ctx context.Context, principal Principal, after string, limit int) (Page[Organization], error) {
+func (service *ManagementService) Organizations(ctx context.Context, principal Principal, after string, limit int) (Page[Organization], error) {
+	store := service.store
 	actor, err := store.managementReadActor(ctx, principal)
 	if err != nil {
 		return Page[Organization]{}, err
@@ -47,7 +48,8 @@ func (store *Store) ManagementOrganizations(ctx context.Context, principal Princ
 	return Page[Organization]{Items: []Organization{organization}}, nil
 }
 
-func (store *Store) ManagementOrganization(ctx context.Context, principal Principal, organizationID string) (Organization, error) {
+func (service *ManagementService) Organization(ctx context.Context, principal Principal, organizationID string) (Organization, error) {
+	store := service.store
 	if err := store.authorizeManagementRead(ctx, principal, authorization.Requirement{Target: "organizations/" + organizationID, Action: "get"}); err != nil {
 		return Organization{}, err
 	}
@@ -69,7 +71,8 @@ func memberReadRequirements(organizationID, memberID string) []authorization.Req
 	return []authorization.Requirement{{Target: member, Action: "get"}, {Target: member + "/bindings", Action: "list"}, {Target: organization + "/roleAssignments", Action: "list"}}
 }
 
-func (store *Store) ManagementMembers(ctx context.Context, principal Principal, organizationID, after string, limit int, filter MemberDirectoryFilter) (ManagementMemberPage, error) {
+func (service *ManagementService) Members(ctx context.Context, principal Principal, organizationID, after string, limit int, filter MemberDirectoryFilter) (ManagementMemberPage, error) {
+	store := service.store
 	if err := store.authorizeManagementRead(ctx, principal, memberReadRequirements(organizationID, "")...); err != nil {
 		return ManagementMemberPage{}, err
 	}
@@ -90,7 +93,8 @@ type ManagementMemberDetail struct {
 	AdministratorIDs []string  `json:"administratorIds"`
 }
 
-func (store *Store) ManagementMember(ctx context.Context, principal Principal, organizationID, memberID string) (ManagementMemberDetail, error) {
+func (service *ManagementService) Member(ctx context.Context, principal Principal, organizationID, memberID string) (ManagementMemberDetail, error) {
+	store := service.store
 	if !ValidID(memberID, MemberKind) {
 		return ManagementMemberDetail{}, ErrInvalid
 	}
@@ -112,14 +116,16 @@ func (store *Store) ManagementMember(ctx context.Context, principal Principal, o
 	return ManagementMemberDetail{Member: member, Bindings: bindings, AdministratorIDs: ids}, nil
 }
 
-func (store *Store) ManagementMemberDirectory(ctx context.Context, principal Principal, after string, limit int, filter MemberDirectoryFilter) (Page[MemberDirectoryEntry], error) {
+func (service *ManagementService) MemberDirectory(ctx context.Context, principal Principal, after string, limit int, filter MemberDirectoryFilter) (Page[MemberDirectoryEntry], error) {
+	store := service.store
 	if err := store.authorizeManagementRead(ctx, principal, authorization.Requirement{Target: "memberDirectory", Action: "list"}); err != nil {
 		return Page[MemberDirectoryEntry]{}, err
 	}
 	return store.AllOrganizationMembers(ctx, after, limit, filter)
 }
 
-func (store *Store) ManagementHistory(ctx context.Context, principal Principal, organizationID, memberID string, before int64) ([]ManagementEvent, error) {
+func (service *ManagementService) History(ctx context.Context, principal Principal, organizationID, memberID string, before int64) ([]ManagementEvent, error) {
+	store := service.store
 	actor, err := store.managementReadActor(ctx, principal)
 	if err != nil {
 		return nil, err
