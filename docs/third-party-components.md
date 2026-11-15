@@ -98,6 +98,30 @@ The resolved upstream test/helper graph additionally includes `github.com/golang
 
 Security review identified [GO-2026-6909](https://pkg.go.dev/vuln/GO-2026-6909), an upstream SP assertion-parsing advisory with no fixed version listed at review. MemberID uses only the IdP side and does not call the affected `ServiceProvider.ParseResponse`, `ParseXMLResponse`, or `ParseXMLArtifactResponse` APIs. Its tests validate generated signatures directly before decoding typed data. This reachability distinction is not a claim that the module has no vulnerabilities; reassess before adding any SP/assertion-consumer functionality or updating the library.
 
+## Independent SAML consumer test
+
+The isolated `internal/interop/saml/package-lock.json` pins Node-SAML 5.2.0, the current stable npm release reviewed on 2026-11-16. It supports Node >=18 and is tested with the repository's Node.js 26.13.1 LTS. The consumer's direct XML packages match Node-SAML's supported dependency graph. Exact downloaded package manifests and all root/nested LICENSE/NOTICE/COPYING files were inspected before adoption; npm audit reported no advisories for this resolved fixture graph at review time.
+
+| Package | Exact resolved version(s) | License |
+| --- | --- | --- |
+| `@node-saml/node-saml` | 5.2.0 | MIT |
+| `@xmldom/xmldom` | 0.8.15 | MIT |
+| `@xmldom/is-dom-node` | 1.0.1 | MIT |
+| `xml-crypto` | 6.4.0 | MIT |
+| `xpath` | 0.0.35, 0.0.33, 0.0.32 | MIT |
+| `xml-encryption` | 3.1.0 | MIT |
+| `xml2js` | 0.6.2 | MIT |
+| `xmlbuilder` | 15.1.1, 11.0.1 | MIT |
+| `escape-html` | 1.0.3 | MIT |
+| `sax` | 1.6.1 | Blue Oak Model License 1.0.0 |
+| `@types/node` | 26.6.6 | MIT |
+| `@types/qs` | 6.15.1 | MIT |
+| `@types/xml-encryption` | 1.2.4 | MIT |
+| `@types/xml2js` | 0.4.14 | MIT |
+| `undici-types` | 8.9.0 | MIT |
+
+These 18 resolved package instances remain unmodified test tools, installed with lifecycle scripts disabled. They are neither linked into the Go executable nor included in console/browser assets, native packages, or runtime images. Upstream notices remain in `node_modules` beside the unmodified packages. MIT copyright and permission notices must accompany redistributed copies; Blue Oak requires its license text or link and grants contributor patent rights. There are no application source-disclosure or commercial-use restrictions. Reassess and retain the complete notices before changing this distribution boundary. The existing OpenSSL tool and pinned PostgreSQL image are used externally under the previously recorded terms. No additional image or application license is introduced.
+
 ## Native and container distributions
 
 The distribution builder uses the existing Go 1.27.4 toolchain with cgo disabled. Native packages retain the complete reviewed `third_party/` directory. The Linux container copies that same statically linked executable and its notices into `FROM scratch`; no base operating-system image, libc, shell, package manager, or extra dependency is incorporated. The image retains notices under `/usr/share/memberid/third_party/` and build metadata under `/usr/share/memberid/BUILDINFO`.

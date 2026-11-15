@@ -14,6 +14,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -428,5 +429,112 @@ func TestSAMLPassiveAndAllowCreate(t *testing.T) {
 	result = verifySAMLResponse(t, f, sp, f.call(f.browser, "GET", start.header.Get("Location"), nil, nil))
 	if result.Status.StatusCode.Value != saml.StatusSuccess {
 		t.Fatal("valid preauthorized SSO failed")
+	}
+}
+
+func TestSAMLCompletionBoundaries(t *testing.T) {
+	for _, kind := range []string{"wrong browser", "other organization", "expired interaction", "fresh authentication"} {
+		t.Run(kind, func(t *testing.T) {
+			f := newFixture(t)
+			sp := enableSAML(t, f)
+			page := f.verifyPhone(samlPage(t, f, sp))
+			member := f.member.ID
+			switch kind {
+			case "wrong browser":
+				f.browser = browserClient()
+			case "other organization":
+				member = f.otherMember.ID
+			case "expired interaction":
+				if _, err := f.store.Database().Exec(t.Context(), "UPDATE authentication_requests SET expires_at=now()-interval '1 second' WHERE id=$1", hidden(t, page.body, "request")); err != nil {
+					t.Fatal(err)
+				}
+			case "fresh authentication":
+				force := true
+				result := verifySAMLResponse(t, f, sp, f.call(f.browser, "GET", samlURL(t, f, sp, func(r *saml.AuthnRequest) { r.ForceAuthn = &force }), nil, nil))
+				if result.Status.StatusCode.StatusCode.Value != saml.StatusRequestUnsupported || result.Assertion != nil {
+					t.Fatal("ForceAuthn reused the existing session")
+				}
+				return
+			}
+			result := f.submit(page.body, "continue", url.Values{"member": {member}, "consent": {"yes"}})
+			if strings.Contains(result.body, "SAMLResponse") {
+				t.Fatal("invalid completion issued a response")
+			}
+		})
+	}
+}
+
+func TestSAMLExpiryDuringCompletion(t *testing.T) {
+	for _, delay := range []string{"directory", "row lock"} {
+		for _, expiry := range []string{"request", "session", "absolute session"} {
+			t.Run(delay+"/"+expiry, func(t *testing.T) {
+				f := newConfiguredFixture(t, true)
+				sp := enableSAML(t, f)
+				provider, _ := enableDingTalk(t, f, false)
+				_, _, memberID := directoryLogin(t, f)
+				page := samlPage(t, f, sp)
+				var elapsed atomic.Int64
+				now := time.Now()
+				f.service.now = func() time.Time { return now.Add(time.Duration(elapsed.Load())) }
+				query := "UPDATE authentication_requests SET expires_at=$1 WHERE id=$2"
+				args := []any{now.Add(time.Minute), hidden(t, page.body, "request")}
+				if expiry != "request" {
+					column := "expires_at"
+					if expiry == "absolute session" {
+						column = "absolute_expires_at"
+					}
+					query, args = "UPDATE authentication_sessions SET "+column+"=$1", args[:1]
+				}
+				if _, err := f.store.Database().Exec(t.Context(), query, args...); err != nil {
+					t.Fatal(err)
+				}
+				advance := func() { elapsed.Store(int64(2 * time.Minute)) }
+				var result reply
+				complete := func() reply {
+					return f.submit(page.body, "continue", url.Values{"member": {memberID}, "consent": {"yes"}})
+				}
+				if delay == "directory" {
+					provider.directoryBefore = advance
+					result = complete()
+				} else {
+					tx, err := f.store.Database().Begin(t.Context())
+					if err != nil {
+						t.Fatal(err)
+					}
+					defer tx.Rollback(t.Context())
+					if _, err := tx.Exec(t.Context(), "SELECT id FROM saml_service_providers WHERE id=$1 FOR UPDATE", sp.ID); err != nil {
+						t.Fatal(err)
+					}
+					done := make(chan reply, 1)
+					go func() { done <- complete() }()
+					deadline := time.Now().Add(10 * time.Second)
+					for {
+						var waiting bool
+						if err := f.store.Database().QueryRow(t.Context(), "SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock')").Scan(&waiting); err != nil {
+							t.Fatal(err)
+						}
+						if waiting {
+							break
+						}
+						if time.Now().After(deadline) {
+							t.Fatal("completion did not reach the locked SP")
+						}
+						time.Sleep(10 * time.Millisecond)
+					}
+					advance()
+					if err := tx.Commit(t.Context()); err != nil {
+						t.Fatal(err)
+					}
+					result = <-done
+				}
+				if strings.Contains(result.body, "SAMLResponse") {
+					t.Fatal("issued after expiry during completion")
+				}
+				var consumed bool
+				if err := f.store.Database().QueryRow(t.Context(), "SELECT consumed_at IS NOT NULL FROM authentication_requests WHERE id=$1", hidden(t, page.body, "request")).Scan(&consumed); err != nil || consumed {
+					t.Fatal("expired completion was committed", err)
+				}
+			})
+		}
 	}
 }

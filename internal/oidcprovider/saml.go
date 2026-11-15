@@ -79,7 +79,7 @@ func (service *Service) finishSAML(w http.ResponseWriter, r *http.Request, reque
 		return identity.ErrIneligible
 	}
 	r = samlprovider.WithNonce(r)
-	now := service.now()
+	authenticated := status == ""
 	var observation *identity.DingTalkDirectoryObservation
 	var observationErr error
 	if status == "" {
@@ -90,22 +90,25 @@ func (service *Service) finishSAML(w http.ResponseWriter, r *http.Request, reque
 	replayed := false
 	err := pgx.BeginFunc(r.Context(), service.store.Database(), func(tx pgx.Tx) error {
 		// Session-before-request is also used by OIDC issuance and logout.
+		now := service.now()
 		auth := samlprovider.Authentication{}
 		if status == "" {
 			var verifiedData []byte
-			if err := tx.QueryRow(r.Context(), "SELECT verification,expires_at FROM authentication_sessions WHERE id=$1 AND revoked_at IS NULL AND expires_at>$2 AND absolute_expires_at>$2 FOR UPDATE", request.SessionID, now).Scan(&verifiedData, &auth.ExpiresAt); err != nil {
+			var absoluteExpiry time.Time
+			if err := tx.QueryRow(r.Context(), "SELECT verification,expires_at,absolute_expires_at FROM authentication_sessions WHERE id=$1 AND revoked_at IS NULL AND expires_at>$2 AND absolute_expires_at>$2 FOR UPDATE", request.SessionID, now).Scan(&verifiedData, &auth.ExpiresAt, &absoluteExpiry); err != nil {
 				return identity.ErrIneligible
 			}
 			var verification identity.Verification
 			if json.Unmarshal(verifiedData, &verification) != nil || verification.Factor.ID != request.FactorID || !verification.AuthenticatedAt.Equal(request.AuthTime) {
 				return identity.ErrIneligible
 			}
-			auth.ExpiresAt = minimum(auth.ExpiresAt, request.AbsoluteExpiry)
+			auth.ExpiresAt = minimum(minimum(auth.ExpiresAt, absoluteExpiry), request.AbsoluteExpiry)
 			auth.AuthenticatedAt, auth.SessionID = request.AuthTime, request.SessionID
 		}
 		var revision int64
 		var consumed *time.Time
-		if err := tx.QueryRow(r.Context(), "SELECT revision,consumed_at FROM authentication_requests WHERE id=$1 AND protocol='saml' AND expires_at>$2 FOR UPDATE", request.ID, now).Scan(&revision, &consumed); err != nil {
+		var requestExpiry time.Time
+		if err := tx.QueryRow(r.Context(), "SELECT revision,consumed_at,expires_at FROM authentication_requests WHERE id=$1 AND protocol='saml' AND expires_at>$2 FOR UPDATE", request.ID, now).Scan(&revision, &consumed, &requestExpiry); err != nil {
 			return identity.ErrIneligible
 		}
 		if consumed != nil {
@@ -147,6 +150,12 @@ func (service *Service) finishSAML(w http.ResponseWriter, r *http.Request, reque
 			if err := tx.QueryRow(r.Context(), "SELECT display_name FROM members WHERE id=$1", request.MemberID).Scan(&auth.DisplayName); err != nil {
 				return err
 			}
+		}
+		// External observations and row-lock waits must not freeze the validity
+		// window. Recheck locked state against the signing time, including errors.
+		now = service.now()
+		if !requestExpiry.After(now) || authenticated && !auth.ExpiresAt.After(now) {
+			return identity.ErrIneligible
 		}
 		body, err = service.saml.Response(r, request.SAML, sp, auth, status, now)
 		if err != nil {
