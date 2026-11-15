@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/euyuil/memberid/internal/identity"
 )
@@ -22,14 +23,15 @@ const MaximumFileSize = 1 << 20
 
 // Installation contains references to protected local files, not database credentials.
 type Installation struct {
-	PhoneSendLimitsPerHour identity.PhoneSendLimits `json:"phoneSendLimitsPerHour,omitzero"`
-	PhoneTrustedProxyCIDRs []string                 `json:"phoneTrustedProxyCidrs,omitempty"`
-	Issuer                 string                   `json:"issuer"`
-	AllowLoopbackHTTP      bool                     `json:"allowLoopbackHttp"`
-	SigningKeyFile         string                   `json:"signingKeyFile"`
-	PublicKeysFile         string                   `json:"publicKeysFile"`
-	SecretsFile            string                   `json:"secretsFile"`
-	ClientsFile            string                   `json:"clientsFile"`
+	AuthenticationEventRetentionDays int                      `json:"authenticationEventRetentionDays,omitempty"`
+	PhoneSendLimitsPerHour           identity.PhoneSendLimits `json:"phoneSendLimitsPerHour,omitzero"`
+	PhoneTrustedProxyCIDRs           []string                 `json:"phoneTrustedProxyCidrs,omitempty"`
+	Issuer                           string                   `json:"issuer"`
+	AllowLoopbackHTTP                bool                     `json:"allowLoopbackHttp"`
+	SigningKeyFile                   string                   `json:"signingKeyFile"`
+	PublicKeysFile                   string                   `json:"publicKeysFile"`
+	SecretsFile                      string                   `json:"secretsFile"`
+	ClientsFile                      string                   `json:"clientsFile"`
 }
 
 type Secrets struct {
@@ -122,6 +124,9 @@ func Load(directory string) (*Loaded, error) {
 }
 
 func (installation Installation) Validate() error {
+	if installation.AuthenticationEventRetentionDays < 0 || installation.AuthenticationEventRetentionDays > 36500 {
+		return errors.New("authentication event retention must be 1 through 36500 days; zero selects 90 days")
+	}
 	if _, err := installation.PhoneSendLimitsPerHour.WithDefaults(); err != nil {
 		return errors.New("phone send limits must be nonnegative; zero selects defaults")
 	}
@@ -220,4 +225,13 @@ func exactURL(raw string, allowLoopback bool) (*url.URL, error) {
 func validHash(value string) bool {
 	decoded, err := hex.DecodeString(value)
 	return err == nil && len(decoded) == 32
+}
+
+// AuthenticationEventRetention is shared by writers, cleanup, and query expiry.
+func (installation Installation) AuthenticationEventRetention() time.Duration {
+	days := installation.AuthenticationEventRetentionDays
+	if days == 0 {
+		days = 90
+	}
+	return time.Duration(days) * 24 * time.Hour
 }

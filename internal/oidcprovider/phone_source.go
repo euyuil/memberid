@@ -6,15 +6,17 @@ import (
 	"net/netip"
 	"strings"
 
+	"github.com/euyuil/memberid/internal/authevent"
 	"github.com/euyuil/memberid/internal/identity"
 )
 
-func (service *Service) startPhone(r *http.Request, binding, phone, clientID string) (identity.PhoneChallenge, error) {
+func (service *Service) startPhone(r *http.Request, binding, phone, clientID string, event authevent.Event) (identity.PhoneChallenge, error) {
 	address, err := phoneSourceAddress(r, service.configuration.PhoneTrustedProxyCIDRs)
 	if err != nil {
+		service.rejectPhoneSend(r, event)
 		return identity.PhoneChallenge{}, err
 	}
-	return service.phone.Start(r.Context(), binding, phone, identity.PhoneSendSource{
+	return service.phone.Start(authevent.WithContext(r.Context(), event), binding, phone, identity.PhoneSendSource{
 		BrowserID: accountBrowser(r), ClientID: clientID, Address: address,
 	})
 }
@@ -54,4 +56,23 @@ func phoneSourceAddress(r *http.Request, trustedCIDRs []string) (netip.Addr, err
 		}
 	}
 	return address.Unmap(), nil
+}
+
+func (service *Service) rejectPhoneSend(r *http.Request, event authevent.Event) {
+	event.RequestID = authevent.FromContext(r.Context()).RequestID
+	event.Type, event.Method, event.Outcome, event.ReasonCode = "sms.send", "sms", "rejected", "invalidRequest"
+	service.events.Offer(event)
+}
+
+func (service *Service) loginEvent(request *authorizationRequest) authevent.Event {
+	// Only an operator-registered organization restriction owns this shared phone
+	// workflow. A phone number or an arbitrary organization hint establishes none.
+	event := authevent.Event{InteractionID: request.InteractionID, ClientID: request.ClientID, Purpose: "login"}
+	if registered, err := service.storage.client(request.ClientID); err == nil {
+		event.OrganizationID = registered.registration.OrganizationID
+	}
+	return event
+}
+func accountEvent(request accountRequest, session accountSession) authevent.Event {
+	return authevent.Event{InteractionID: request.InteractionID, OrganizationID: request.OrganizationID, MemberID: request.MemberID, ClientID: request.ClientID, FactorID: session.verified.Factor.ID, SessionID: session.id, BindingID: request.BindingID, Actor: authevent.Actor{Kind: "member", ID: request.MemberID}, Purpose: "accountLinking"}
 }

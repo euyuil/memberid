@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/euyuil/memberid/internal/authevent"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -39,6 +40,7 @@ type PhoneChallenge struct {
 }
 
 type PhoneVerifier struct {
+	events *authevent.Recorder
 	store  *Store
 	key    []byte
 	sender SMSSender
@@ -76,7 +78,13 @@ func (verifier *PhoneVerifier) codeMAC(id, phone, binding, code string) []byte {
 	return mac.Sum(nil)
 }
 
-func (verifier *PhoneVerifier) Start(ctx context.Context, binding, number string, source PhoneSendSource) (PhoneChallenge, error) {
+func (verifier *PhoneVerifier) Start(ctx context.Context, binding, number string, source PhoneSendSource) (challengeResult PhoneChallenge, resultErr error) {
+	accepted := false
+	defer func() {
+		if !accepted && resultErr != nil {
+			verifier.recordSend(ctx, resultErr)
+		}
+	}()
 	phone, err := NormalizePhone(number)
 	if err != nil || !validText(binding, 256) || len(binding) < 32 {
 		return PhoneChallenge{}, ErrInvalid
@@ -119,6 +127,8 @@ func (verifier *PhoneVerifier) Start(ctx context.Context, binding, number string
 	if err := verifier.sender.Send(ctx, phone, code); err != nil {
 		return PhoneChallenge{}, ErrDeliveryUnavailable
 	}
+	accepted = true
+	verifier.recordSend(ctx, nil)
 	result, err := verifier.store.pool.Exec(ctx, "UPDATE phone_challenges SET ready=true WHERE id=$1 AND consumed_at IS NULL AND expires_at>$2", id, verifier.now())
 	if err != nil {
 		return PhoneChallenge{}, err
@@ -189,4 +199,26 @@ func (verifier *PhoneVerifier) VerifyAndApply(ctx context.Context, binding, id, 
 func (store *Store) CleanupPhoneChallenges(ctx context.Context) error {
 	_, err := store.pool.Exec(ctx, "DELETE FROM phone_challenges WHERE expires_at<clock_timestamp()-interval '1 hour'")
 	return err
+}
+
+// SetEventRecorder configures delivery before serving requests.
+func (verifier *PhoneVerifier) SetEventRecorder(recorder *authevent.Recorder) {
+	verifier.events = recorder
+}
+
+func (verifier *PhoneVerifier) recordSend(ctx context.Context, err error) {
+	event := authevent.FromContext(ctx)
+	event.Type, event.Method, event.Outcome = "sms.send", "sms", "succeeded"
+	if err != nil {
+		event.Outcome, event.ReasonCode = "failed", "backendUnavailable"
+		switch {
+		case errors.Is(err, ErrRateLimited):
+			event.Outcome, event.ReasonCode = "rejected", "sendRateLimited"
+		case errors.Is(err, ErrInvalid):
+			event.Outcome, event.ReasonCode = "rejected", "invalidRequest"
+		case errors.Is(err, ErrDeliveryUnavailable):
+			event.ReasonCode = "providerUnavailable"
+		}
+	}
+	verifier.events.Offer(event)
 }

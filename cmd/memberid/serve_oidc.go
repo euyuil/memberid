@@ -9,6 +9,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/euyuil/memberid/internal/authevent"
 	"github.com/euyuil/memberid/internal/config"
 	"github.com/euyuil/memberid/internal/dingtalk"
 	"github.com/euyuil/memberid/internal/feishu"
@@ -86,6 +87,11 @@ func authenticationHandler(ctx context.Context, directory string) (http.Handler,
 		store.Close()
 		return nil, nil, err
 	}
+	events, err := authevent.Open(os.Getenv("MEMBERID_DATABASE_URL"), loaded.AuthenticationEventRetention())
+	if err != nil {
+		slog.Warn("Authentication event writer unavailable")
+	}
+	provider.SetEventRecorder(events)
 	cleanup, cancel := context.WithCancel(ctx)
 	finished := make(chan struct{})
 	synchronized := make(chan struct{})
@@ -129,5 +135,12 @@ func authenticationHandler(ctx context.Context, directory string) (http.Handler,
 			}
 		}
 	}()
-	return provider, func() { cancel(); <-finished; <-synchronized; <-feishuFinished; store.Close() }, nil
+	return provider, func() {
+		cancel()
+		<-finished
+		<-synchronized
+		<-feishuFinished
+		events.Close(5 * time.Second)
+		store.Close()
+	}, nil
 }
