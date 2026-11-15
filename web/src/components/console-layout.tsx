@@ -207,7 +207,6 @@ export function ConsoleLayout({
             ) : (
               <ChevronsLeft aria-hidden="true" />
             )}
-            <span className="nav-label">收起侧栏</span>
           </Button>
           <div className="actor-panel">{account()}</div>
         </div>
