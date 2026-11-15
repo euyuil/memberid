@@ -79,7 +79,10 @@ Initial grant establishment and confirmed code/Refresh Token reuse produce
 [best-effort authentication events](authentication-events.md). A replay observation
 and its actual grant revocation are separate events; audit failure never replaces
 or gates the protocol transaction. Issuance success means committed grant/token
-records, not confirmation that the client received the response.
+records, not confirmation that the client received the response. Explicit client
+revocation, browser logout, and operator grant revocation use the same independent
+event writer. A shared-session logout records platform session context and each
+actually revoked organization grant; an idempotent no-op adds no state-change event.
 
 ## Standard refresh
 

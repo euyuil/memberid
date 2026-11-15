@@ -372,7 +372,18 @@ func (s *storage) RevokeToken(ctx context.Context, id, subject, clientID string)
 	if !validTokenID(id) || !identity.ValidID(subject, identity.MemberKind) && !identity.ValidID(subject, identity.FactorKind) {
 		return nil
 	}
-	_, err := s.service.store.Database().Exec(ctx, "UPDATE oidc_grants SET revoked_at=$3 WHERE client_id=$1 AND COALESCE(NULLIF(data->>'memberId',''),data->>'factorId')=$4 AND id IN (SELECT grant_id FROM oidc_access_tokens WHERE id=$2 UNION SELECT grant_id FROM oidc_refresh_tokens WHERE id=$2)", clientID, id, s.service.now(), subject)
+	event := authevent.Event{Type: "grant.revoke", Trigger: "clientRevocation", ClientID: clientID, RequestID: authevent.FromContext(ctx).RequestID, Actor: authevent.Actor{Kind: "client", ID: clientID}}
+	var grantID string
+	var data []byte
+	err := s.service.store.Database().QueryRow(ctx, "UPDATE oidc_grants SET revoked_at=$3 WHERE revoked_at IS NULL AND client_id=$1 AND COALESCE(NULLIF(data->>'memberId',''),data->>'factorId')=$4 AND id IN (SELECT grant_id FROM oidc_access_tokens WHERE id=$2 UNION SELECT grant_id FROM oidc_refresh_tokens WHERE id=$2) RETURNING id,data", clientID, id, s.service.now(), subject).Scan(&grantID, &data)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	if err == nil {
+		event = revokedGrantEvent(ctx, grantID, data, event.Actor, "clientRevocation")
+	}
+	// Autocommit acknowledgement may be lost; do not claim rollback on transport errors.
+	s.service.events.Offer(operationResult(event, err, true))
 	if err != nil {
 		return oidc.ErrServerError()
 	}
@@ -382,9 +393,17 @@ func (s *storage) TerminateSession(context.Context, string, string) error {
 	return oidc.ErrInvalidRequest().WithDescription("Use the browser logout endpoint")
 }
 func (s *storage) endSession(ctx context.Context, sessionID, secret string) error {
-	return pgx.BeginFunc(ctx, s.service.store.Database(), func(tx pgx.Tx) error {
+	event := authevent.Event{EventID: authevent.NewID(), Type: "session.revoke", Trigger: "browserLogout", RequestID: authevent.FromContext(ctx).RequestID}
+	changed, commitReady := false, false
+	// Bound the producer as well as the delivery queue. Revocation still covers
+	// every grant; excess evidence is counted as dropped only after commit.
+	grants := make([]authevent.Event, 0, maxLogoutGrantEvents)
+	var dropped uint64
+	err := pgx.BeginFunc(ctx, s.service.store.Database(), func(tx pgx.Tx) error {
 		var expected string
-		err := tx.QueryRow(ctx, "SELECT secret_hash FROM oidc_sessions WHERE id=$1 FOR UPDATE", sessionID).Scan(&expected)
+		var verification []byte
+		var revokedAt *time.Time
+		err := tx.QueryRow(ctx, "SELECT secret_hash,verification,revoked_at FROM oidc_sessions WHERE id=$1 FOR UPDATE", sessionID).Scan(&expected, &verification, &revokedAt)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil
 		}
@@ -394,12 +413,54 @@ func (s *storage) endSession(ctx context.Context, sessionID, secret string) erro
 		if !sameSecret(expected, config.SecretHash(secret)) {
 			return oidc.ErrInvalidRequest()
 		}
+		if revokedAt != nil {
+			return nil
+		}
+		event.SessionID = sessionID
+		var verified identity.Verification
+		if json.Unmarshal(verification, &verified) == nil && verified.Factor.ID != "" {
+			event.FactorID, event.Method = verified.Factor.ID, verified.Method
+			event.Actor = authevent.Actor{Kind: "factor", ID: verified.Factor.ID}
+		}
+		changed = true
 		if _, err := tx.Exec(ctx, "UPDATE oidc_sessions SET revoked_at=$2 WHERE id=$1", sessionID, s.service.now()); err != nil {
 			return err
 		}
-		_, err = tx.Exec(ctx, "UPDATE oidc_grants SET revoked_at=$2 WHERE session_id=$1", sessionID, s.service.now())
+		rows, err := tx.Query(ctx, "UPDATE oidc_grants SET revoked_at=$2 WHERE session_id=$1 AND revoked_at IS NULL RETURNING id,data", sessionID, s.service.now())
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var id string
+			var data []byte
+			if err := rows.Scan(&id, &data); err != nil {
+				return err
+			}
+			if len(grants) == maxLogoutGrantEvents {
+				dropped++
+				continue
+			}
+			child := revokedGrantEvent(ctx, id, data, event.Actor, "browserLogout")
+			child.CausationID = event.EventID
+			grants = append(grants, child)
+		}
+		err = rows.Err()
+		commitReady = err == nil
 		return err
 	})
+	if changed || err != nil {
+		event.OccurredAt = s.service.now().UTC()
+		s.service.events.Offer(operationResult(event, err, commitReady))
+		if err == nil {
+			for _, child := range grants {
+				child.OccurredAt = event.OccurredAt
+				s.service.events.Offer(operationResult(child, nil, true))
+			}
+			s.service.events.Drop(dropped)
+		}
+	}
+	return err
 }
 
 // Feishu source changes and token issuance take complementary organization locks.
