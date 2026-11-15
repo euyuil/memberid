@@ -14,6 +14,8 @@ Adaptations localize accessible names, retain only the Sidebar primitives curren
 
 The organization switcher follows the same version's [Sidebar-07 Team Switcher](https://github.com/shadcn-ui/ui/blob/shadcn%404.23.0/apps/v4/registry/bases/base/blocks/sidebar-07/components/team-switcher.tsx). The project's pinned CLI added the Base Nova Dropdown Menu component from the official registry on 2026-11-15. Adaptations use radio items for the current organization, preserve server-side organization pagination, and show a static identity for organization administrators. No package dependencies changed; the retained shadcn MIT notice also covers this source.
 
+The account menu follows the same version's [Sidebar-07 Nav User](https://github.com/shadcn-ui/ui/blob/shadcn%404.23.0/apps/v4/registry/bases/base/blocks/sidebar-07/components/nav-user.tsx), using the shared Dropdown Menu and official Base Nova Avatar added through the pinned CLI. Adaptations retain MemberID's member profile and asynchronous sign-out actions, show the management role, and use initials without external avatar requests. The dependency graph and retained MIT notice are unchanged.
+
 Registry response SHA-256 values, before import/icon transformation:
 
 | Component | SHA-256 |
