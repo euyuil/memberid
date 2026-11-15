@@ -158,17 +158,22 @@ function signInBlockers(
   ]
 }
 
-function EventDetails({ event }: { event: ManagementEvent }) {
-  const presentation = describeEvent(event)
-  const description = presentation.changes.join("；") || "—"
+function EventDetails({
+  event,
+  presentation,
+  description,
+}: {
+  event: ManagementEvent
+  presentation: ReturnType<typeof describeEvent>
+  description: string
+}) {
   return (
     <Dialog>
       <DialogTrigger
-        className="event-summary"
-        title={description}
+        render={<Button variant="ghost" size="sm" />}
         aria-label={`查看操作记录详情：${presentation.action} ${presentation.targetName}`}
       >
-        {description}
+        查看详情
       </DialogTrigger>
       <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
@@ -182,9 +187,27 @@ function EventDetails({ event }: { event: ManagementEvent }) {
           <dt>操作者</dt>
           <dd className="wrap-anywhere">{presentation.actorName}</dd>
           <dt>组织</dt>
-          <dd className="wrap-anywhere">{presentation.organizationName}</dd>
+          <dd className="wrap-anywhere">
+            <Link
+              className="text-primary hover:underline"
+              href={routeURL({ org: event.organizationId })}
+            >
+              {presentation.organizationName}
+            </Link>
+          </dd>
           <dt>对象</dt>
-          <dd className="wrap-anywhere">{presentation.targetName}</dd>
+          <dd className="wrap-anywhere">
+            {presentation.targetURL ? (
+              <Link
+                className="text-primary hover:underline"
+                href={presentation.targetURL}
+              >
+                {presentation.targetName}
+              </Link>
+            ) : (
+              presentation.targetName
+            )}
+          </dd>
           <dt>操作者标识</dt>
           <dd>
             <RecordIdentifier value={event.actor} label="操作者标识" />
@@ -807,8 +830,10 @@ export default function App() {
             )}
             {data.organization && !events && !membersView && !providers && (
               <section className="organization-summary">
-                <div>
-                  <Status active={data.organization.status === "enabled"} />
+                <div className="organization-identity">
+                  <div className="organization-status">
+                    <Status active={data.organization.status === "enabled"} />
+                  </div>
                   <RecordIdentifier value={org} label="组织 ID" />
                 </div>
                 <div className="actions">
@@ -1066,45 +1091,65 @@ export default function App() {
                 className="directory event-directory"
                 aria-label="操作记录列表"
               >
-                <Table>
+                <Table className="table-fixed">
                   <TableHeader>
                     <TableRow>
-                      <TableHead>时间</TableHead>
-                      <TableHead>操作者</TableHead>
-                      {!org && <TableHead>组织</TableHead>}
+                      <TableHead className="event-time">时间</TableHead>
+                      <TableHead className="event-wide-column">操作者</TableHead>
+                      {!org && (
+                        <TableHead className="event-wide-column">组织</TableHead>
+                      )}
                       <TableHead>操作</TableHead>
-                      <TableHead>对象</TableHead>
-                      <TableHead>变更</TableHead>
+                      <TableHead className="event-wide-column">对象</TableHead>
+                      <TableHead className="event-wide-column">变更</TableHead>
+                      <TableHead className="row-actions">
+                        <span className="sr-only">详情</span>
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {data.events.map((event) => {
                       const presentation = describeEvent(event)
+                      const description = presentation.changes.join("；") || "—"
                       return (
                         <TableRow key={event.id}>
                           <TableCell>
                             <RecordTime value={event.createdAt} compact />
                           </TableCell>
-                          <TableCell>
+                          <TableCell className="event-wide-column">
                             <RecordIdentity name={presentation.actorName} />
                           </TableCell>
                           {!org && (
-                            <TableCell>
+                            <TableCell className="event-wide-column">
                               <RecordIdentity
                                 name={presentation.organizationName}
                                 href={routeURL({ org: event.organizationId })}
                               />
                             </TableCell>
                           )}
-                          <TableCell>{presentation.action}</TableCell>
                           <TableCell>
+                            {presentation.action}
+                            <span className="event-context">
+                              {presentation.targetName}
+                            </span>
+                          </TableCell>
+                          <TableCell className="event-wide-column">
                             <RecordIdentity
                               name={presentation.targetName}
                               href={presentation.targetURL}
                             />
                           </TableCell>
-                          <TableCell>
-                            <EventDetails event={event} />
+                          <TableCell className="event-wide-column">
+                            <span className="event-summary" title={description}>
+                              {description}
+                            </span>
+                          </TableCell>
+                          <TableCell className="row-actions">
+                            <EventDetails
+                              event={event}
+                              presentation={presentation}
+                              description={description}
+                            />
                           </TableCell>
                         </TableRow>
                       )
@@ -1387,29 +1432,31 @@ function MemberSearch({
           <option value="no">普通成员</option>
         </select>
       </label>
-      <Button type="submit" variant="outline">
-        搜索
-      </Button>
-      <Button
-        type="button"
-        variant="ghost"
-        disabled={
-          !(
-            query ||
-            status ||
-            administrator ||
-            Object.values(filters).some(Boolean)
-          )
-        }
-        onClick={() => {
-          setQuery("")
-          setStatus("")
-          setAdministrator("")
-          onClear()
-        }}
-      >
-        清除筛选
-      </Button>
+      <div className="flex items-center gap-2">
+        <Button type="submit" variant="outline">
+          搜索
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          disabled={
+            !(
+              query ||
+              status ||
+              administrator ||
+              Object.values(filters).some(Boolean)
+            )
+          }
+          onClick={() => {
+            setQuery("")
+            setStatus("")
+            setAdministrator("")
+            onClear()
+          }}
+        >
+          清除筛选
+        </Button>
+      </div>
     </form>
   )
 }
