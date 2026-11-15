@@ -33,6 +33,8 @@ const (
 	providersResource                        managementResource = organizationResource + "/providers"
 	providerTypeResource                     managementResource = providersResource + "/{providerType}"
 	providerResource                         managementResource = providerTypeResource + "/{providerId}"
+	samlServiceProvidersResource             managementResource = organizationResource + "/samlServiceProviders"
+	samlServiceProviderResource              managementResource = samlServiceProvidersResource + "/{serviceProviderId}"
 	organizationEventsResource               managementResource = organizationResource + "/managementEvents"
 	memberDirectoryResource                  managementResource = "memberDirectory"
 	managementEventsResource                 managementResource = "managementEvents"
@@ -57,6 +59,8 @@ var managementOperations = map[managementResource][]string{
 	providersResource:                        {actionList},
 	providerTypeResource:                     {actionCreate},
 	providerResource:                         {actionUpdate, actionStatusUpdate},
+	samlServiceProvidersResource:             {actionCreate, actionList},
+	samlServiceProviderResource:              {actionGet, actionUpdate, actionStatusUpdate, actionDelete},
 	organizationEventsResource:               {actionList},
 	memberDirectoryResource:                  {actionList},
 	managementEventsResource:                 {actionList},
@@ -145,6 +149,8 @@ func validManagementPart(template, value string) bool {
 		return value == "dingtalk" || value == "feishu"
 	case "{providerId}":
 		return validText(value, 128)
+	case "{serviceProviderId}":
+		return validSAMLServiceProviderID(value)
 	default:
 		return template == value
 	}

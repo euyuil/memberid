@@ -98,6 +98,43 @@ export function describeEvent(event: ManagementEvent) {
     case "binding.revoke":
       label = "撤销绑定"
       break
+    case "saml.serviceProvider.configure":
+      label =
+        changes.retired === true
+          ? "退役 SAML 应用"
+          : changes.revision === 1
+            ? "添加 SAML 应用"
+            : "配置 SAML 应用"
+      if (changes.retired === true || changes.revision === 1) break
+      field("displayName", "重命名 SAML 应用", name)
+      field("acsUrl", "更新 ACS", name)
+      field(
+        "enabled",
+        changes.enabled ? "启用 SAML 应用" : "停用 SAML 应用",
+        enabled
+      )
+      field("allowUnsignedRequests", "更新请求签名策略", (value) =>
+        typeof value === "boolean"
+          ? value
+            ? "允许未签名"
+            : "必须签名"
+          : undefined
+      )
+      field("preauthorized", "更新授权确认策略", (value) =>
+        typeof value === "boolean"
+          ? value
+            ? "跳过确认"
+            : "用户确认"
+          : undefined
+      )
+      for (const [key, text] of [
+        ["signingCertificates", "更新 SP 签名证书"],
+        ["attributes", "更新属性授权"],
+      ]) {
+        if (JSON.stringify(changes[key]) !== JSON.stringify(previous[key]))
+          operations.push(text)
+      }
+      break
     case "provider.configure":
       label = changes.created === true ? "添加登录" : "配置登录"
       if (changes.created === true) {
@@ -121,6 +158,7 @@ export function describeEvent(event: ManagementEvent) {
       break
   }
   const provider = action === "provider.configure"
+  const saml = action === "saml.serviceProvider.configure"
   const providerId =
     provider && typeof changes.providerId === "string"
       ? changes.providerId
@@ -128,7 +166,10 @@ export function describeEvent(event: ManagementEvent) {
   const recordedName =
     action === "organization.create" || action === "organization.update"
       ? name(changes.name)
-      : action === "member.create" || action === "member.update" || provider
+      : action === "member.create" ||
+          action === "member.update" ||
+          provider ||
+          saml
         ? name(changes.displayName)
         : undefined
   return {
@@ -142,19 +183,25 @@ export function describeEvent(event: ManagementEvent) {
           : snapshot.actorName || "姓名未记录",
     organizationName: snapshot.organizationName || "组织名称未记录",
     targetName: snapshot.targetName || recordedName || "名称未记录",
-    targetURL: provider
-      ? providerId
-        ? routeURL({
-            org: event.organizationId,
-            view: "providers",
-            provider: providerId,
-          })
-        : undefined
-      : routeURL({
+    targetURL: saml
+      ? routeURL({
           org: event.organizationId,
-          view: event.memberId ? "members" : "organization",
-          member: event.memberId,
-        }),
+          view: "saml-service-providers",
+          serviceProvider: name(changes.id),
+        })
+      : provider
+        ? providerId
+          ? routeURL({
+              org: event.organizationId,
+              view: "providers",
+              provider: providerId,
+            })
+          : undefined
+        : routeURL({
+            org: event.organizationId,
+            view: event.memberId ? "members" : "organization",
+            member: event.memberId,
+          }),
     providerId,
   }
 }

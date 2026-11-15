@@ -1,5 +1,10 @@
 export type View =
-  "organization" | "members" | "providers" | "events" | "authentication-events"
+  | "organization"
+  | "members"
+  | "providers"
+  | "saml-service-providers"
+  | "events"
+  | "authentication-events"
 
 export type Route = {
   view?: View
@@ -11,6 +16,7 @@ export type Route = {
   after?: string
   before?: string
   provider?: string
+  serviceProvider?: string
   target?: string
 }
 
@@ -28,6 +34,10 @@ export function routeURL(route: Route): string {
       if (route[key]) query.set(key, route[key])
   } else if (view === "providers" && org) {
     if (route.provider) query.set("providerId", route.provider)
+  } else if (view === "saml-service-providers") {
+    if (route.after) query.set("after", route.after)
+    if (org && route.serviceProvider)
+      query.set("serviceProviderId", route.serviceProvider)
   } else if (view === "events") {
     if (route.target) query.set("memberId", route.target)
     if (route.before) query.set("before", route.before)
@@ -49,7 +59,7 @@ export function parseRoute(location: string) {
       query,
     }
   const match =
-    /^(?:\/(organizations|members|providers|events|authentication-events)|\/organizations\/([A-Za-z0-9_-]+)(?:\/(members|providers|events|authentication-events)(?:\/([A-Za-z0-9_-]+))?)?)$/.exec(
+    /^(?:\/(organizations|members|providers|saml-service-providers|events|authentication-events)|\/organizations\/([A-Za-z0-9_-]+)(?:\/(members|providers|saml-service-providers|events|authentication-events)(?:\/([A-Za-z0-9_-]+))?)?)$/.exec(
       path
     )
   if (!match || (match[4] && match[3] !== "members")) return null

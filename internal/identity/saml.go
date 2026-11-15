@@ -13,12 +13,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/euyuil/memberid/internal/authorization"
 	"github.com/jackc/pgx/v5"
 )
 
-// SAMLServiceProvider is operator-owned protocol admission, not application authorization.
+// SAMLServiceProvider is organization-owned protocol admission, not application authorization.
 type SAMLServiceProvider struct {
 	ID                    string   `json:"id"`
+	DisplayName           string   `json:"displayName"`
 	EntityID              string   `json:"entityId"`
 	OrganizationID        string   `json:"organizationId"`
 	ACSURL                string   `json:"acsUrl"`
@@ -32,7 +34,7 @@ type SAMLServiceProvider struct {
 }
 
 func (sp SAMLServiceProvider) Validate(loopback bool) error {
-	if len(sp.ID) < 1 || len(sp.ID) > 64 || strings.Trim(sp.ID, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_") != "" || !ValidID(sp.OrganizationID, OrganizationKind) {
+	if !validSAMLServiceProviderID(sp.ID) || !ValidID(sp.OrganizationID, OrganizationKind) || sp.DisplayName != "" && !validText(sp.DisplayName, 128) {
 		return ErrInvalid
 	}
 	entity, err := url.Parse(sp.EntityID)
@@ -66,6 +68,10 @@ func (sp SAMLServiceProvider) Validate(loopback bool) error {
 	return nil
 }
 
+func validSAMLServiceProviderID(id string) bool {
+	return len(id) >= 1 && len(id) <= 64 && strings.Trim(id, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_") == ""
+}
+
 func readSAMLProvider(row pgx.Row) (SAMLServiceProvider, error) {
 	var sp SAMLServiceProvider
 	var data []byte
@@ -89,7 +95,7 @@ func (store *Store) SAMLServiceProviderByEntityID(ctx context.Context, entityID 
 	return readSAMLProvider(store.pool.QueryRow(ctx, "SELECT data,revision,retired_at IS NOT NULL FROM saml_service_providers WHERE entity_id=$1", entityID))
 }
 
-// LockSAMLServiceProvider serializes issuance with operator policy changes.
+// LockSAMLServiceProvider serializes issuance with registration policy changes.
 func LockSAMLServiceProvider(ctx context.Context, tx pgx.Tx, id string) (SAMLServiceProvider, error) {
 	return readSAMLProvider(tx.QueryRow(ctx, "SELECT data,revision,retired_at IS NOT NULL FROM saml_service_providers WHERE id=$1 FOR SHARE", id))
 }
@@ -111,30 +117,70 @@ func (store *Store) SAMLServiceProviders(ctx context.Context) ([]SAMLServiceProv
 	return result, rows.Err()
 }
 
-// PutSAMLServiceProvider accepts only the in-process operator principal. Revision
-// zero creates; subsequent writes require the currently inspected revision.
+// PutSAMLServiceProvider is the installation entry point. Console callers use
+// ManagementService, which retains Member authority instead of impersonating an operator.
 func (store *Store) PutSAMLServiceProvider(ctx context.Context, principal Principal, sp SAMLServiceProvider, loopback bool) (SAMLServiceProvider, error) {
-	if principal.kind != operatorPrincipal {
-		return sp, ErrForbidden
+	if !principal.installation() {
+		return SAMLServiceProvider{}, ErrForbidden
 	}
+	return store.putSAMLServiceProvider(ctx, principal, sp, loopback)
+}
+
+func (store *Store) putSAMLServiceProvider(ctx context.Context, principal Principal, sp SAMLServiceProvider, loopback bool) (SAMLServiceProvider, error) {
 	if err := sp.Validate(loopback); err != nil || sp.Revision < 0 {
-		return sp, ErrInvalid
+		return SAMLServiceProvider{}, ErrInvalid
+	}
+	return store.mutateSAMLServiceProvider(ctx, principal, sp.OrganizationID, sp.ID, sp.Revision, &sp)
+}
+
+func (store *Store) mutateSAMLServiceProvider(ctx context.Context, principal Principal, organizationID, id string, revision int64, update *SAMLServiceProvider) (SAMLServiceProvider, error) {
+	var result SAMLServiceProvider
+	if !ValidID(organizationID, OrganizationKind) || !validSAMLServiceProviderID(id) || revision < 0 || update == nil && revision == 0 {
+		return result, ErrInvalid
 	}
 	err := pgx.BeginFunc(ctx, store.pool, func(tx pgx.Tx) error {
 		if err := managementLock(ctx, tx); err != nil {
 			return err
 		}
-		current, err := readSAMLProvider(tx.QueryRow(ctx, "SELECT data,revision,retired_at IS NOT NULL FROM saml_service_providers WHERE id=$1 FOR UPDATE", sp.ID))
+		requirements := []authorization.Requirement{samlServiceProviderResource.require(actionUpdate, organizationID, id), samlServiceProviderResource.require(actionStatusUpdate, organizationID, id)}
+		if update == nil || update.Retired {
+			requirements = []authorization.Requirement{samlServiceProviderResource.require(actionDelete, organizationID, id)}
+		} else if revision == 0 {
+			requirements = []authorization.Requirement{samlServiceProvidersResource.require(actionCreate, organizationID)}
+		}
+		if err := authorizeAll(ctx, tx, principal, requirements...); err != nil {
+			return err
+		}
+		current, err := readSAMLProvider(tx.QueryRow(ctx, "SELECT data,revision,retired_at IS NOT NULL FROM saml_service_providers WHERE id=$1 FOR UPDATE", id))
+		var previous map[string]any
 		if errors.Is(err, ErrNotFound) {
-			if sp.Revision != 0 || sp.Retired {
+			if revision != 0 || update == nil || update.Retired {
 				return ErrConflict
 			}
 		} else if err != nil {
 			return err
-		} else if current.Retired || current.Revision != sp.Revision || current.EntityID != sp.EntityID || current.OrganizationID != sp.OrganizationID {
-			return ErrConflict
+		} else {
+			if current.OrganizationID != organizationID {
+				return ErrNotFound
+			}
+			if current.Retired || current.Revision != revision || update != nil && current.EntityID != update.EntityID {
+				return ErrConflict
+			}
+			data, err := json.Marshal(current)
+			if err != nil {
+				return err
+			}
+			if err := json.Unmarshal(data, &previous); err != nil {
+				return err
+			}
 		}
-		sp.Revision++
+		sp := current
+		if update != nil {
+			sp = *update
+		} else {
+			sp.Retired = true
+		}
+		sp.Revision = revision + 1
 		if sp.Retired {
 			sp.Enabled = false
 		}
@@ -152,9 +198,16 @@ func (store *Store) PutSAMLServiceProvider(ctx context.Context, principal Princi
 		if err != nil {
 			return storageError(err)
 		}
-		return managementEvent(ctx, tx, principal, sp.OrganizationID, "", "saml.serviceProvider.configure", sp, nil)
+		if err := managementEvent(ctx, tx, principal, sp.OrganizationID, "", "saml.serviceProvider.configure", sp, previous); err != nil {
+			return err
+		}
+		result = sp
+		return nil
 	})
-	return sp, err
+	if err != nil {
+		return SAMLServiceProvider{}, err
+	}
+	return result, nil
 }
 
 // SAMLNameID never uses profile attributes, provider subjects, or an operator-

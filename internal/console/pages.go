@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-var pagePath = regexp.MustCompile(`^/(organizations(/[A-Za-z0-9_-]+(/(members(/[A-Za-z0-9_-]+)?|providers|events|authentication-events))?)?|members|providers|events|authentication-events)?$`)
+var pagePath = regexp.MustCompile(`^/(organizations(/[A-Za-z0-9_-]+(/(members(/[A-Za-z0-9_-]+)?|providers|saml-service-providers|events|authentication-events))?)?|members|providers|saml-service-providers|events|authentication-events)?$`)
 
 // Only page routes receive the application entry point. API, authentication,
 // missing assets, and unknown paths retain their own HTTP responses.

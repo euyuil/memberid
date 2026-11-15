@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react"
 import {
   Building2,
+  AppWindow,
   ChevronsUpDown,
   ChevronRight,
   Fingerprint,
@@ -93,6 +94,11 @@ import {
   type AuthenticationEventPage,
 } from "@/authentication-events"
 import { Providers, type ProviderDirectory } from "@/Providers"
+import { SAMLServiceProviders } from "@/SAMLServiceProviders"
+import type {
+  SAMLDirectory,
+  SAMLServiceProvider,
+} from "@/saml-service-providers"
 import { memberListLocation, parseRoute, routeURL, type Route } from "@/routes"
 import { describeEvent, type ManagementEvent } from "@/operation-history"
 import { currentLocation, Link, navigate } from "@/navigation"
@@ -139,6 +145,8 @@ type Data = {
   authenticationEvents?: AuthenticationEventPage
   historyMember?: Member
   providers?: ProviderDirectory
+  saml?: SAMLDirectory
+  serviceProvider?: SAMLServiceProvider
 }
 type Action = {
   title: string
@@ -334,6 +342,7 @@ export default function App() {
   const events = view === "events"
   const authenticationEvents = view === "authentication-events"
   const providers = view === "providers"
+  const saml = view === "saml-service-providers"
   const membersView = view === "members"
   const activeView = view ?? "organization"
   const member = route?.member ?? ""
@@ -475,6 +484,23 @@ export default function App() {
               `/api/organizations/${encodeURIComponent(org)}/providers`,
               options
             )
+          } else if (saml) {
+            const endpoint = `/api/organizations/${encodeURIComponent(org)}/saml-service-providers`
+            const selected = params.get("serviceProviderId")
+            const [directory, detail] = await Promise.all([
+              request<SAMLDirectory>(
+                `${endpoint}${after ? `?after=${encodeURIComponent(after)}` : ""}`,
+                options
+              ),
+              selected
+                ? request<SAMLServiceProvider>(
+                    `${endpoint}/${encodeURIComponent(selected)}`,
+                    options
+                  )
+                : undefined,
+            ])
+            result.saml = directory
+            result.serviceProvider = detail
           } else if (member) {
             result.detail = await request<Detail>(
               `/api/organizations/${encodeURIComponent(org)}/members/${encodeURIComponent(member)}`,
@@ -629,6 +655,8 @@ export default function App() {
     }
   } else if (providers) {
     breadcrumbs.push({ label: "身份提供商" })
+  } else if (saml) {
+    breadcrumbs.push({ label: "SAML 应用" })
   } else if (authenticationEvents) {
     breadcrumbs.push({ label: "认证记录" })
   } else if (events) {
@@ -703,6 +731,16 @@ export default function App() {
           group: "身份管理",
         },
         {
+          label: "SAML 应用",
+          href: routeURL({
+            view: "saml-service-providers",
+            ...navigationScope,
+          }),
+          icon: AppWindow,
+          active: saml,
+          group: "应用接入",
+        },
+        {
           label: "认证记录",
           href: routeURL({ view: "authentication-events", ...navigationScope }),
           icon: Fingerprint,
@@ -755,11 +793,13 @@ export default function App() {
                   : "操作记录"
                 : providers
                   ? "身份提供商"
-                  : membersView
-                    ? member
-                      ? (selected?.displayName ?? "成员详情")
-                      : "成员"
-                    : (data.organization?.name ?? "组织")}
+                  : saml
+                    ? "SAML 应用"
+                    : membersView
+                      ? member
+                        ? (selected?.displayName ?? "成员详情")
+                        : "成员"
+                      : (data.organization?.name ?? "组织")}
           </h1>
         </div>
         <div className="actions">
@@ -831,6 +871,7 @@ export default function App() {
             !events &&
             !authenticationEvents &&
             !providers &&
+            !saml &&
             org && (
               <>
                 {actor.platform && (
@@ -922,13 +963,15 @@ export default function App() {
                   ? "暂时无法加载操作记录"
                   : providers
                     ? "暂时无法加载身份提供商"
-                    : membersView
-                      ? member
-                        ? "暂时无法加载成员详情"
-                        : "暂时无法加载成员列表"
-                      : org
-                        ? "暂时无法加载组织详情"
-                        : "暂时无法加载组织列表"
+                    : saml
+                      ? "暂时无法加载 SAML 应用"
+                      : membersView
+                        ? member
+                          ? "暂时无法加载成员详情"
+                          : "暂时无法加载成员列表"
+                        : org
+                          ? "暂时无法加载组织详情"
+                          : "暂时无法加载组织列表"
             }
             action={
               <Button variant="outline" onClick={refresh}>
@@ -1009,7 +1052,7 @@ export default function App() {
                   count={data.organizations.items.length}
                   after={after}
                   next={data.organizations.nextAfter}
-                  route={providers ? { view: "providers" } : {}}
+                  route={providers || saml ? { view: activeView } : {}}
                 />
               </section>
             )}
@@ -1026,10 +1069,23 @@ export default function App() {
                 onComplete={refresh}
               />
             )}
+            {data.saml && data.organization && (
+              <SAMLServiceProviders
+                key={`${org}:${params.get("serviceProviderId") ?? ""}:${revision}`}
+                directory={data.saml}
+                selected={data.serviceProvider}
+                organizationId={org}
+                after={after}
+                csrf={session.csrf}
+                save={request}
+                onComplete={refresh}
+              />
+            )}
             {data.organization &&
               !events &&
               !authenticationEvents &&
               !membersView &&
+              !saml &&
               !providers && (
                 <Card>
                   <CardHeader>

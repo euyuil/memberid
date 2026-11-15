@@ -83,6 +83,7 @@ func New(ctx context.Context, store *identity.Store, installation *config.Loaded
 	s.routes.HandleFunc("GET /api/organizations/{organizationId}/authentication-events", s.authenticationEvents)
 	s.routes.HandleFunc("GET /api/organizations/{organizationId}/authentication-events/{eventId}", s.authenticationEvent)
 	s.registerProviderRoutes(installation)
+	s.registerSAMLRoutes()
 	static, _ := fs.Sub(assets, "static")
 	registerPages(s.routes, static)
 	return s, nil

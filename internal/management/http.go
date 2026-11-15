@@ -71,6 +71,7 @@ func New(store *identity.Store, secretSHA256 string, applications *identity.Ding
 	})
 	h.routes.HandleFunc("POST /v1/eligibility", h.eligibility)
 	h.routes.HandleFunc("POST /v1/organizations/{organizationId}/member-eligibility", h.memberEligibility)
+	h.samlRoutes()
 	if applications != nil {
 		h.dingTalkRoutes(applications)
 	}
@@ -96,7 +97,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.URL.RawQuery != "" || r.URL.ForceQuery {
-		if r.Method != http.MethodGet || (r.URL.Path != "/v1/organizations" && !strings.HasSuffix(r.URL.Path, "/members")) {
+		if r.Method != http.MethodGet || (r.URL.Path != "/v1/organizations" && !strings.HasSuffix(r.URL.Path, "/members") && !strings.HasSuffix(r.URL.Path, "/saml-service-providers")) {
 			problem(w, http.StatusBadRequest, "invalid_request")
 			return
 		}
