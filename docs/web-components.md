@@ -22,6 +22,8 @@ Detail identifiers use the official Base Nova Input Group, including its Textare
 
 The provider form uses the official Base Nova Checkbox with Field and FieldLabel. Its native button rendering supports the sibling label; the hidden form input retains checked/unchecked submission semantics. The pinned CLI adds only source using the existing Base UI and Lucide dependencies, covered by the retained MIT notice.
 
+Management state and access confirmations use the official Base Nova Alert Dialog from the pinned CLI. Cancel receives initial focus, action labels name the operation, and asynchronous submission keeps the dialog open on errors and prevents dismissal while pending. Create and rename forms retain Dialog. The existing Button source and package dependencies are unchanged; the retained MIT notice covers the new component.
+
 Registry response SHA-256 values, before import/icon transformation:
 
 | Component | SHA-256 |
