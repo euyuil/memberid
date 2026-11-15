@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/euyuil/memberid/internal/config"
 	"github.com/euyuil/memberid/internal/identity"
 	"github.com/euyuil/memberid/internal/testdb"
 )
@@ -30,11 +31,26 @@ func TestDatabaseInitSavesInitialRootPasswordExclusively(t *testing.T) {
 		stderr.Reset()
 		return run(t.Context(), []string{"database", "init", "--initial-root-password-file", path}, &stdout, &stderr)
 	}
+	t.Setenv("MEMBERID_DATABASE_URL", "invalid-database-settings")
 	if err := initialize(existing); !errors.Is(err, os.ErrExist) {
-		t.Fatal("initialization did not refuse the existing password file", err)
+		t.Fatal("initialization did not detect the existing file before connecting", err)
 	}
+	t.Setenv("MEMBERID_DATABASE_URL", databaseURL)
 	if data, err := os.ReadFile(existing); err != nil || string(data) != "preserve existing contents" {
 		t.Fatal("an existing operator-owned file was changed", err)
+	}
+	competing := filepath.Join(protected, "competing-password-file")
+	err := identity.InitializeWithRoot(t.Context(), databaseURL, func(password string) error {
+		if err := os.WriteFile(competing, []byte("created during initialization"), 0600); err != nil {
+			return err
+		}
+		return config.WriteExclusive(competing, []byte(password+"\n"))
+	})
+	if !errors.Is(err, os.ErrExist) {
+		t.Fatal("password write did not refuse a file created during initialization", err)
+	}
+	if data, err := os.ReadFile(competing); err != nil || string(data) != "created during initialization" {
+		t.Fatal("initialization changed a competing writer's file", err)
 	}
 	if store, err := identity.Open(t.Context(), databaseURL); store != nil || !errors.Is(err, identity.ErrSchemaRequired) {
 		t.Fatal("a failed password write did not roll back initialization", err)

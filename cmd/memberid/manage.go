@@ -51,6 +51,11 @@ func manage(ctx context.Context, args []string, stdout, stderr io.Writer) error 
 		if *passwordFile == "" {
 			err = identity.Initialize(ctx, databaseURL)
 		} else {
+			if _, err := os.Lstat(*passwordFile); err == nil {
+				return &os.PathError{Op: "create", Path: *passwordFile, Err: os.ErrExist}
+			} else if !errors.Is(err, os.ErrNotExist) {
+				return err
+			}
 			err = identity.InitializeWithRoot(ctx, databaseURL, func(password string) error {
 				return config.WriteExclusive(*passwordFile, []byte(password+"\n"))
 			})
