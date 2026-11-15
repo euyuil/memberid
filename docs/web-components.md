@@ -18,6 +18,8 @@ The account menu follows the same version's [Sidebar-07 Nav User](https://github
 
 The console header uses the official Base Nova Breadcrumb from the same pinned CLI and registry. MemberID supplies localized labels and router links with their existing return state. Layout adaptations keep the path on one line and truncate long names; no dependency or license inventory changes are required.
 
+Detail identifiers use the official Base Nova Input Group, including its Textarea source dependency, added through the same pinned CLI. The copy button sits in an inline-end addon; selectable read-only values, asynchronous clipboard handling, and reserved feedback space remain application behavior. Existing Button and Input sources are retained, with no package graph changes. The same retained MIT notice covers the added source.
+
 Registry response SHA-256 values, before import/icon transformation:
 
 | Component | SHA-256 |

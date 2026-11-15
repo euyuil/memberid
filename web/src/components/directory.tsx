@@ -12,8 +12,12 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from "@/components/ui/input-group"
 
 const directoryStateImages = {
   empty: emptyDirectory,
@@ -73,34 +77,34 @@ export function RecordIdentifier({
   const [copying, setCopying] = useState(false)
   return (
     <div className="record-identifier">
-      <div className="identifier-value">
-        <Input
+      <InputGroup>
+        <InputGroupInput
           aria-label={label}
           value={value}
           readOnly
           onFocus={(event) => event.currentTarget.select()}
         />
-        <Button
-          type="button"
-          variant="outline"
-          size="icon"
-          aria-label={`复制${label}`}
-          disabled={copying}
-          onClick={async () => {
-            setCopying(true)
-            try {
-              await navigator.clipboard.writeText(value)
-              setFeedback("已复制完整 ID。")
-            } catch {
-              setFeedback("无法自动复制，请选中上方 ID 手动复制。")
-            } finally {
-              setCopying(false)
-            }
-          }}
-        >
-          <Copy aria-hidden="true" />
-        </Button>
-      </div>
+        <InputGroupAddon align="inline-end">
+          <InputGroupButton
+            size="icon-xs"
+            aria-label={`复制${label}`}
+            disabled={copying}
+            onClick={async () => {
+              setCopying(true)
+              try {
+                await navigator.clipboard.writeText(value)
+                setFeedback("已复制完整 ID。")
+              } catch {
+                setFeedback("无法自动复制，请选中上方 ID 手动复制。")
+              } finally {
+                setCopying(false)
+              }
+            }}
+          >
+            <Copy aria-hidden="true" />
+          </InputGroupButton>
+        </InputGroupAddon>
+      </InputGroup>
       <p className="identifier-feedback" role="status">
         {feedback}
       </p>
