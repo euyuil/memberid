@@ -6,6 +6,8 @@ The UI uses shadcn 4.23.0 Base Nova components, adapted for MemberID navigation,
 
 The console Select follows the [Base Nova Select](https://github.com/shadcn-ui/ui/blob/shadcn%404.23.0/packages/registry/test/fixtures/transform-corpus/base-nova--select.tsx) from the same version. It uses the existing Base UI Select primitives and Lucide icons.
 
+The member directory follows the toolbar, bordered table, and pagination layout of the [Base UI Data Table example](https://github.com/shadcn-ui/ui/blob/shadcn%404.23.0/apps/v4/examples/base/data-table-demo.tsx) from the same version. It uses the existing Table, Input, Select, and Button components with MemberID's server-side filters and cursor pagination. Selection, sorting, and column visibility are not added, and no TanStack dependency is introduced.
+
 The Sidebar, Sheet, Tooltip, and mobile breakpoint hook follow the shadcn 4.23.0 [Base UI source](https://github.com/shadcn-ui/ui/tree/shadcn%404.23.0/apps/v4/registry/bases/base) and its icon-sidebar example. Base Nova styling was obtained from the official component registry on 2026-11-15. The source tag resolves to `96da9cc7f1aa10580a3741664e2a77c721206c00`; its root MIT license matches the retained shadcn notice. These components use the already reviewed Base UI, React, Lucide, cn, and class-variance-authority dependencies; the package graph is unchanged.
 
 Adaptations localize accessible names, retain only the Sidebar primitives currently used by the console, replace the unused server-side preference-cookie write with the existing in-memory state, and subscribe to the mobile media query through React `useSyncExternalStore`. MemberID supplies its own navigation links and account actions.
