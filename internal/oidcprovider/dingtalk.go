@@ -34,7 +34,7 @@ func dingTalkCallbackCode(r *http.Request) (string, bool) {
 }
 
 func (service *Service) startDingTalk(w http.ResponseWriter, r *http.Request, request *authorizationRequest, registered client) {
-	if service.dingtalk == nil || registered.registration.SubjectKind != "member" || request.Verification != nil || request.ChallengeID != "" || request.externalPending() {
+	if service.dingtalk == nil || registered.registration.SubjectKind != "member" || request.Verification != nil || request.phonePending() || request.externalPending() {
 		http.Error(w, "Cancel the current verification before starting DingTalk login.", http.StatusBadRequest)
 		return
 	}

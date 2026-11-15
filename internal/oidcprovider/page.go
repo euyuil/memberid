@@ -54,10 +54,13 @@ func (service *Service) renderLogin(w http.ResponseWriter, r *http.Request, requ
 	if verified && client.registration.SubjectKind == "member" && len(choices) == 0 {
 		message = "No eligible Member identity is available. Contact your organization administrator."
 	}
+	if !verified && request.phonePending() && request.ChallengeID == "" && message == "" {
+		message = "Phone verification is pending. Cancel verification to start again."
+	}
 	data := pageData{
 		Request: request, ClientID: client.registration.ID, Scopes: strings.Join(request.Scopes, ", "), Message: message,
 		Nonce: config.RandomSecret(), Members: choices, Verified: verified,
-		Pending: request.ChallengeID != "" || request.externalPending(), PhonePending: request.ChallengeID != "",
+		Pending: request.phonePending() || request.externalPending(), PhonePending: request.ChallengeID != "",
 		PhoneEnabled: service.phone != nil, ProviderEnabled: client.registration.SubjectKind == "member" && (service.dingtalk != nil || service.feishu != nil),
 		OrganizationRestricted: client.registration.OrganizationID != "", ProviderOrganizationID: client.registration.OrganizationID,
 		FactorClient: client.registration.SubjectKind == "factor", ConsentRequired: !client.registration.Preauthorized || slices.Contains(request.Input.Prompt, "consent"),

@@ -82,23 +82,6 @@ func setVerification(request *authorizationRequest, verified identity.Verificati
 	request.AbsoluteExpiry = verified.AuthenticatedAt.Add(maximumLifetime)
 	request.MemberID, request.OrganizationID, request.BindingID = "", "", ""
 }
-func (service *Service) createSession(w http.ResponseWriter, r *http.Request, request *authorizationRequest, verified identity.Verification) error {
-	id, secret := newID(), config.RandomSecret()
-	data, err := json.Marshal(verified)
-	if err != nil {
-		return err
-	}
-	absolute := verified.AuthenticatedAt.Add(maximumLifetime)
-	expiry := minimum(service.now().Add(sessionIdleLifetime), absolute)
-	if _, err := service.store.Database().Exec(r.Context(), "INSERT INTO oidc_sessions(id,secret_hash,verification,expires_at,absolute_expires_at) VALUES($1,$2,$3,$4,$5)", id, config.SecretHash(secret), data, expiry, absolute); err != nil {
-		return err
-	}
-	service.cookie(w, "session", secret, expiry.Sub(service.now()))
-	request.SessionID = id
-	setVerification(request, verified)
-	return nil
-}
-
 func (service *Service) members(r *http.Request, request *authorizationRequest, client client) ([]identity.Member, error) {
 	if request.Verification == nil || client.registration.SubjectKind == "factor" {
 		return nil, nil
@@ -176,7 +159,7 @@ func (service *Service) login(w http.ResponseWriter, r *http.Request) {
 		}
 		switch r.PostForm.Get("action") {
 		case "choose-organization":
-			if request.Verification != nil || request.ChallengeID != "" || request.externalPending() ||
+			if request.Verification != nil || request.phonePending() || request.externalPending() ||
 				registered.registration.SubjectKind != "member" || registered.registration.OrganizationID != "" {
 				http.Error(w, "Invalid organization selection", http.StatusBadRequest)
 				return
@@ -184,7 +167,8 @@ func (service *Service) login(w http.ResponseWriter, r *http.Request) {
 			organization, err := service.store.Organization(r.Context(), r.PostForm.Get("organization"))
 			if err != nil || organization.Status != "enabled" {
 				message = "Login providers are unavailable for that organization."
-				break
+				service.renderLogin(w, r, request, registered, message)
+				return
 			}
 			request.ProviderOrganizationID = organization.ID
 		case "feishu":
@@ -198,21 +182,34 @@ func (service *Service) login(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, "Phone verification unavailable", http.StatusBadRequest)
 				return
 			}
-			if request.ChallengeID != "" || request.Verification != nil {
+			if request.phonePending() || request.Verification != nil {
 				message = "Cancel the current verification before requesting another code."
-				break
+				service.renderLogin(w, r, request, registered, message)
+				return
 			}
-			challenge, err := service.phone.Start(r.Context(), request.ID, r.PostForm.Get("phone"))
+			phone, err := identity.NormalizePhone(r.PostForm.Get("phone"))
 			if err != nil {
-				message = "Unable to send a code. Check the number and try again later."
-				if errors.Is(err, identity.ErrRateLimited) {
-					message = "Please wait before requesting another verification code."
-				}
-				break
+				message = "Enter a valid supported phone number."
+				service.renderLogin(w, r, request, registered, message)
+				return
 			}
-			request.PhoneNumber, _ = identity.NormalizePhone(r.PostForm.Get("phone"))
+			// Reserve the attempt before provider I/O. Failed or uncertain delivery
+			// stays pending until explicitly canceled.
+			request.PhoneNumber, request.Fresh = phone, true
+			if err := service.storage.saveRequest(r.Context(), request); err != nil {
+				http.Error(w, "Login transaction expired", http.StatusBadRequest)
+				return
+			}
+			challenge, err := service.phone.Start(r.Context(), request.ID, phone)
+			if err != nil {
+				message = "Unable to send a code. Cancel verification before trying again."
+				if errors.Is(err, identity.ErrRateLimited) {
+					message = "Please wait before requesting another verification code. Cancel verification to start again."
+				}
+				service.renderLogin(w, r, request, registered, message)
+				return
+			}
 			request.ChallengeID = challenge.ID
-			request.Fresh = true
 			message = "Verification code requested. Enter the code within five minutes."
 		case "verify":
 			if service.phone == nil || request.externalPending() {
@@ -221,18 +218,19 @@ func (service *Service) login(w http.ResponseWriter, r *http.Request) {
 			}
 			if request.ChallengeID == "" || request.Verification != nil {
 				message = "Request a verification code first."
-				break
-			}
-			verified, err := service.phone.Verify(r.Context(), request.ID, request.ChallengeID, r.PostForm.Get("code"))
-			if err != nil {
-				message = "The code is invalid, expired, or unavailable. Request a new code if needed."
-				break
-			}
-			if err := service.createSession(w, r, request, verified); err != nil {
-				http.Error(w, "Login temporarily unavailable", http.StatusServiceUnavailable)
+				service.renderLogin(w, r, request, registered, message)
 				return
 			}
-			message = "Phone verified. Select your identity and continue."
+			if err := service.verifyPhoneLogin(w, r, request, r.PostForm.Get("code")); err != nil {
+				if errors.Is(err, identity.ErrPhoneChallenge) {
+					service.renderLogin(w, r, request, registered, "The code is invalid, expired, or unavailable. Request a new code if needed.")
+				} else {
+					http.Error(w, "Login could not complete. Reopen the login page before trying again.", http.StatusBadRequest)
+				}
+				return
+			}
+			service.renderLogin(w, r, request, registered, "Phone verified. Select your identity and continue.")
+			return
 		case "cancel":
 			request.DingTalk, request.Feishu = nil, nil
 			request.Verification = nil
@@ -244,11 +242,13 @@ func (service *Service) login(w http.ResponseWriter, r *http.Request) {
 		case "continue":
 			if request.Verification == nil {
 				message = "Verify your identity before continuing."
-				break
+				service.renderLogin(w, r, request, registered, message)
+				return
 			}
 			if (!registered.registration.Preauthorized || slices.Contains(request.Input.Prompt, "consent")) && r.PostForm.Get("consent") != "yes" {
 				message = "Approve the requested identity information before continuing."
-				break
+				service.renderLogin(w, r, request, registered, message)
+				return
 			}
 			if registered.registration.SubjectKind == "member" {
 				members, err := service.members(r, request, registered)

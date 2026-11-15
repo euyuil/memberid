@@ -25,6 +25,19 @@ The current policy is a five-minute lifetime, at most five wrong attempts, a six
 
 Successful verification returns a typed server-local authentication result with the factor, authentication time, and `sms` authentication method. It does not issue a credential, create a Member, infer a binding, or grant application access. Standard OIDC issuance remains the protocol layer's responsibility.
 
+The login page reserves its phone attempt before contacting the SMS provider.
+Concurrent sends, including sends to different numbers, cannot replace that
+attempt. Failed or uncertain delivery remains pending until explicitly canceled;
+cancellation during delivery prevents the returning result from reviving it.
+
+A successful login consumes the code, creates its SSO session, and advances the
+login transaction in one database transaction. A cancellation or competing state
+change that wins before this commit prevents the login. Database failures roll
+back the code consumption and any newly created factor or session together. The
+browser receives its session cookie only after commit. Incorrect codes still
+persist their attempt counts. Canceling an unfinished verification does not
+revoke an already committed SSO session; use logout for that operation.
+
 ## Explicit account linking
 
 An already eligible Member can use the MemberID-hosted [phone linking page](account-linking.md) after fresh authentication through a registered application. Verification and the explicit binding commit together. This operation preserves the existing Member, session, and grants and cannot replace, transfer, or restore a binding. Normal phone login remains standard OIDC; linking introduces no private authentication proof or renewal endpoint.

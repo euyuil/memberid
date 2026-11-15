@@ -22,7 +22,7 @@ type feishuAttempt struct {
 }
 
 func (service *Service) startFeishu(w http.ResponseWriter, r *http.Request, request *authorizationRequest, registered client) {
-	if service.feishu == nil || registered.registration.SubjectKind != "member" || request.Verification != nil || request.ChallengeID != "" || request.externalPending() {
+	if service.feishu == nil || registered.registration.SubjectKind != "member" || request.Verification != nil || request.phonePending() || request.externalPending() {
 		http.Error(w, "Feishu login is unavailable for this transaction.", http.StatusBadRequest)
 		return
 	}
