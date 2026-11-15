@@ -6,6 +6,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/euyuil/memberid/internal/authevent"
 	"github.com/euyuil/memberid/internal/identity"
 	"github.com/jackc/pgx/v5"
 )
@@ -13,6 +14,7 @@ import (
 // GrantInfo contains operator-visible metadata, never credential values or verifiers.
 // State describes persisted lifecycle only; token use still checks current eligibility and client policy.
 type GrantInfo struct {
+	grant             grant
 	ID                string     `json:"id"`
 	ClientID          string     `json:"clientId"`
 	SessionID         string     `json:"sessionId"`
@@ -54,6 +56,7 @@ func readGrantInfo(row pgx.Row) (GrantInfo, error) {
 	if json.Unmarshal(data, &stored) != nil {
 		return result, errors.New("invalid stored grant metadata")
 	}
+	result.grant = stored
 	result.Subject = stored.GetSubject()
 	result.OrganizationID = stored.OrganizationID
 	result.FactorID, result.FactorType = stored.FactorID, stored.FactorType
@@ -112,11 +115,38 @@ func ListGrants(ctx context.Context, store *identity.Store, filter GrantFilter) 
 }
 
 // RevokeGrant serializes with token rotation on the grant row, so refresh cannot resurrect it.
-func RevokeGrant(ctx context.Context, store *identity.Store, id string) (GrantInfo, error) {
+func RevokeGrant(ctx context.Context, store *identity.Store, id string, events *authevent.Recorder) (GrantInfo, error) {
 	if !validTokenID(id) {
 		return GrantInfo{}, identity.ErrInvalid
 	}
-	return readGrantInfo(store.Database().QueryRow(ctx, `WITH changed AS (
-        UPDATE oidc_grants SET revoked_at=COALESCE(revoked_at,clock_timestamp()) WHERE id=$1 RETURNING *
-        ) SELECT `+grantInfoColumns+" FROM changed g JOIN oidc_sessions s ON s.id=g.session_id", id))
+	var result GrantInfo
+	changed, commitReady := false, false
+	var now time.Time
+	event := authevent.Event{RequestID: authevent.FromContext(ctx).RequestID}
+	err := pgx.BeginFunc(ctx, store.Database(), func(tx pgx.Tx) error {
+		var err error
+		result, err = readGrantInfo(tx.QueryRow(ctx, "SELECT "+grantInfoColumns+" FROM oidc_grants g JOIN oidc_sessions s ON s.id=g.session_id WHERE g.id=$1 FOR UPDATE OF g", id))
+		if err != nil || result.RevokedAt != nil {
+			return err
+		}
+		event = grantEvent(ctx, &result.grant)
+		event.GrantID = id
+		changed = true
+		err = tx.QueryRow(ctx, "UPDATE oidc_grants SET revoked_at=clock_timestamp() WHERE id=$1 RETURNING revoked_at", id).Scan(&now)
+		commitReady = err == nil
+		return err
+	})
+	if changed || err != nil && !errors.Is(err, identity.ErrNotFound) {
+		event.Type, event.Trigger = "grant.revoke", "operatorRequest"
+		event.Actor = authevent.Actor{Kind: "operator", ID: "installation"}
+		events.Offer(operationResult(event, err, commitReady))
+	}
+	if err != nil {
+		return GrantInfo{}, err
+	}
+	if changed {
+		now = now.UTC()
+		result.RevokedAt, result.State = &now, "revoked"
+	}
+	return result, nil
 }

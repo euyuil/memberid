@@ -16,6 +16,17 @@ type postgresSink struct {
 // Open uses one dedicated connection; audit failures cannot exhaust the business
 // pool. No startup ping or audit-table write gates authentication availability.
 func Open(databaseURL string, retention time.Duration) (*Recorder, error) {
+	return open(databaseURL, retention, true)
+}
+
+// OpenWriter is for short-lived operator commands emitting current events. It
+// does not run retention cleanup without the installation's configured policy.
+// The authentication service owns cleanup; the query service owns expiry filters.
+func OpenWriter(databaseURL string) (*Recorder, error) {
+	return open(databaseURL, 90*24*time.Hour, false)
+}
+
+func open(databaseURL string, retention time.Duration, maintenance bool) (*Recorder, error) {
 	configuration, err := pgxpool.ParseConfig(databaseURL)
 	if err != nil {
 		return nil, err
@@ -27,7 +38,11 @@ func Open(databaseURL string, retention time.Duration) (*Recorder, error) {
 	if err != nil {
 		return nil, err
 	}
-	recorder := newRecorder(&postgresSink{pool, retention}, defaults())
+	bounds := defaults()
+	if !maintenance {
+		bounds.maintenance = 0
+	}
+	recorder := newRecorder(&postgresSink{pool, retention}, bounds)
 	recorder.closeSink = pool.Close
 	return recorder, nil
 }

@@ -61,11 +61,11 @@ func TestGrantInspectionAndTargetedRevocation(t *testing.T) {
 	if err != nil || after.State != "active" {
 		t.Fatal("browser expiry incorrectly expired the grant", err)
 	}
-	revoked, err := RevokeGrant(t.Context(), f.store, id)
+	revoked, err := RevokeGrant(t.Context(), f.store, id, nil)
 	if err != nil || revoked.State != "revoked" || revoked.RevokedAt == nil || !revoked.AuthenticatedAt.Equal(before.AuthenticatedAt) || !revoked.AbsoluteExpiresAt.Equal(before.AbsoluteExpiresAt) {
 		t.Fatalf("revoke changed original metadata: %+v %v", revoked, err)
 	}
-	repeated, err := RevokeGrant(t.Context(), f.store, id)
+	repeated, err := RevokeGrant(t.Context(), f.store, id, nil)
 	if err != nil || repeated.RevokedAt == nil || !repeated.RevokedAt.Equal(*revoked.RevokedAt) {
 		t.Fatal("repeated revocation changed its first timestamp", err)
 	}
@@ -76,7 +76,7 @@ func TestGrantInspectionAndTargetedRevocation(t *testing.T) {
 	if _, err := InspectGrant(t.Context(), f.store, newID()); !errors.Is(err, identity.ErrNotFound) {
 		t.Fatal("missing grant not reported", err)
 	}
-	if _, err := RevokeGrant(t.Context(), f.store, "invalid"); !errors.Is(err, identity.ErrInvalid) {
+	if _, err := RevokeGrant(t.Context(), f.store, "invalid", nil); !errors.Is(err, identity.ErrInvalid) {
 		t.Fatal("invalid grant ID accepted", err)
 	}
 }
@@ -92,7 +92,7 @@ func TestOperatorRevocationSerializesWithRefresh(t *testing.T) {
 	rotated := make(chan reply, 1)
 	revoked := make(chan error, 1)
 	go func() { <-start; rotated <- f.refresh("example-web", tokens["refresh_token"].(string), "") }()
-	go func() { <-start; _, err := RevokeGrant(t.Context(), f.store, grants.Items[0].ID); revoked <- err }()
+	go func() { <-start; _, err := RevokeGrant(t.Context(), f.store, grants.Items[0].ID, nil); revoked <- err }()
 	close(start)
 	response := <-rotated
 	if err := <-revoked; err != nil {

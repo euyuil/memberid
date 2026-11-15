@@ -2,6 +2,7 @@ package oidcprovider
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 
 	"github.com/euyuil/memberid/internal/authevent"
@@ -10,6 +11,21 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/zitadel/oidc/v3/pkg/oidc"
 )
+
+const maxLogoutGrantEvents = 256
+
+// A completed revocation must remain successful even if historical JSON cannot
+// be decoded for auditing. The returned row ID still establishes its target;
+// unavailable contextual fields stay absent rather than being reconstructed.
+func revokedGrantEvent(ctx context.Context, id string, data []byte, actor authevent.Actor, trigger string) authevent.Event {
+	var stored grant
+	event := authevent.Event{RequestID: authevent.FromContext(ctx).RequestID}
+	if json.Unmarshal(data, &stored) == nil {
+		event = grantEvent(ctx, &stored)
+	}
+	event.GrantID, event.Type, event.Trigger, event.Actor = id, "grant.revoke", trigger, actor
+	return event
+}
 
 // These references come from validated protocol state, not submitted token text.
 // Reuse identifies the affected subject, never the presenter as that Member.

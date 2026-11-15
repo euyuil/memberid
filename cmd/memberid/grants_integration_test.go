@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/euyuil/memberid/internal/authevent"
 	"github.com/euyuil/memberid/internal/config"
 	"github.com/euyuil/memberid/internal/identity"
 	"github.com/euyuil/memberid/internal/oidcprovider"
@@ -63,6 +64,32 @@ func TestGrantOperatorCommands(t *testing.T) {
 	execute("grant", "revoke", "--id", id)
 	if err := json.Unmarshal(output.Bytes(), &info); err != nil || info.State != "revoked" {
 		t.Fatal("revoke failed", err)
+	}
+	// The command drains its own bounded writer without installation files.
+	var eventData []byte
+	if err := store.Database().QueryRow(t.Context(), "SELECT data FROM authentication_events WHERE event_type='grant.revoke'").Scan(&eventData); err != nil {
+		t.Fatal("CLI exited before recording revocation", err)
+	}
+	var event authevent.Event
+	if err := json.Unmarshal(eventData, &event); err != nil || event.Actor.Kind != "operator" || event.Actor.ID != "installation" || event.Trigger != "operatorRequest" || event.GrantID != id || event.Outcome != "succeeded" || event.RequestID == "" {
+		t.Fatal(event, err)
+	}
+	execute("grant", "revoke", "--id", id)
+	var count int
+	if err := store.Database().QueryRow(t.Context(), "SELECT count(*) FROM authentication_events").Scan(&count); err != nil || count != 1 {
+		t.Fatal("idempotent CLI revoke created an event", err, count)
+	}
+	const second = "00000000-0000-4000-8000-000000000003"
+	if _, err := store.Database().Exec(t.Context(), `INSERT INTO oidc_grants(id,client_id,session_id,data,expires_at,absolute_expires_at)
+ SELECT $2,client_id,session_id,data||jsonb_build_object('id',$2::text),expires_at,absolute_expires_at FROM oidc_grants WHERE id=$1`, id, second); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Database().Exec(t.Context(), "ALTER TABLE authentication_events ADD CONSTRAINT event_audit_failure CHECK(false) NOT VALID"); err != nil {
+		t.Fatal(err)
+	}
+	execute("grant", "revoke", "--id", second)
+	if err := json.Unmarshal(output.Bytes(), &info); err != nil || info.State != "revoked" || info.ID != second {
+		t.Fatal("audit outage changed CLI result", err)
 	}
 	for _, args := range [][]string{{"grant"}, {"grant", "unknown"}, {"grant", "inspect"}, {"grant", "revoke", "--client", "example-web"}, {"grant", "list", "--limit", "101"}} {
 		if err := run(t.Context(), args, &output, &diagnostic); err == nil {

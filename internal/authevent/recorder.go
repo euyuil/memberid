@@ -97,6 +97,14 @@ func (recorder *Recorder) Stats() Stats {
 	return Stats{len(recorder.queue), recorder.written.Load(), recorder.failures.Load(), recorder.exhausted.Load(), recorder.dropped.Load(), recorder.expired.Load(), recorder.healthy.Load(), recorder.cleanupFailures.Load(), recorder.cleanupLag.Load(), recorder.lastCleanup.Load()}
 }
 
+// Drop accounts for events omitted by a bounded bulk producer after its business
+// transaction. It never changes that transaction or attempts audit persistence.
+func (recorder *Recorder) Drop(count uint64) {
+	if recorder != nil {
+		recorder.dropped.Add(count)
+	}
+}
+
 // Close permits a bounded drain independent of canceled HTTP/server contexts.
 func (recorder *Recorder) Close(timeout time.Duration) {
 	if recorder == nil {
@@ -125,8 +133,12 @@ func (recorder *Recorder) Close(timeout time.Duration) {
 
 func (recorder *Recorder) run(ctx context.Context) {
 	defer close(recorder.done)
-	ticker := time.NewTicker(recorder.limits.maintenance)
-	defer ticker.Stop()
+	var maintenance <-chan time.Time
+	if recorder.limits.maintenance > 0 {
+		ticker := time.NewTicker(recorder.limits.maintenance)
+		defer ticker.Stop()
+		maintenance = ticker.C
+	}
 	for {
 		select {
 		case <-ctx.Done():
@@ -139,7 +151,7 @@ func (recorder *Recorder) run(ctx context.Context) {
 				return
 			}
 			recorder.deliver(ctx, item)
-		case <-ticker.C:
+		case <-maintenance:
 			timeout, cancel := context.WithTimeout(ctx, recorder.limits.timeout)
 			lag, err := recorder.sink.cleanup(timeout)
 			cancel()

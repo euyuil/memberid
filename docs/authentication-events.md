@@ -3,9 +3,9 @@
 This document records the agreed design for MemberID authentication events:
 event meaning, correlation, organization visibility, retention, and delivery
 failure behavior. **The store, bounded writer, retention cleanup, `sms.send`,
-supported-method `authentication.verify`, initial grant issuance, and confirmed
-OIDC reuse events with their resulting revocations are implemented.** Other
-revocation triggers, authorized queries, and console views remain planned.
+supported-method `authentication.verify`, initial grant issuance, confirmed OIDC
+reuse, and explicit session/grant revocation producers are implemented.** Authorized
+queries and console views remain planned.
 Authentication policy and token claims are unchanged.
 
 The existing [management history](administration.md#availability-and-audit)
@@ -343,6 +343,31 @@ before testing consumption. Code expiry between lookup and consumption is a
 rejected issuance, not evidence of reuse. No code, token, verifier, client secret,
 or credential hash is copied into events.
 
+Explicit revocation producers cover the standard authenticated client revocation
+endpoint, browser logout, and the trusted `grant revoke` operator command.
+Unknown/mismatched tokens and already-revoked targets do not invent another
+successful state change. Client revocation records the affected grant from the
+mutation result; if no target can be established after a database failure, its
+failure event remains platform-only with the authenticated client context.
+
+Browser logout records one platform-owned session event and organization-owned
+events for each grant actually changed, causally linked to that session event.
+The verified shared-session factor is the initiator; it is not implicitly a Member
+of every affected organization. A rolled-back logout records its failed session
+operation without claiming committed grant effects. The transaction revokes all
+applicable grants, while the producer retains at most 256 grant event envelopes;
+excess committed effects increment the audit drop counter. Queue capacity and
+shutdown limits can cause additional loss. This bounds audit memory without
+limiting business revocation.
+
+The operator command keeps its database-only configuration contract and labels
+its actor as installation operator authority, not an inferred human Member or OS
+username. Its dedicated writer attempts a drain for up to five seconds, preserving
+the business exit status if auditing fails. This short-lived writer emits current
+events and performs no retention cleanup; configured service cleanup and query
+expiry policy remain authoritative. Repeated operator revocation preserves the
+original revocation timestamp and produces no additional state-change event.
+
 The fresh-install schema is version 18. Existing databases are never migrated or
 reset automatically. The new store intentionally has no foreign keys to transient
 sessions, flows, grants, or causal events. Events remain historical evidence after
@@ -367,7 +392,9 @@ Real DingTalk and Feishu provider verification is separate from these synthetic
 adapter and HTTP checks. OIDC event tests exercise client/PKCE rejection, Member
 and factor subjects, issuance rollback, eligibility-read failures, deferred commit
 failures, expiry between lookup and consumption, concurrent code exchange, and
-replay revocation despite audit insert denial.
+replay revocation despite audit insert denial. Explicit revocation checks cover
+client ownership, shared-session organization attribution, rollback/commit failure,
+idempotence, bounded bulk evidence, and CLI completion during audit insert denial.
 
 Remaining catalog and query work must demonstrate the following before claiming
 support:

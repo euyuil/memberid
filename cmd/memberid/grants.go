@@ -6,8 +6,11 @@ import (
 	"errors"
 	"flag"
 	"io"
+	"log/slog"
 	"os"
+	"time"
 
+	"github.com/euyuil/memberid/internal/authevent"
 	"github.com/euyuil/memberid/internal/identity"
 	"github.com/euyuil/memberid/internal/oidcprovider"
 )
@@ -52,7 +55,12 @@ func manageGrant(ctx context.Context, args []string, stdout, stderr io.Writer) e
 	case "inspect":
 		result, err = oidcprovider.InspectGrant(ctx, store, id)
 	case "revoke":
-		result, err = oidcprovider.RevokeGrant(ctx, store, id)
+		events, openErr := authevent.OpenWriter(os.Getenv("MEMBERID_DATABASE_URL"))
+		if openErr != nil {
+			slog.Warn("Authentication event writer unavailable")
+		}
+		defer events.Close(5 * time.Second)
+		result, err = oidcprovider.RevokeGrant(authevent.RequestContext(ctx), store, id, events)
 	}
 	if err != nil {
 		return err

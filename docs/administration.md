@@ -51,8 +51,8 @@ These events are a limited management change history, not a complete authenticat
 The [authentication event contract](authentication-events.md) separately defines
 authentication/lifecycle events, organization visibility, retention, and
 best-effort delivery. Its store, writer, retention cleanup, and SMS send and
-supported-method verification, grant issuance, and confirmed OIDC reuse events
-are implemented. Other revocation triggers and authorized queries remain planned.
+supported-method verification, grant issuance, confirmed OIDC reuse, and explicit
+session/grant revocation events are implemented. Authorized queries remain planned.
 This does not change the existing transactional management events.
 
 ## Validation boundaries
