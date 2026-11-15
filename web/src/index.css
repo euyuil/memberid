@@ -131,40 +131,24 @@
 /* Shared console layout and directory surfaces. */
 body { margin: 0; font-size: 14px; -webkit-font-smoothing: antialiased; }
 h1 { font-size: 24px; font-weight: 650; letter-spacing: -.03em; line-height: 1.4; overflow-wrap: anywhere; }
-h2 { font-size: 15px; font-weight: 600; }
 code { font-size: 11px; color: var(--muted-foreground); overflow-wrap: anywhere; }
 .muted { color: var(--muted-foreground); line-height: 1.7; }
 .scope-bar { display: flex; align-items: center; gap: 12px; min-height: 65px; padding: 12px 28px; border-bottom: 1px solid var(--border); background: var(--card); font-size: 12px; }
 .page-content { padding: 28px 32px 20px; max-width: 1600px; margin: 0 auto; }
-.page-heading, .organization-summary { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-bottom: 24px; }
+.page-heading { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-bottom: 24px; }
 .actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .page-heading > .actions { flex-shrink: 0; }
 .console-feedback { position: fixed; bottom: 24px; right: 24px; z-index: 60; width: min(440px, calc(100vw - 32px)); }
 .console-feedback:empty { display: none; }
 .console-feedback > [data-slot=alert] { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; background: var(--card); box-shadow: 0 8px 30px #00000012; }
 .directory { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--card); box-shadow: 0 1px 2px #00000003; }
-.record-identifier { min-width: 0; }
 .identifier-feedback { min-height: 44px; padding-top: 4px; font-size: 12px; color: var(--muted-foreground); line-height: 1.6; }
-.status-badge { gap: 6px; border-radius: 6px; font-size: 11px; font-weight: 500; padding: 3px 7px; height: 24px; }
-.status-badge[data-tone=positive] { color: #19734d; background: #edf8f2; border-color: #d5eddf; }
-.status-badge[data-tone=negative] { color: #b23838; background: #fff1f0; border-color: #f5d7d4; }
-.status-badge[data-tone=neutral] { color: var(--muted-foreground); background: var(--muted); border-color: var(--border); }
-.status-dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
 .record-time { font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .directory-loading { display: grid; gap: 16px; padding: 20px; }
-.organization-summary { align-items: flex-start; padding: 20px; border: 1px solid var(--border); border-radius: 10px; background: var(--card); }
-.organization-identity { display: flex; align-items: flex-start; flex: 1; gap: 16px; min-width: 0; }
-.organization-status { display: flex; align-items: center; flex-shrink: 0; min-height: 32px; }
-.organization-identity .record-identifier { flex: 0 1 24rem; }
-.detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border: 1px solid var(--border); border-radius: 10px; padding: 0 24px; background: var(--card); }
-.detail-section { padding: 28px 0; display: flex; flex-direction: column; align-items: flex-start; gap: 20px; border-bottom: 1px solid var(--border); }
-.detail-section:nth-child(odd) { padding-right: 32px; }
-.detail-section:nth-last-child(-n+2) { border-bottom: 0; }
 dl { display: grid; grid-template-columns: 80px minmax(0, 1fr); gap: 16px; width: 100%; }
 dt { color: var(--muted-foreground); }
 .authentication-event-detail { display: block; }
 .authentication-event-detail dt { margin-bottom: 4px; }
-.binding-row { display: flex; justify-content: space-between; width: 100%; max-width: 320px; align-items: center; }
 .form-feedback { min-height: 64px; padding-block: 12px; color: var(--destructive); font-size: 13px; line-height: 1.5; }
 .login-page { min-height: 100dvh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; padding: 32px 20px; text-align: center; }
 .feedback { min-height: 72px; padding-block: 12px; }
@@ -180,11 +164,6 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
  .page-content { padding: 24px 16px 20px; }
  .page-heading { gap: 16px; align-items: flex-start; flex-wrap: wrap; }
  .page-heading > div:first-child { flex: 1; min-width: 180px; }
- .organization-summary { flex-direction: column; gap: 16px; }
- .organization-identity { width: 100%; }
- .detail-grid { grid-template-columns: minmax(0, 1fr); padding-inline: 20px; }
- .detail-section:nth-child(odd) { padding-right: 0; }
- .detail-section:nth-last-child(2) { border-bottom: 1px solid var(--border); }
  .console-feedback { bottom: 16px; right: 16px; }
 }
 

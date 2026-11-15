@@ -4,7 +4,6 @@ import accessDenied from "@/assets/directory-states/access-denied.webp"
 import emptyDirectory from "@/assets/directory-states/empty.webp"
 import loadFailed from "@/assets/directory-states/load-failed.webp"
 import noMatches from "@/assets/directory-states/no-matches.webp"
-import { Badge } from "@/components/ui/badge"
 import {
   Empty,
   EmptyContent,
@@ -76,7 +75,7 @@ export function RecordIdentifier({
   const [feedback, setFeedback] = useState("")
   const [copying, setCopying] = useState(false)
   return (
-    <div className="record-identifier">
+    <div className="min-w-0">
       <InputGroup>
         <InputGroupInput
           aria-label={label}
@@ -109,21 +108,6 @@ export function RecordIdentifier({
         {feedback}
       </p>
     </div>
-  )
-}
-
-export function StatusBadge({
-  tone,
-  children,
-}: {
-  tone: "positive" | "negative" | "neutral"
-  children: ReactNode
-}) {
-  return (
-    <Badge variant="outline" className="status-badge" data-tone={tone}>
-      <span className="status-dot" aria-hidden="true" />
-      {children}
-    </Badge>
   )
 }
 

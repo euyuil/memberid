@@ -24,6 +24,8 @@ The provider form uses the official Base Nova Checkbox with Field and FieldLabel
 
 Management state and access confirmations use the official Base Nova Alert Dialog from the pinned CLI. Cancel receives initial focus, action labels name the operation, and asynchronous submission keeps the dialog open on errors and prevents dismissal while pending. Create and rename forms retain Dialog. The existing Button source and package dependencies are unchanged; the retained MIT notice covers the new component.
 
+Organization and Member details use the official Base Nova Card header, content, action, and footer composition from the pinned CLI. MemberID groups profile, management access, and authentication information; existing Badge variants and Alert communicate status and sign-in blockers. Custom detail surfaces and status-dot styles are removed. Card adds no package dependencies and is covered by the retained MIT notice.
+
 Registry response SHA-256 values, before import/icon transformation:
 
 | Component | SHA-256 |
