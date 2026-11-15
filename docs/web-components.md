@@ -6,6 +6,18 @@ The UI uses shadcn 4.23.0 Base Nova components, adapted for MemberID navigation,
 
 The console Select follows the [Base Nova Select](https://github.com/shadcn-ui/ui/blob/shadcn%404.23.0/packages/registry/test/fixtures/transform-corpus/base-nova--select.tsx) from the same version. It uses the existing Base UI Select primitives and Lucide icons.
 
+The Sidebar, Sheet, Tooltip, and mobile breakpoint hook follow the shadcn 4.23.0 [Base UI source](https://github.com/shadcn-ui/ui/tree/shadcn%404.23.0/apps/v4/registry/bases/base) and its icon-sidebar example. Base Nova styling was obtained from the official component registry on 2026-11-15. The source tag resolves to `96da9cc7f1aa10580a3741664e2a77c721206c00`; its root MIT license matches the retained shadcn notice. These components use the already reviewed Base UI, React, Lucide, cn, and class-variance-authority dependencies; the package graph is unchanged.
+
+Adaptations localize accessible names, retain only the Sidebar primitives currently used by the console, replace the unused server-side preference-cookie write with the existing in-memory state, and subscribe to the mobile media query through React `useSyncExternalStore`. MemberID supplies its own navigation links and account actions.
+
+Registry response SHA-256 values, before import/icon transformation:
+
+| Component | SHA-256 |
+| --- | --- |
+| sidebar | `02b1ea430fb246da062048f0161a01d1b34a2c787f6974958c9b20a3142120a6` |
+| sheet | `72b36d92af7fcbc9bd2d1d4ef0cbc65f4fc8178f7bb2bedaf657460f15011cf4` |
+| tooltip | `2f55867faecee2d3616cfd8c6a80b538909a21e62fdfa2788b1ead56093e5395` |
+
 Node.js 26.13.1 LTS and npm 11.20.0 are unmodified external build tools. The Node distribution LICENSE and npm LICENSE/third-party dependency notices were reviewed; Node includes MIT, BSD, Apache, ICU/Unicode and other bundled-component terms, and npm uses Artistic-2.0. They are not shipped in MemberID. CI checks official Node archive SHA-256 values in `scripts/ci-node.sh`.
 
 Build-only Lightning CSS has MPL-2.0 terms. Its unmodified compiler/native bindings are not delivered in the executable or browser assets; generated CSS does not incorporate its implementation. No MPL-covered source is modified or distributed. Build-only caniuse-lite is CC-BY-4.0 data; its attribution and data license stay in the installed package. Blue Oak notice and patent provisions apply to the named tooling packages. Type-fest offers MIT or CC0; the MIT option is used. Redistribution of these tools or datasets would need their own notices and, where applicable, source provision.
