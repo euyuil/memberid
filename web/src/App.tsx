@@ -14,6 +14,14 @@ import {
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import {
+  Card,
+  CardAction,
+  CardContent,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
+import {
   Table,
   TableBody,
   TableCell,
@@ -31,7 +39,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import {
@@ -74,7 +82,6 @@ import {
   DirectoryState,
   RecordIdentifier,
   RecordTime,
-  StatusBadge,
 } from "@/components/directory"
 import {
   AuthenticationEvents,
@@ -183,9 +190,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 function Status({ active, text }: { active: boolean; text?: string }) {
   return (
-    <StatusBadge tone={active ? "positive" : "negative"}>
+    <Badge variant={active ? "secondary" : "destructive"}>
       {text ?? (active ? "正常" : "已停用")}
-    </StatusBadge>
+    </Badge>
   )
 }
 function MemberStatus({ member }: { member: Member }) {
@@ -1023,14 +1030,24 @@ export default function App() {
               !authenticationEvents &&
               !membersView &&
               !providers && (
-                <section className="organization-summary">
-                  <div className="organization-identity">
-                    <div className="organization-status">
+                <Card>
+                  <CardHeader>
+                    <CardTitle role="heading" aria-level={2}>
+                      组织资料
+                    </CardTitle>
+                    <CardAction>
                       <Status active={data.organization.status === "enabled"} />
-                    </div>
-                    <RecordIdentifier value={org} label="组织 ID" />
-                  </div>
-                  <div className="actions">
+                    </CardAction>
+                  </CardHeader>
+                  <CardContent>
+                    <dl className="max-w-xl">
+                      <dt>组织 ID</dt>
+                      <dd>
+                        <RecordIdentifier value={org} label="组织 ID" />
+                      </dd>
+                    </dl>
+                  </CardContent>
+                  <CardFooter className="flex-wrap gap-2">
                     <Button
                       variant="outline"
                       onClick={() =>
@@ -1077,8 +1094,8 @@ export default function App() {
                           : "恢复组织"}
                       </Button>
                     )}
-                  </div>
-                </section>
+                  </CardFooter>
+                </Card>
               )}
             {data.members && (
               <section aria-label="成员列表">
@@ -1179,26 +1196,36 @@ export default function App() {
               </section>
             )}
             {selected && data.detail && (
-              <div className="detail-grid">
-                <section className="detail-section">
-                  <h2>成员资料</h2>
-                  <dl>
-                    <dt>成员 ID</dt>
-                    <dd>
-                      <RecordIdentifier value={selected.id} label="成员 ID" />
-                    </dd>
-                    <dt>身份状态</dt>
-                    <dd>
+              <section
+                aria-label="成员详情"
+                className="grid items-start gap-4 lg:grid-cols-2"
+              >
+                <Card>
+                  <CardHeader>
+                    <CardTitle role="heading" aria-level={2}>
+                      成员资料
+                    </CardTitle>
+                    <CardAction>
                       <MemberStatus member={selected} />
-                    </dd>
-                    <dt>阻断原因</dt>
-                    <dd>
-                      {selected.blockSources
-                        .map((v) => (v === "manual" ? "人工封禁" : "外部离职"))
-                        .join("、") || "无"}
-                    </dd>
-                  </dl>
-                  <div className="actions">
+                    </CardAction>
+                  </CardHeader>
+                  <CardContent>
+                    <dl>
+                      <dt>成员 ID</dt>
+                      <dd>
+                        <RecordIdentifier value={selected.id} label="成员 ID" />
+                      </dd>
+                      <dt>阻断原因</dt>
+                      <dd>
+                        {selected.blockSources
+                          .map((v) =>
+                            v === "manual" ? "人工封禁" : "外部离职"
+                          )
+                          .join("、") || "无"}
+                      </dd>
+                    </dl>
+                  </CardContent>
+                  <CardFooter className="flex-wrap gap-2">
                     <Button
                       variant="outline"
                       onClick={() =>
@@ -1239,77 +1266,97 @@ export default function App() {
                         ? "解除人工封禁"
                         : "封禁成员"}
                     </Button>
-                  </div>
-                </section>
-                <section className="detail-section">
-                  <h2>管理权限</h2>
-                  <p>
-                    {administrator
-                      ? `此成员是${adminTitle}。`
-                      : "此成员没有管理权限。"}
-                  </p>
-                  <Button
-                    variant={administrator ? "destructive" : "outline"}
-                    onClick={() =>
-                      setAction({
-                        title: administrator
-                          ? `取消${adminTitle}`
-                          : `设为${adminTitle}`,
-                        description: administrator
-                          ? "撤销后，该成员后续的管理请求将被拒绝。"
-                          : "成员需具有可用的登录方式。此授权不会赋予业务应用中的角色。",
-                        path: `${base}/members/${member}/administrator`,
-                        method: "PUT",
-                        body: { enabled: !administrator },
-                        destructive: administrator,
-                      })
-                    }
-                  >
-                    {administrator ? "取消管理员" : "设为管理员"}
-                  </Button>
-                </section>
-                <section className="detail-section">
-                  <h2>登录方式</h2>
-                  {blockers.length > 0 && (
-                    <div className="grid gap-2">
-                      <Badge variant="destructive">当前无法登录</Badge>
-                      <ul className="list-disc space-y-1 pl-5 text-sm">
-                        {blockers.map((reason) => (
-                          <li key={reason}>{reason}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                  {data.detail.bindings.length > 0 &&
-                    data.detail.bindings.map((b) => (
-                      <div className="binding-row" key={b.id}>
-                        <strong>
-                          {factorLabels[b.factorType] ?? b.factorType}
-                        </strong>
-                        <Status
-                          active={b.status === "active"}
-                          text={b.status === "active" ? "已绑定" : "已撤销"}
+                    <Button
+                      variant="outline"
+                      render={
+                        <Link
+                          href={routeURL({
+                            org,
+                            view: "events",
+                            target: member,
+                          })}
+                          state={memberNavigationState}
                         />
-                      </div>
-                    ))}
-                </section>
-                <section className="detail-section">
-                  <h2>管理记录</h2>
-                  <Button
-                    variant="outline"
-                    render={
-                      <Link
-                        href={routeURL({ org, view: "events", target: member })}
-                        state={memberNavigationState}
-                      />
-                    }
-                    nativeButton={false}
-                  >
-                    查看记录
-                    <ChevronRight data-icon="inline-end" />
-                  </Button>
-                </section>
-              </div>
+                      }
+                      nativeButton={false}
+                    >
+                      查看记录
+                      <ChevronRight data-icon="inline-end" />
+                    </Button>
+                  </CardFooter>
+                </Card>
+                <div className="grid gap-4">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle role="heading" aria-level={2}>
+                        管理权限
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <Badge variant={administrator ? "secondary" : "outline"}>
+                        {administrator ? adminTitle : "普通成员"}
+                      </Badge>
+                    </CardContent>
+                    <CardFooter>
+                      <Button
+                        variant={administrator ? "destructive" : "outline"}
+                        onClick={() =>
+                          setAction({
+                            title: administrator
+                              ? `取消${adminTitle}`
+                              : `设为${adminTitle}`,
+                            description: administrator
+                              ? "撤销后，该成员后续的管理请求将被拒绝。"
+                              : "成员需具有可用的登录方式。此授权不会赋予业务应用中的角色。",
+                            path: `${base}/members/${member}/administrator`,
+                            method: "PUT",
+                            body: { enabled: !administrator },
+                            destructive: administrator,
+                          })
+                        }
+                      >
+                        {administrator ? "取消管理员" : "设为管理员"}
+                      </Button>
+                    </CardFooter>
+                  </Card>
+                  <Card>
+                    <CardHeader>
+                      <CardTitle role="heading" aria-level={2}>
+                        登录方式
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="grid gap-4">
+                      {blockers.length > 0 && (
+                        <Alert variant="destructive">
+                          <AlertTitle>当前无法登录</AlertTitle>
+                          <AlertDescription>
+                            <ul className="flex list-disc flex-col gap-1 pl-5">
+                              {blockers.map((reason) => (
+                                <li key={reason}>{reason}</li>
+                              ))}
+                            </ul>
+                          </AlertDescription>
+                        </Alert>
+                      )}
+                      {data.detail.bindings.length > 0 &&
+                        data.detail.bindings.map((b) => (
+                          <div
+                            className="flex items-center justify-between gap-4"
+                            key={b.id}
+                          >
+                            <span>
+                              {factorLabels[b.factorType] ?? b.factorType}
+                            </span>
+                            <Status
+                              active={b.status === "active"}
+                              text={b.status === "active" ? "已绑定" : "已撤销"}
+                            />
+                          </div>
+                        ))}
+                    </CardContent>
+                  </Card>
+                </div>
+              </section>
             )}
             {data.authenticationEvents && (
               <AuthenticationEvents
