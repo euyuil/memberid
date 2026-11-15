@@ -60,10 +60,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import {
-  DirectoryFooter,
   DirectoryResults,
   DirectoryState,
-  RecordIdentity,
   RecordIdentifier,
   RecordTime,
   StatusBadge,
@@ -1312,105 +1310,112 @@ export default function App() {
               />
             )}
             {data.events && (
-              <section
-                className="directory event-directory"
-                aria-label="操作记录列表"
-              >
-                <DirectoryResults
-                  count={data.events.length}
-                  empty={
-                    before ? undefined : (
-                      <DirectoryState kind="empty" title="暂无管理操作记录" />
-                    )
-                  }
-                >
-                  <Table className="table-fixed">
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="event-time">时间</TableHead>
-                        <TableHead className="event-wide-column">
-                          操作者
-                        </TableHead>
-                        {!org && (
-                          <TableHead className="event-wide-column">
-                            组织
-                          </TableHead>
-                        )}
-                        <TableHead>操作</TableHead>
-                        <TableHead className="event-wide-column">
-                          对象
-                        </TableHead>
-                        <TableHead className="event-wide-column">
-                          变更
-                        </TableHead>
-                        <TableHead className="row-actions">
-                          <span className="sr-only">详情</span>
-                        </TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {data.events.map((event) => {
-                        const presentation = describeEvent(event)
-                        const description =
-                          presentation.changes.join("；") || "—"
-                        return (
-                          <TableRow key={event.id}>
-                            <TableCell>
-                              <RecordTime value={event.createdAt} compact />
-                            </TableCell>
-                            <TableCell className="event-wide-column">
-                              <RecordIdentity name={presentation.actorName} />
-                            </TableCell>
-                            {!org && (
-                              <TableCell className="event-wide-column">
-                                <RecordIdentity
-                                  name={presentation.organizationName}
-                                  href={routeURL({ org: event.organizationId })}
-                                />
-                              </TableCell>
-                            )}
-                            <TableCell>
-                              {presentation.action}
-                              <span className="event-context">
-                                {presentation.targetName}
-                              </span>
-                            </TableCell>
-                            <TableCell className="event-wide-column">
-                              <RecordIdentity
-                                name={presentation.targetName}
-                                href={presentation.targetURL}
-                              />
-                            </TableCell>
-                            <TableCell className="event-wide-column">
-                              <span
-                                className="event-summary"
-                                title={description}
-                              >
-                                {description}
-                              </span>
-                            </TableCell>
-                            <TableCell className="row-actions">
-                              <EventDetails
-                                event={event}
-                                presentation={presentation}
-                                description={description}
-                              />
-                            </TableCell>
-                          </TableRow>
-                        )
-                      })}
-                    </TableBody>
-                  </Table>
-                </DirectoryResults>
-                {(data.events.length > 0 || before) && (
-                  <DirectoryFooter
+              <section aria-label="操作记录列表">
+                <div className="overflow-hidden rounded-md border">
+                  <DirectoryResults
                     count={data.events.length}
-                    message={
-                      data.events.length === 0 ? "没有更早的记录" : undefined
+                    empty={
+                      before ? undefined : (
+                        <DirectoryState kind="empty" title="暂无管理操作记录" />
+                      )
                     }
                   >
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>时间</TableHead>
+                          <TableHead>操作者</TableHead>
+                          {!org && <TableHead>组织</TableHead>}
+                          <TableHead>操作</TableHead>
+                          <TableHead>对象</TableHead>
+                          <TableHead>变更</TableHead>
+                          <TableHead className="w-0 text-right">
+                            <span className="sr-only">详情</span>
+                          </TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {data.events.map((event) => {
+                          const presentation = describeEvent(event)
+                          const description =
+                            presentation.changes.join("；") || "—"
+                          return (
+                            <TableRow key={event.id}>
+                              <TableCell>
+                                <RecordTime value={event.createdAt} compact />
+                              </TableCell>
+                              <TableCell>
+                                <span
+                                  className="block max-w-40 truncate"
+                                  title={presentation.actorName}
+                                >
+                                  {presentation.actorName}
+                                </span>
+                              </TableCell>
+                              {!org && (
+                                <TableCell>
+                                  <Link
+                                    className="block max-w-48 truncate font-medium hover:underline"
+                                    title={presentation.organizationName}
+                                    href={routeURL({
+                                      org: event.organizationId,
+                                    })}
+                                  >
+                                    {presentation.organizationName}
+                                  </Link>
+                                </TableCell>
+                              )}
+                              <TableCell>{presentation.action}</TableCell>
+                              <TableCell>
+                                {presentation.targetURL ? (
+                                  <Link
+                                    className="block max-w-48 truncate font-medium hover:underline"
+                                    title={presentation.targetName}
+                                    href={presentation.targetURL}
+                                  >
+                                    {presentation.targetName}
+                                  </Link>
+                                ) : (
+                                  <span
+                                    className="block max-w-48 truncate"
+                                    title={presentation.targetName}
+                                  >
+                                    {presentation.targetName}
+                                  </span>
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                <span
+                                  className="block max-w-64 truncate"
+                                  title={description}
+                                >
+                                  {description}
+                                </span>
+                              </TableCell>
+                              <TableCell className="w-0 text-right">
+                                <EventDetails
+                                  event={event}
+                                  presentation={presentation}
+                                  description={description}
+                                />
+                              </TableCell>
+                            </TableRow>
+                          )
+                        })}
+                      </TableBody>
+                    </Table>
+                  </DirectoryResults>
+                </div>
+                {(data.events.length > 0 || before) && (
+                  <div className="flex items-center justify-end gap-2 py-4">
+                    <div className="flex-1 text-sm text-muted-foreground">
+                      {data.events.length
+                        ? `本页 ${data.events.length} 条记录`
+                        : "没有更早的记录"}
+                    </div>
                     <Button
                       variant="outline"
+                      size="sm"
                       disabled={!before}
                       onClick={() =>
                         navigate(
@@ -1424,6 +1429,7 @@ export default function App() {
                     {data.events.length > 0 && (
                       <Button
                         variant="outline"
+                        size="sm"
                         disabled={data.events.length < 50}
                         onClick={() =>
                           navigate(
@@ -1440,7 +1446,7 @@ export default function App() {
                         更早记录
                       </Button>
                     )}
-                  </DirectoryFooter>
+                  </div>
                 )}
               </section>
             )}
