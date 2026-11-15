@@ -353,7 +353,7 @@ func TestPhoneAccountDeliveryFailureAndCancellationCannotReviveChallenge(t *test
 					return f.sender.Send(ctx, phone, code)
 				}
 				return errors.New("synthetic provider diagnostic must remain private")
-			}))
+			}), identity.PhoneSendLimits{})
 			if err != nil {
 				t.Fatal(err)
 			}

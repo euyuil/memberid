@@ -1,7 +1,7 @@
 CREATE TABLE memberid_schema (
-    version integer PRIMARY KEY CHECK (version = 16)
+    version integer PRIMARY KEY CHECK (version = 17)
 );
-INSERT INTO memberid_schema(version) VALUES (16);
+INSERT INTO memberid_schema(version) VALUES (17);
 
 CREATE TABLE organizations (
     id text COLLATE "C" PRIMARY KEY CHECK (id = 'org_system' OR id ~ '^org_[0-9bcdfghjkmnpqrstvwxz]{27}$'),
@@ -64,6 +64,9 @@ CREATE TABLE phone_challenges (
     id text COLLATE "C" PRIMARY KEY,
     phone_number text NOT NULL,
     binding_hash bytea NOT NULL CHECK (octet_length(binding_hash) = 32),
+    browser_hash bytea NOT NULL CHECK (octet_length(browser_hash) = 32),
+    source_hash bytea NOT NULL CHECK (octet_length(source_hash) = 32),
+    client_hash bytea NOT NULL CHECK (octet_length(client_hash) = 32),
     code_mac bytea NOT NULL CHECK (octet_length(code_mac) = 32),
     ready boolean NOT NULL DEFAULT false,
     attempts smallint NOT NULL DEFAULT 0 CHECK (attempts BETWEEN 0 AND 5),
@@ -71,6 +74,7 @@ CREATE TABLE phone_challenges (
     expires_at timestamptz NOT NULL,
     consumed_at timestamptz
 );
+CREATE INDEX phone_challenge_send_window ON phone_challenges (created_at);
 CREATE INDEX phone_challenge_rate_limit ON phone_challenges (phone_number, created_at);
 
 CREATE TABLE oidc_sessions (

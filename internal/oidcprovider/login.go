@@ -200,7 +200,7 @@ func (service *Service) login(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, "Login transaction expired", http.StatusBadRequest)
 				return
 			}
-			challenge, err := service.phone.Start(r.Context(), request.ID, phone)
+			challenge, err := service.startPhone(r, request.ID, phone, request.ClientID)
 			if err != nil {
 				message = "Unable to send a code. Cancel verification before trying again."
 				if errors.Is(err, identity.ErrRateLimited) {

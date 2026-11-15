@@ -123,7 +123,7 @@ func newConfiguredFixture(t *testing.T, refreshEnabled bool) *fixture {
 	configuration.Clients[1].Refresh = refreshEnabled
 	key, _ := base64.StdEncoding.DecodeString(configuration.Secrets.PhoneCodeKey)
 	sender := new(testSender)
-	phone, err := identity.NewPhoneVerifier(store, key, sender)
+	phone, err := identity.NewPhoneVerifier(store, key, sender, configuration.PhoneSendLimitsPerHour)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -125,7 +125,7 @@ func (service *Service) accountPhonePost(w http.ResponseWriter, r *http.Request,
 			return
 		}
 		request.State = "pending"
-		challenge, err := service.phone.Start(r.Context(), request.ID, phone)
+		challenge, err := service.startPhone(r, request.ID, phone, request.ClientID)
 		if err != nil {
 			message := "Unable to send a code. Cancel verification before trying again."
 			if errors.Is(err, identity.ErrRateLimited) {

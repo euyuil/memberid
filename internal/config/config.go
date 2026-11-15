@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/netip"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -21,12 +22,14 @@ const MaximumFileSize = 1 << 20
 
 // Installation contains references to protected local files, not database credentials.
 type Installation struct {
-	Issuer            string `json:"issuer"`
-	AllowLoopbackHTTP bool   `json:"allowLoopbackHttp"`
-	SigningKeyFile    string `json:"signingKeyFile"`
-	PublicKeysFile    string `json:"publicKeysFile"`
-	SecretsFile       string `json:"secretsFile"`
-	ClientsFile       string `json:"clientsFile"`
+	PhoneSendLimitsPerHour identity.PhoneSendLimits `json:"phoneSendLimitsPerHour,omitzero"`
+	PhoneTrustedProxyCIDRs []string                 `json:"phoneTrustedProxyCidrs,omitempty"`
+	Issuer                 string                   `json:"issuer"`
+	AllowLoopbackHTTP      bool                     `json:"allowLoopbackHttp"`
+	SigningKeyFile         string                   `json:"signingKeyFile"`
+	PublicKeysFile         string                   `json:"publicKeysFile"`
+	SecretsFile            string                   `json:"secretsFile"`
+	ClientsFile            string                   `json:"clientsFile"`
 }
 
 type Secrets struct {
@@ -119,6 +122,15 @@ func Load(directory string) (*Loaded, error) {
 }
 
 func (installation Installation) Validate() error {
+	if _, err := installation.PhoneSendLimitsPerHour.WithDefaults(); err != nil {
+		return errors.New("phone send limits must be nonnegative; zero selects defaults")
+	}
+	for _, value := range installation.PhoneTrustedProxyCIDRs {
+		prefix, err := netip.ParsePrefix(value)
+		if err != nil || prefix.Addr().Is4In6() || prefix.Bits() == 0 {
+			return errors.New("phone trusted proxies must be explicit IPv4 or IPv6 CIDRs, not all addresses")
+		}
+	}
 	issuer, err := exactURL(installation.Issuer, installation.AllowLoopbackHTTP)
 	if err != nil || issuer.Path != "" || issuer.RawQuery != "" || issuer.ForceQuery {
 		return errors.New("issuer must be an exact HTTPS origin; loopback HTTP requires explicit development configuration")

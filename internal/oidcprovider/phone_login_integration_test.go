@@ -37,7 +37,7 @@ func TestPhoneLoginSendReservation(t *testing.T) {
 					return errors.New("private synthetic delivery failure")
 				}
 				return f.sender.Send(ctx, phone, code)
-			}))
+			}), identity.PhoneSendLimits{})
 			if err != nil {
 				t.Fatal(err)
 			}

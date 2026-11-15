@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/rand"
 	"errors"
+	"net/netip"
 	"strings"
 	"sync"
 	"testing"
@@ -42,7 +43,7 @@ func phoneFixture(t *testing.T) (*PhoneVerifier, *recordingSender, string) {
 		t.Fatal(err)
 	}
 	sender := &recordingSender{codes: map[string]string{}}
-	verifier, err := NewPhoneVerifier(store, key[:], sender)
+	verifier, err := NewPhoneVerifier(store, key[:], sender, PhoneSendLimits{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,7 +52,7 @@ func phoneFixture(t *testing.T) (*PhoneVerifier, *recordingSender, string) {
 
 func TestPhoneVerificationIsBoundAndSingleUse(t *testing.T) {
 	verifier, sender, binding := phoneFixture(t)
-	challenge, err := verifier.Start(t.Context(), binding, "19900000001")
+	challenge, err := verifier.Start(t.Context(), binding, "19900000001", testPhoneSource())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -59,7 +60,7 @@ func TestPhoneVerificationIsBoundAndSingleUse(t *testing.T) {
 	if _, err := verifier.Verify(t.Context(), strings.Repeat("y", 43), challenge.ID, code); !errors.Is(err, ErrPhoneChallenge) {
 		t.Fatal("accepted another browser transaction")
 	}
-	restarted, err := NewPhoneVerifier(verifier.store, verifier.key, sender)
+	restarted, err := NewPhoneVerifier(verifier.store, verifier.key, sender, PhoneSendLimits{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,7 +100,7 @@ func TestPhoneAttemptsExpiryAndReplacement(t *testing.T) {
 	verifier, sender, binding := phoneFixture(t)
 	now := time.Now().UTC()
 	verifier.now = func() time.Time { return now }
-	challenge, err := verifier.Start(t.Context(), binding, "19900000001")
+	challenge, err := verifier.Start(t.Context(), binding, "19900000001", testPhoneSource())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,13 +118,13 @@ func TestPhoneAttemptsExpiryAndReplacement(t *testing.T) {
 		t.Fatal("attempt limit was not persisted")
 	}
 	now = now.Add(61 * time.Second)
-	next, err := verifier.Start(t.Context(), binding, "19900000001")
+	next, err := verifier.Start(t.Context(), binding, "19900000001", testPhoneSource())
 	if err != nil {
 		t.Fatal(err)
 	}
 	nextCode := sender.code("+8619900000001")
 	now = now.Add(61 * time.Second)
-	latest, err := verifier.Start(t.Context(), binding, "19900000001")
+	latest, err := verifier.Start(t.Context(), binding, "19900000001", testPhoneSource())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -138,11 +139,15 @@ func TestPhoneAttemptsExpiryAndReplacement(t *testing.T) {
 
 func TestPhoneConcurrentRateLimitAndHourlyCap(t *testing.T) {
 	verifier, sender, binding := phoneFixture(t)
+	verifier.limits.Transaction = 20 // Isolate the per-number hourly cap.
 	now := time.Now().UTC()
 	verifier.now = func() time.Time { return now }
 	failures := make(chan error, 10)
 	for range 10 {
-		go func() { _, err := verifier.Start(t.Context(), binding, "19900000001"); failures <- err }()
+		go func() {
+			_, err := verifier.Start(t.Context(), binding, "19900000001", testPhoneSource())
+			failures <- err
+		}()
 	}
 	success := 0
 	for range 10 {
@@ -158,12 +163,12 @@ func TestPhoneConcurrentRateLimitAndHourlyCap(t *testing.T) {
 	}
 	for range 5 {
 		now = now.Add(61 * time.Second)
-		if _, err := verifier.Start(t.Context(), binding, "19900000001"); err != nil {
+		if _, err := verifier.Start(t.Context(), binding, "19900000001", testPhoneSource()); err != nil {
 			t.Fatal(err)
 		}
 	}
 	now = now.Add(61 * time.Second)
-	if _, err := verifier.Start(t.Context(), binding, "19900000001"); !errors.Is(err, ErrRateLimited) {
+	if _, err := verifier.Start(t.Context(), binding, "19900000001", testPhoneSource()); !errors.Is(err, ErrRateLimited) {
 		t.Fatal("hourly cap was bypassed")
 	}
 }
@@ -171,7 +176,7 @@ func TestPhoneConcurrentRateLimitAndHourlyCap(t *testing.T) {
 func TestFailedPhoneDeliveryCannotAuthenticate(t *testing.T) {
 	verifier, sender, binding := phoneFixture(t)
 	sender.failure = errors.New("private delivery failure")
-	if _, err := verifier.Start(t.Context(), binding, "19900000001"); !errors.Is(err, ErrDeliveryUnavailable) {
+	if _, err := verifier.Start(t.Context(), binding, "19900000001", testPhoneSource()); !errors.Is(err, ErrDeliveryUnavailable) {
 		t.Fatal("delivery error was exposed or accepted")
 	}
 	var id string
@@ -181,14 +186,14 @@ func TestFailedPhoneDeliveryCannotAuthenticate(t *testing.T) {
 	if _, err := verifier.Verify(t.Context(), binding, id, sender.code("+8619900000001")); !errors.Is(err, ErrPhoneChallenge) {
 		t.Fatal("undelivered challenge accepted")
 	}
-	if _, err := verifier.Start(t.Context(), binding, "19900000001"); !errors.Is(err, ErrRateLimited) {
+	if _, err := verifier.Start(t.Context(), binding, "19900000001", testPhoneSource()); !errors.Is(err, ErrRateLimited) {
 		t.Fatal("delivery failure removed cooldown")
 	}
 }
 
 func TestPhoneVerificationOperationRollsBackAtomically(t *testing.T) {
 	verifier, sender, binding := phoneFixture(t)
-	challenge, err := verifier.Start(t.Context(), binding, "19900000003")
+	challenge, err := verifier.Start(t.Context(), binding, "19900000003", testPhoneSource())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -221,4 +226,8 @@ func TestPhoneVerificationOperationRollsBackAtomically(t *testing.T) {
 	if _, err := verifier.Verify(t.Context(), binding, challenge.ID, code); err != nil {
 		t.Fatal("rollback consumed challenge", err)
 	}
+}
+
+func testPhoneSource() PhoneSendSource {
+	return PhoneSendSource{BrowserID: strings.Repeat("b", 43), ClientID: "test-web", Address: netip.MustParseAddr("192.0.2.1")}
 }
