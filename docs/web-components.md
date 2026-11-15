@@ -4,6 +4,8 @@ Resolved from `web/package-lock.json`. All 403 package records, including nested
 
 The UI uses shadcn 4.23.0 Base Nova components, adapted for MemberID navigation, localization and forms. The package MIT license covers the copied component source and stylesheet. Retained UI notices are in `third_party/web/NOTICES.txt`; distribution packaging includes them. Lucide includes ISC and MIT notices for inherited Feather icons.
 
+The console Select follows the [Base Nova Select](https://github.com/shadcn-ui/ui/blob/shadcn%404.23.0/packages/registry/test/fixtures/transform-corpus/base-nova--select.tsx) from the same version. It uses the existing Base UI Select primitives and Lucide icons.
+
 Node.js 26.13.1 LTS and npm 11.20.0 are unmodified external build tools. The Node distribution LICENSE and npm LICENSE/third-party dependency notices were reviewed; Node includes MIT, BSD, Apache, ICU/Unicode and other bundled-component terms, and npm uses Artistic-2.0. They are not shipped in MemberID. CI checks official Node archive SHA-256 values in `scripts/ci-node.sh`.
 
 Build-only Lightning CSS has MPL-2.0 terms. Its unmodified compiler/native bindings are not delivered in the executable or browser assets; generated CSS does not incorporate its implementation. No MPL-covered source is modified or distributed. Build-only caniuse-lite is CC-BY-4.0 data; its attribution and data license stay in the installed package. Blue Oak notice and patent provisions apply to the named tooling packages. Type-fest offers MIT or CC0; the MIT option is used. Redistribution of these tools or datasets would need their own notices and, where applicable, source provision.
