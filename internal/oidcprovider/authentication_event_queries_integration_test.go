@@ -40,6 +40,10 @@ func TestConsoleAuthenticationEventQueries(t *testing.T) {
 	if len(page["items"].([]any)) != 1 || page["nextAfter"] != nil {
 		t.Fatal(page)
 	}
+	names := page["organizationNames"].(map[string]any)
+	if len(names) != 1 || names[f.member.OrganizationID] != "Example Team" {
+		t.Fatal("unsafe organization display names", names)
+	}
 	event := consoleJSON(t, f, server, "GET", base+"/local", "", "", 200)
 	for _, field := range []string{"factorId", "sessionId", "actor", "causationId"} {
 		if _, ok := event[field]; ok {

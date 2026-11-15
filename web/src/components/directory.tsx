@@ -15,25 +15,6 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 
-export function DirectoryFooter({
-  count,
-  message,
-  children,
-}: {
-  count: number
-  message?: string
-  children?: ReactNode
-}) {
-  return (
-    <div className="directory-footer">
-      <span className="directory-count" role={message ? "status" : undefined}>
-        {message ?? `本页 ${count} 条记录`}
-      </span>
-      <div className="pagination">{children}</div>
-    </div>
-  )
-}
-
 const directoryStateImages = {
   empty: emptyDirectory,
   filtered: noMatches,

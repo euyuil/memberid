@@ -190,7 +190,7 @@ request/interaction IDs, and a time range. Time controls use the browser's local
 timezone and send explicit UTC instants; start is inclusive and end exclusive.
 Filters and the cursor live in the URL, survive refresh/back/forward, and apply on
 the server before pagination. New filters and organization switching reset the
-cursor. Counts describe only the displayed page. The empty state reports no matching
+cursor. Counts describe only the displayed page. Organization cells show current names; technical organization IDs remain in record details. The empty state reports no matching
 records, not proof that authentication did not occur.
 
 Details fetch the record again with current authorization and show occurrence and
