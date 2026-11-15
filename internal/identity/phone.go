@@ -14,12 +14,14 @@ import (
 
 	"github.com/euyuil/memberid/internal/authevent"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 var (
-	ErrPhoneChallenge      = errors.New("invalid or expired phone challenge")
-	ErrRateLimited         = errors.New("phone verification rate limit reached")
-	ErrDeliveryUnavailable = errors.New("phone delivery unavailable")
+	ErrVerificationCommitUnconfirmed = errors.New("phone verification commit unconfirmed")
+	ErrPhoneChallenge                = errors.New("invalid or expired phone challenge")
+	ErrRateLimited                   = errors.New("phone verification rate limit reached")
+	ErrDeliveryUnavailable           = errors.New("phone delivery unavailable")
 )
 
 type SMSSender interface {
@@ -158,6 +160,7 @@ func (verifier *PhoneVerifier) VerifyAndApply(ctx context.Context, binding, id, 
 	now := verifier.now().UTC()
 	bindingHash := sha256.Sum256([]byte(binding))
 	denied := false
+	applied := false
 	var verified Verification
 	err := pgx.BeginFunc(ctx, verifier.store.pool, func(tx pgx.Tx) error {
 		var phone string
@@ -183,15 +186,24 @@ func (verifier *PhoneVerifier) VerifyAndApply(ctx context.Context, binding, id, 
 		}
 		verified = Verification{Factor: factor, AuthenticatedAt: now.Truncate(time.Second), Method: "sms"}
 		if apply != nil {
-			return apply(tx, verified)
+			if err := apply(tx, verified); err != nil {
+				return err
+			}
 		}
+		applied = true
 		return nil
 	})
+	// A failed attempt write is operational failure too. Only a confirmed
+	// commit can turn a wrong code into the ordinary credential rejection.
+	if err != nil {
+		var serverError *pgconn.PgError
+		if applied && !errors.As(err, &serverError) && !errors.Is(err, pgx.ErrTxCommitRollback) {
+			return Verification{}, fmt.Errorf("%w: %w", ErrVerificationCommitUnconfirmed, err)
+		}
+		return Verification{}, err
+	}
 	if denied {
 		return Verification{}, ErrPhoneChallenge
-	}
-	if err != nil {
-		return Verification{}, err
 	}
 	return verified, nil
 }

@@ -2,9 +2,9 @@
 
 This document records the agreed design for MemberID authentication events:
 event meaning, correlation, organization visibility, retention, and delivery
-failure behavior. **The store, bounded writer, retention cleanup, and `sms.send`
-events are implemented.** SMS verification, external authentication, OIDC
-issuance/replay/revocation events, authorized queries, and console views remain
+failure behavior. **The store, bounded writer, retention cleanup, `sms.send`,
+and SMS `authentication.verify` events are implemented.** External authentication,
+OIDC issuance/replay/revocation events, authorized queries, and console views remain
 planned. Authentication policy and token claims are unchanged.
 
 The existing [management history](administration.md#availability-and-audit)
@@ -294,6 +294,19 @@ phone binding does not. Account linking uses the already validated Member contex
 Each HTTP request and stored flow has an independent server-generated correlation
 ID; neither value is a cookie, state parameter, code, or credential hash.
 
+SMS verification records its result only after the existing combined verification
+transaction returns. Successful login includes the committed factor and session,
+without inferring a Member from its phone number. Successful phone linking uses
+the authenticated Member actor and the newly verified factor; the source binding
+is not mislabeled as the new binding. Failed transitions expose no rolled-back
+factor or new session references. Wrong, expired, consumed, and exhausted codes
+share `rejected / invalidCredential`; this does not disclose which check failed.
+Operational errors use `failed / backendUnavailable`. A transport failure while
+committing a completed verification transaction uses `failed / commitUnconfirmed`
+and does not assert rollback. Database errors when recording incorrect-code
+attempts or evaluating binding eligibility remain operational errors, rather than
+being mistaken for invalid credentials or ineligibility.
+
 The fresh-install schema is version 18. Existing databases are never migrated or
 reset automatically. The new store intentionally has no foreign keys to transient
 sessions, flows, grants, or causal events. Events remain historical evidence after
@@ -308,8 +321,10 @@ context, allowlisted fields, and bounded retries with stable event IDs. PostgreS
 and HTTP integration tests cover deduplication, occurrence-based expiry, bounded
 cleanup, SMS success/rejection/provider failure, confirmed provider acceptance
 followed by a business-write failure, and authentication success despite audit
-insert denial. Tests use synthetic provider adapters; they do not prove real SMS
-delivery.
+insert denial. Verification tests additionally cover wrong/expired codes, failed
+attempt writes, login/linking rollback, deferred commit failure, and successful
+login/linking despite audit insert denial. Tests use synthetic provider adapters;
+they do not prove real SMS delivery.
 
 Remaining catalog and query work must demonstrate the following before claiming
 support:
