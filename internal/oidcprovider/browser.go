@@ -2,11 +2,15 @@ package oidcprovider
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
+	"time"
 
 	"github.com/euyuil/memberid/internal/browserauth"
+	"github.com/euyuil/memberid/internal/config"
 	"github.com/euyuil/memberid/internal/identity"
 	"github.com/jackc/pgx/v5"
+	"github.com/zitadel/oidc/v3/pkg/oidc"
 )
 
 type loginPolicy struct{ registration browserauth.Policy }
@@ -57,4 +61,33 @@ func (service *Service) validateLoginPolicy(ctx context.Context, tx pgx.Tx, requ
 		return identity.ErrIneligible
 	}
 	return nil
+}
+
+// Store fresh verification and its session in the credential verification
+// transaction. The request revision prevents a competing transition from
+// creating a session for a canceled or already verified interaction.
+func (service *Service) persistVerifiedSession(ctx context.Context, tx pgx.Tx, completed *authorizationRequest, verified identity.Verification, secret string) (time.Time, error) {
+	if err := service.validateLoginPolicy(ctx, tx, completed); err != nil {
+		return time.Time{}, err
+	}
+	setVerification(completed, verified)
+	now := service.now()
+	data, err := json.Marshal(completed)
+	if err != nil {
+		return time.Time{}, err
+	}
+	result, err := tx.Exec(ctx, "UPDATE authentication_requests SET data=$2,revision=revision+1 WHERE id=$1 AND revision=$3 AND code_hash IS NULL AND consumed_at IS NULL AND expires_at>$4", completed.ID, data, completed.Revision, now)
+	if err != nil {
+		return time.Time{}, err
+	}
+	if result.RowsAffected() != 1 {
+		return time.Time{}, oidc.ErrInvalidRequest()
+	}
+	session, err := json.Marshal(completed.Verification)
+	if err != nil {
+		return time.Time{}, err
+	}
+	expires := minimum(now.Add(sessionIdleLifetime), completed.AbsoluteExpiry)
+	_, err = tx.Exec(ctx, "INSERT INTO authentication_sessions(id,secret_hash,verification,expires_at,absolute_expires_at) VALUES($1,$2,$3,$4,$5)", completed.SessionID, config.SecretHash(secret), session, expires, completed.AbsoluteExpiry)
+	return expires, err
 }

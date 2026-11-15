@@ -17,8 +17,8 @@ import (
 	"golang.org/x/oauth2"
 )
 
-// New wires protected management operations and bounded session persistence.
-// HTTP handlers retain neither the identity Store nor a database connection.
+// New wires protected management operations, session persistence, and the
+// installation setup endpoints.
 func New(ctx context.Context, store *identity.Store, installation *config.Loaded, settings Settings, secret string, dingTalk identity.DingTalkAuthorizationChecker, feishu identity.FeishuProvider) (*Service, error) {
 	u, err := url.Parse(settings.Origin)
 	if err != nil || u.Host == "" || u.User != nil || u.Path != "" || u.RawQuery != "" || u.Fragment != "" || u.ForceQuery {
@@ -56,7 +56,7 @@ func New(ctx context.Context, store *identity.Store, installation *config.Loaded
 	if err != nil {
 		return nil, err
 	}
-	s := &Service{management: identity.NewManagementService(store, dingTalkApps, feishuApps, installation.AuthenticationEventRetention()), sessions: consolestate.New(store.Database()), origin: settings.Origin, clientID: settings.ClientID, party: party, routes: http.NewServeMux()}
+	s := &Service{management: identity.NewManagementService(store, dingTalkApps, feishuApps, installation.AuthenticationEventRetention()), sessions: consolestate.New(store.Database()), origin: settings.Origin, clientID: settings.ClientID, party: party, routes: http.NewServeMux(), setupStore: store}
 	s.routes.HandleFunc("GET /auth/login", s.login)
 	s.routes.HandleFunc("GET /auth/callback", s.callback)
 	s.routes.HandleFunc("POST /api/logout", s.logout)
@@ -84,7 +84,10 @@ func New(ctx context.Context, store *identity.Store, installation *config.Loaded
 	s.routes.HandleFunc("GET /api/organizations/{organizationId}/authentication-events", s.authenticationEvents)
 	s.routes.HandleFunc("GET /api/organizations/{organizationId}/authentication-events/{eventId}", s.authenticationEvent)
 	s.registerProviderRoutes(installation)
+	s.routes.HandleFunc("GET /setup", s.installationSetup)
+	s.routes.HandleFunc("POST /setup", s.installationSetup)
+	s.routes.HandleFunc("GET /setup/copy.js", setupScript)
 	static, _ := fs.Sub(assets, "static")
-	registerPages(s.routes, static)
+	registerPages(s.routes, static, s.redirectToSetup)
 	return s, nil
 }

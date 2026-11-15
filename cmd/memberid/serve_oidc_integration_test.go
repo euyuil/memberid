@@ -13,7 +13,7 @@ import (
 	"github.com/euyuil/memberid/internal/testdb"
 )
 
-func TestOIDCStartsWithDingTalkWithoutPhoneCredentials(t *testing.T) {
+func TestOIDCStartsWithoutPhoneCredentials(t *testing.T) {
 	databaseURL := testdb.Create(t)
 	if err := identity.Initialize(t.Context(), databaseURL); err != nil {
 		t.Fatal(err)
@@ -49,9 +49,15 @@ func TestOIDCStartsWithDingTalkWithoutPhoneCredentials(t *testing.T) {
 		t.Fatal("invalid provider switch accepted")
 	}
 	t.Setenv("MEMBERID_DINGTALK_ENABLED", "false")
-	if _, closeStore, err := authenticationHandler(t.Context(), directory); err == nil {
-		closeStore()
-		t.Fatal("OIDC started with no authentication providers")
+	handler, stopLocalOnly, err := authenticationHandler(t.Context(), directory)
+	if err != nil {
+		t.Fatal("first-time setup must start without external authentication providers", err)
+	}
+	response = httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	stopLocalOnly()
+	if response.Code != 200 {
+		t.Fatal("local-only installation did not serve discovery")
 	}
 	t.Setenv("MEMBERID_FEISHU_ENABLED", "invalid")
 	if _, closeStore, err := authenticationHandler(t.Context(), directory); err == nil {

@@ -26,7 +26,7 @@ func main() {
 
 func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	if len(args) == 0 {
-		return errors.New("usage: memberid <version|serve|serve-management|serve-console|config|client|database|organization|member|administrator|factor|grant|dingtalk|saml>")
+		return errors.New("usage: memberid <version|serve|serve-management|serve-console|config|client|database|setup|organization|member|administrator|factor|grant|dingtalk|saml>")
 	}
 	switch args[0] {
 	case "saml":
@@ -35,6 +35,8 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 		return serveConsole(ctx, args[1:], stdout, stderr)
 	case "administrator":
 		return manageAdministrator(ctx, args[1:], stdout, stderr)
+	case "setup":
+		return manageSetup(ctx, args[1:], stdout)
 	case "dingtalk":
 		return manageDingTalk(ctx, args[1:], stdout, stderr)
 	case "grant":

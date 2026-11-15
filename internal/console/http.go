@@ -44,6 +44,7 @@ type Service struct {
 	clientID   string
 	party      rp.RelyingParty
 	routes     *http.ServeMux
+	setupStore *identity.Store
 }
 
 type nonceKey struct{}
@@ -132,7 +133,11 @@ func (s *Service) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.cookie(w, "login", browser, 300)
-	http.Redirect(w, r, s.party.OAuthConfig().AuthCodeURL(state, oauth2.S256ChallengeOption(verifier), oauth2.SetAuthURLParam("nonce", nonce), oauth2.SetAuthURLParam("max_age", "28800")), http.StatusSeeOther)
+	options := []oauth2.AuthCodeOption{oauth2.S256ChallengeOption(verifier), oauth2.SetAuthURLParam("nonce", nonce), oauth2.SetAuthURLParam("max_age", "28800")}
+	if query.Get("setup") == "1" {
+		options = append(options, oauth2.SetAuthURLParam("login_hint", identity.RootUsername+"@"+identity.SystemOrganizationID), oauth2.SetAuthURLParam("prompt", "login"))
+	}
+	http.Redirect(w, r, s.party.OAuthConfig().AuthCodeURL(state, options...), http.StatusSeeOther)
 }
 
 func (s *Service) callback(w http.ResponseWriter, r *http.Request) {

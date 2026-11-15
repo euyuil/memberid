@@ -1,10 +1,30 @@
 # Administrator identities and operator setup
 
-Fresh schema version **18** creates the enabled organization `org_system`, named `System organization`, with no Members or administrator assignments. The exact ID is reserved: ordinary creation and enrollment cannot claim it, and it cannot be disabled. There is no organization-kind field, default customer organization, organization-less Member, or global User.
+Fresh schema version **20** creates the enabled organization `org_system`, named `System organization`, with no Members or administrator assignments. The exact ID is reserved: ordinary creation and enrollment cannot claim it, and it cannot be disabled. There is no organization-kind field, default customer organization, organization-less Member, or global User.
 
 An administrator is an explicitly assigned Member with at least one currently eligible authentication binding. Membership in `org_system` alone grants no privileges. A platform administrator can manage all organizations; an ordinary organization administrator is limited to their own organization. The identity store rechecks a Member administrator's current grant, SSO session, assignment, and eligibility when authorizing mutations. These roles belong to MemberID management and are not added to consuming applications' identity claims. See [Member roles](roles.md) for the agreed definitions, including ordinary system Members and the absence of a system-organization administrator role.
 
 The [shared administration console](console.md) exposes individual administrator access; operator bootstrap remains available through the CLI. The private management API retains its independent installation-wide credential and does not accept Member actor impersonation.
+
+## First-time setup
+
+Initialize a fresh database and start the authentication and console processes. On the deployment host, with the protected database environment in scope, run:
+
+```sh
+memberid setup code
+```
+
+Keep stdout private. The code expires after 15 minutes, is consumed when a password is generated, and can be replaced by rerunning the command before setup completes. Open the console home, enter the code in the setup wizard, and save the displayed password to a password manager. The password is shown once. If you lose it or leave the page before finishing, generate a new setup code and start again.
+
+Confirm that the password is saved. MemberID creates the `root` Member in `org_system`, binds its password, grants platform administrator access, and closes setup in one transaction. Sign in with the generated password on the normal OIDC page. The wizard does not require an external provider. Granting the first system administrator through the alternate operator bootstrap also closes the wizard.
+
+If the initial password is lost after setup, run `memberid setup reset-password` from the protected deployment environment. Save the replacement from stdout. This rotates the same Member's credential, revokes its existing grants and password-authenticated SSO sessions, and keeps setup closed. Offline JWT verifiers can still accept already-issued access tokens until expiry. The command preserves existing administrator assignments and blocks.
+
+## Organization-scoped passwords
+
+An installation operator can provision or rotate an existing Member's password with `memberid member set-password --organization ORGANIZATION_ID --member MEMBER_ID --username USERNAME`. Save the generated password from stdout. Usernames contain 1–64 lowercase ASCII letters, digits, dots, underscores, or hyphens, beginning with a letter or digit. Each is unique within its organization. A Member has one locally managed username. Repeating the command with the same username rotates the password and revokes prior grants and password sessions. The reserved system `root` uses the recovery command above.
+
+MemberID generates passwords from 24 bytes of cryptographic randomness and persists a PBKDF2-HMAC-SHA-256 hash with an independent 16-byte salt and a stored work factor. Sign-in throttles each organization and username to ten attempts in five minutes and bounds concurrent password derivations per process. Passwords, password hashes, and setup codes are excluded from event payloads. Use HTTPS and keep the database, deployment shell, and operator command output protected.
 
 ## Bootstrap and recovery
 

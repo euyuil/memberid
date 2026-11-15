@@ -63,5 +63,5 @@ func validText(value string, maximum int) bool {
 }
 
 func validFactorType(kind string) bool {
-	return kind == "phone" || kind == "dingtalk" || kind == "feishu"
+	return kind == "phone" || kind == "dingtalk" || kind == "feishu" || kind == "password"
 }

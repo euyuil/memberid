@@ -141,6 +141,30 @@ func verifySAMLResponse(t *testing.T, f *fixture, sp identity.SAMLServiceProvide
 	return response
 }
 
+func TestSAMLPasswordSessionCanContinueIntoOIDC(t *testing.T) {
+	f := newFixture(t)
+	sp := enableSAML(t, f)
+	password, err := f.store.SetMemberPassword(t.Context(), identity.OperatorPrincipal(), f.member.OrganizationID, f.member.ID, "example")
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := samlPage(t, f, sp)
+	page = f.submit(page.body, "password", url.Values{"username": {"example"}, "password": {password}})
+	f.status(page, 200)
+	response := verifySAMLResponse(t, f, sp, f.submit(page.body, "continue", url.Values{"member": {f.member.ID}, "consent": {"yes"}}))
+	if response.Assertion == nil {
+		t.Fatal("password-authenticated SAML request did not issue an assertion")
+	}
+	page, verifier := f.loginPage("example-web", "openid")
+	tokens := f.exchange("example-web", f.complete(page, f.member.ID), verifier)
+	f.status(tokens, 200)
+	claims := f.signedClaims(jsonObject(t, tokens)["id_token"].(string))
+	methods, ok := claims["amr"].([]any)
+	if claims["sub"] != f.member.ID || !ok || len(methods) != 1 || methods[0] != "pwd" {
+		t.Fatal("OIDC did not reuse the password-authenticated Member session")
+	}
+}
+
 func TestSAMLSharedPhoneSessionAndIndependentSubjects(t *testing.T) {
 	f := newConfiguredFixture(t, true)
 	sp := enableSAML(t, f)
