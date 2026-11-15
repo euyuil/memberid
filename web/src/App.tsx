@@ -9,9 +9,7 @@ import {
   KeyRound,
   Plus,
   RefreshCw,
-  ShieldCheck,
   X,
-  Search,
   Users,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -815,7 +813,7 @@ export default function App() {
       <div
         className={
           membersView && !member
-            ? "directory member-directory"
+            ? "w-full"
             : unavailableScope || loadFailure
               ? "directory"
               : undefined
@@ -1037,93 +1035,95 @@ export default function App() {
             )}
             {data.members && (
               <section aria-label="成员列表">
-                <DirectoryResults
-                  count={data.members.items.length}
-                  empty={
-                    after ? undefined : (
-                      <DirectoryState
-                        kind={noMemberMatches ? "filtered" : "empty"}
-                        title={
-                          noMemberMatches
-                            ? "没有符合当前筛选条件的成员"
-                            : org
-                              ? "本组织还没有成员"
-                              : "还没有成员"
-                        }
-                        action={
-                          noMemberMatches ? (
-                            <Button
-                              variant="outline"
-                              onClick={clearMemberFilters}
-                            >
-                              清除筛选
-                            </Button>
-                          ) : (
-                            showCreateMember && (
-                              <Button onClick={() => create(false)}>
-                                <Plus data-icon="inline-start" />
-                                新增成员
+                <div className="overflow-hidden rounded-md border">
+                  <DirectoryResults
+                    count={data.members.items.length}
+                    empty={
+                      after ? undefined : (
+                        <DirectoryState
+                          kind={noMemberMatches ? "filtered" : "empty"}
+                          title={
+                            noMemberMatches
+                              ? "没有符合当前筛选条件的成员"
+                              : org
+                                ? "本组织还没有成员"
+                                : "还没有成员"
+                          }
+                          action={
+                            noMemberMatches ? (
+                              <Button
+                                variant="outline"
+                                onClick={clearMemberFilters}
+                              >
+                                清除筛选
                               </Button>
-                            )
-                          )
-                        }
-                      />
-                    )
-                  }
-                >
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>成员</TableHead>
-                        {!org && <TableHead>所属组织</TableHead>}
-                        <TableHead>身份状态</TableHead>
-                        <TableHead>管理权限</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {data.members.items.map((m) => (
-                        <TableRow key={m.id}>
-                          <TableCell>
-                            <RecordIdentity
-                              name={m.displayName}
-                              icon={Array.from(m.displayName)[0] || <Users />}
-                              href={routeURL({
-                                view: "members",
-                                org: m.organizationId,
-                                member: m.id,
-                              })}
-                              state={{ memberList: location }}
-                            />
-                          </TableCell>
-                          {!org && (
-                            <TableCell>
-                              <RecordIdentity
-                                name={m.organizationName ?? "所属组织"}
-                              />
-                            </TableCell>
-                          )}
-                          <TableCell>
-                            <MemberStatus member={m} />
-                          </TableCell>
-                          <TableCell>
-                            {(m.administrator ??
-                            data.members?.administratorIds?.includes(m.id)) ? (
-                              <Badge variant="secondary" className="role-badge">
-                                <ShieldCheck aria-hidden="true" />
-                                {m.organizationId === "org_system"
-                                  ? "平台管理员"
-                                  : "组织管理员"}
-                              </Badge>
                             ) : (
-                              <span className="muted">普通成员</span>
-                            )}
-                          </TableCell>
+                              showCreateMember && (
+                                <Button onClick={() => create(false)}>
+                                  <Plus data-icon="inline-start" />
+                                  新增成员
+                                </Button>
+                              )
+                            )
+                          }
+                        />
+                      )
+                    }
+                  >
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>成员</TableHead>
+                          {!org && <TableHead>所属组织</TableHead>}
+                          <TableHead>身份状态</TableHead>
+                          <TableHead>管理权限</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </DirectoryResults>
-                <Pager
+                      </TableHeader>
+                      <TableBody>
+                        {data.members.items.map((m) => (
+                          <TableRow key={m.id}>
+                            <TableCell>
+                              <Link
+                                className="block max-w-64 truncate font-medium hover:underline"
+                                title={m.displayName}
+                                href={routeURL({
+                                  view: "members",
+                                  org: m.organizationId,
+                                  member: m.id,
+                                })}
+                                state={{ memberList: location }}
+                              >
+                                {m.displayName}
+                              </Link>
+                            </TableCell>
+                            {!org && (
+                              <TableCell>
+                                <span
+                                  className="block max-w-64 truncate"
+                                  title={m.organizationName}
+                                >
+                                  {m.organizationName ?? "所属组织"}
+                                </span>
+                              </TableCell>
+                            )}
+                            <TableCell>
+                              {m.status === "active" ? "未阻断" : "已阻断"}
+                            </TableCell>
+                            <TableCell>
+                              {(m.administrator ??
+                              data.members?.administratorIds?.includes(m.id))
+                                ? m.organizationId === "org_system"
+                                  ? "平台管理员"
+                                  : "组织管理员"
+                                : "普通成员"}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </DirectoryResults>
+                </div>
+                <MemberPagination
                   count={data.members.items.length}
                   after={after}
                   next={data.members.nextAfter}
@@ -1605,15 +1605,14 @@ function MemberSearch({
   return (
     <form
       aria-label="查找成员"
-      className="directory-filters"
+      className="flex flex-wrap items-center gap-2 py-4"
       onSubmit={(event) => {
         event.preventDefault()
         onSubmit({ q: query.trim(), status, administrator })
       }}
     >
-      <label className="search-field">
+      <label className="w-full sm:max-w-sm">
         <span className="sr-only">姓名或成员 ID</span>
-        <Search aria-hidden="true" />
         <Input
           type="search"
           placeholder="搜索姓名或成员 ID…"
@@ -1690,6 +1689,43 @@ function MemberSearch({
         )}
       </div>
     </form>
+  )
+}
+
+function MemberPagination({
+  count,
+  after,
+  next,
+  route,
+}: {
+  count: number
+  after: string
+  next?: string
+  route: Route
+}) {
+  if (!count && !after) return null
+  return (
+    <div className="flex items-center justify-end gap-2 py-4">
+      <div className="flex-1 text-sm text-muted-foreground">
+        {count ? `本页 ${count} 位成员` : "没有更多成员"}
+      </div>
+      <Button
+        variant="outline"
+        size="sm"
+        disabled={!after}
+        onClick={() => navigate(route)}
+      >
+        第一页
+      </Button>
+      <Button
+        variant="outline"
+        size="sm"
+        disabled={!next}
+        onClick={() => next && navigate({ ...route, after: next })}
+      >
+        下一页
+      </Button>
+    </div>
   )
 }
 
