@@ -74,3 +74,7 @@ query budgets, and interpretation of the results.
 ## GitLab interoperability
 
 See [the GitLab guide](docs/gitlab.md) for the pinned unmodified client, packaged-provider fixture, local prerequisites, synthetic SMS boundary, and separate browser inspection. CI compiles `go test -tags=interop ./internal/interop`; an actual GitLab deployment requires the explicit package environment variable and is not part of that compile check.
+
+## SAML interoperability
+
+See [independent SAML consumer acceptance](docs/saml-interop.md) for the pinned Node-SAML consumer, ordinary packaged executable, temporary HTTPS environment, and replay/constraint checks. Its isolated npm lockfile is `internal/interop/saml/package-lock.json`; these dependencies are test-only and are not part of the console or MemberID distribution. Linux build CI runs this acceptance with its freshly built package.

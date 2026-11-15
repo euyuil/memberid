@@ -11,6 +11,7 @@ import (
 	"encoding/base64"
 	"encoding/pem"
 	"encoding/xml"
+	"fmt"
 	"html"
 	"math/big"
 	"net/http"
@@ -178,11 +179,25 @@ func mustXML(t *testing.T, element *etree.Element) []byte {
 }
 
 func TestBoundedRequestInspection(t *testing.T) {
+	root := `<AuthnRequest xmlns="urn:oasis:names:tc:SAML:2.0:protocol"><Issuer xmlns="urn:oasis:names:tc:SAML:2.0:assertion">sp</Issuer>`
+	end := `</AuthnRequest>`
+	entropy := make([]byte, 32<<10)
+	if _, err := rand.Read(entropy); err != nil {
+		t.Fatal(err)
+	}
 	for name, document := range map[string]string{
-		"entity":          `<!DOCTYPE AuthnRequest [<!ENTITY x SYSTEM "file:///private">]><AuthnRequest xmlns="urn:oasis:names:tc:SAML:2.0:protocol"/>`,
-		"wrong namespace": `<AuthnRequest xmlns="urn:wrong"><Issuer xmlns="urn:oasis:names:tc:SAML:2.0:assertion">sp</Issuer></AuthnRequest>`,
-		"expanded limit":  strings.Repeat("x", (256<<10)+1),
-		"deep":            strings.Repeat("<x>", 40) + strings.Repeat("</x>", 40),
+		"entity":                 `<!DOCTYPE AuthnRequest [<!ENTITY x SYSTEM "file:///private">]><AuthnRequest xmlns="urn:oasis:names:tc:SAML:2.0:protocol"/>`,
+		"wrong namespace":        `<AuthnRequest xmlns="urn:wrong"><Issuer xmlns="urn:oasis:names:tc:SAML:2.0:assertion">sp</Issuer></AuthnRequest>`,
+		"expanded limit":         root + `<Extensions>` + strings.Repeat("x", 256<<10) + `</Extensions>` + end,
+		"deep":                   root + strings.Repeat("<x>", 40) + strings.Repeat("</x>", 40) + end,
+		"many elements":          root + `<Extensions>` + strings.Repeat(`<x/>`, 2048) + `</Extensions>` + end,
+		"duplicate issuer":       root + `<Issuer xmlns="urn:oasis:names:tc:SAML:2.0:assertion">other</Issuer>` + end,
+		"nested issuer":          strings.Replace(root, ">sp<", "><x>sp</x><", 1) + end,
+		"duplicate attribute":    strings.Replace(root, "<AuthnRequest ", `<AuthnRequest ID="first" ID="second" `, 1) + end,
+		"second root":            root + end + root + end,
+		"trailing text":          root + end + "unexpected",
+		"processing instruction": root + `<?external instruction?>` + end,
+		"unclosed":               root,
 	} {
 		t.Run(name, func(t *testing.T) {
 			if _, err := Inspect(redirectRequest(t, []byte(document), nil)); err == nil {
@@ -190,8 +205,92 @@ func TestBoundedRequestInspection(t *testing.T) {
 			}
 		})
 	}
+	for name, change := range map[string]func(*http.Request){
+		"query limit": func(r *http.Request) {
+			*r = *redirectRequest(t, []byte(root+`<Extensions>`+base64.StdEncoding.EncodeToString(entropy)+`</Extensions>`+end), nil)
+			if len(r.URL.RawQuery) <= 32<<10 {
+				t.Fatal("fixture must exceed the compressed query limit")
+			}
+		},
+		"RelayState byte limit": func(r *http.Request) {
+			r.URL.RawQuery = strings.Replace(r.URL.RawQuery, "opaque-state", url.QueryEscape(strings.Repeat("界", 27)), 1)
+		},
+		"invalid base64": func(r *http.Request) { r.URL.RawQuery = "SAMLRequest=%21" },
+		"invalid DEFLATE": func(r *http.Request) {
+			r.URL.RawQuery = "SAMLRequest=" + url.QueryEscape(base64.StdEncoding.EncodeToString([]byte("invalid")))
+		},
+		"duplicate RelayState": func(r *http.Request) { r.URL.RawQuery += "&RelayState=second" },
+		"unexpected parameter": func(r *http.Request) { r.URL.RawQuery += "&redirect=https://example.test" },
+		"POST":                 func(r *http.Request) { r.Method = "POST" },
+	} {
+		t.Run(name, func(t *testing.T) {
+			r := redirectRequest(t, []byte(root+end), nil)
+			change(r)
+			if _, err := Inspect(r); err == nil {
+				t.Fatal("accepted invalid binding")
+			}
+		})
+	}
 	request := httptest.NewRequest("GET", "https://example.test/saml/sso?SAMLRequest=a&SAMLRequest=b", nil)
 	if _, err := Inspect(request); err == nil {
 		t.Fatal("duplicate parameter")
+	}
+}
+
+func TestRequestSignatureAndCorrelation(t *testing.T) {
+	signing, other := signingFixture(t), signingFixture(t)
+	provider, err := New("https://idp.example.test", signing)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sp := identity.SAMLServiceProvider{ID: "example", EntityID: "https://sp.example.test/metadata", ACSURL: "https://sp.example.test/acs", Enabled: true, SigningCertificates: []string{string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: signing.Certificate.Raw}))}}
+	now := time.Now().UTC()
+	input := saml.AuthnRequest{ID: "_request", Version: "2.0", IssueInstant: now, Destination: "https://idp.example.test/saml/sso", Issuer: &saml.Issuer{Value: sp.EntityID}, AssertionConsumerServiceURL: sp.ACSURL, ProtocolBinding: saml.HTTPPostBinding}
+	for _, unsigned := range []bool{false, true} {
+		sp.AllowUnsignedRequests = unsigned
+		for name, change := range map[string]func(*saml.AuthnRequest){
+			"empty ID":          func(r *saml.AuthnRequest) { r.ID = "" },
+			"long ID":           func(r *saml.AuthnRequest) { r.ID = strings.Repeat("x", 257) },
+			"wrong issuer":      func(r *saml.AuthnRequest) { r.Issuer = &saml.Issuer{Value: "https://other.example.test"} },
+			"wrong destination": func(r *saml.AuthnRequest) { r.Destination += "/changed" },
+			"wrong ACS":         func(r *saml.AuthnRequest) { r.AssertionConsumerServiceURL += "/changed" },
+			"old request":       func(r *saml.AuthnRequest) { r.IssueInstant = now.Add(-6 * time.Minute) },
+			"future request":    func(r *saml.AuthnRequest) { r.IssueInstant = now.Add(2 * time.Minute) },
+			"wrong version":     func(r *saml.AuthnRequest) { r.Version = "1.1" },
+		} {
+			t.Run(name+"/unsigned="+fmt.Sprint(unsigned), func(t *testing.T) {
+				modified := input
+				change(&modified)
+				data, _ := xml.Marshal(modified)
+				if _, _, err := provider.Parse(redirectRequest(t, data, signing.Key), sp, now); err == nil {
+					t.Fatal("accepted invalid signed request")
+				}
+			})
+		}
+		document, _ := xml.Marshal(input)
+		for name, change := range map[string]func(*http.Request){
+			"wrong key": func(r *http.Request) { *r = *redirectRequest(t, document, other.Key) },
+			"modified request": func(r *http.Request) {
+				q := r.URL.Query()
+				q.Set("SAMLRequest", redirectRequest(t, bytes.Replace(document, []byte("_request"), []byte("_changed"), 1), nil).URL.Query().Get("SAMLRequest"))
+				r.URL.RawQuery = q.Encode()
+			},
+			"missing signature": func(r *http.Request) { q := r.URL.Query(); q.Del("Signature"); r.URL.RawQuery = q.Encode() },
+			"missing algorithm": func(r *http.Request) { q := r.URL.Query(); q.Del("SigAlg"); r.URL.RawQuery = q.Encode() },
+			"SHA1": func(r *http.Request) {
+				q := r.URL.Query()
+				q.Set("SigAlg", dsig.RSASHA1SignatureMethod)
+				r.URL.RawQuery = q.Encode()
+			},
+			"duplicate signature": func(r *http.Request) { r.URL.RawQuery += "&Signature=invalid" },
+		} {
+			t.Run(name+"/unsigned="+fmt.Sprint(unsigned), func(t *testing.T) {
+				r := redirectRequest(t, document, signing.Key)
+				change(r)
+				if _, _, err := provider.Parse(r, sp, now); err == nil {
+					t.Fatal("invalid signature treated as unsigned")
+				}
+			})
+		}
 	}
 }

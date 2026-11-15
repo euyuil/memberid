@@ -57,6 +57,13 @@ jobs:
           trap 'docker rm "$container"' EXIT
           docker cp "$container:/usr/local/bin/memberid" dist/from-container
           cmp dist/package/memberid dist/from-container
+      - name: Independent SAML consumer acceptance
+        if: runner.os == 'Linux'
+        env:
+          MEMBERID_SAML_PACKAGE: ${{ github.workspace }}/dist/package
+        run: |
+          npm --prefix internal/interop/saml ci --ignore-scripts
+          npm --prefix internal/interop/saml test
       - name: Race tests
         if: runner.os == 'Linux'
         run: go test -race ./...

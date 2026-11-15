@@ -1,0 +1,17 @@
+{
+  "name": "memberid-saml-interop",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "26.13.1"
+  },
+  "scripts": {
+    "test": "node --test acceptance.test.mjs"
+  },
+  "dependencies": {
+    "@node-saml/node-saml": "5.2.0",
+    "@xmldom/xmldom": "0.8.15",
+    "xml-crypto": "6.4.0",
+    "xpath": "0.0.35"
+  }
+}
