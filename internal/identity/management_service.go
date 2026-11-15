@@ -1,19 +1,23 @@
 package identity
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // ManagementService exposes only authorized Member management operations.
 // It does not embed Store or expose raw queries, provider credentials or SQL.
 type ManagementService struct {
-	store    *Store
-	dingTalk *DingTalkApplications
-	feishu   *FeishuApplications
+	store                        *Store
+	dingTalk                     *DingTalkApplications
+	feishu                       *FeishuApplications
+	authenticationEventRetention time.Duration
 }
 
 // NewManagementService wires the management boundary from installation-owned
 // dependencies. Nil provider adapters leave that provider unavailable.
-func NewManagementService(store *Store, dingTalk *DingTalkApplications, feishu *FeishuApplications) *ManagementService {
-	return &ManagementService{store: store, dingTalk: dingTalk, feishu: feishu}
+func NewManagementService(store *Store, dingTalk *DingTalkApplications, feishu *FeishuApplications, authenticationEventRetention time.Duration) *ManagementService {
+	return &ManagementService{store: store, dingTalk: dingTalk, feishu: feishu, authenticationEventRetention: authenticationEventRetention}
 }
 
 func (service *ManagementService) Actor(ctx context.Context, memberID, grantID string) (ManagementActor, error) {

@@ -214,6 +214,10 @@ interfaces do not acquire console authentication or delegated Member permissions
 | B4 | `GET /v1/factors/{factorId}`; `factor inspect --phone` CLI | `authenticationFactors/{factorId}` | `get` | Manager / Operator only | Existing factor lookup; neither route creates or verifies a factor. A Member binding grant does not imply this global read. |
 | E1 | `GET /api/events` for one organization, optionally one Member | `O/managementEvents` | `list` | Platform; own organization admin | Console read; organization restriction precedes Member filtering and pagination. Member reference does not change ownership. |
 | E2 | Same route without organization restriction | `managementEvents` | `list` | Platform | Console read; organization admin requests are always constrained to their own O, never this global view. |
+| E3 | `GET /api/authentication-events` | `authenticationEvents` | `list` | Platform | Console read; retained platform collection. |
+| E4 | `GET /api/authentication-events/{eventId}` | `authenticationEvents/{eventId}` | `get` | Platform | Console read; retained event only. |
+| E5 | `GET /api/O/authentication-events` | `O/authenticationEvents` | `list` | Platform; own organization admin | Console read; ownership and retention precede filters and pagination; safe organization projection. |
+| E6 | `GET /api/O/authentication-events/{eventId}` | `O/authenticationEvents/{eventId}` | `get` | Platform; own organization admin | Console read; foreign, absent and expired IDs are indistinguishable; safe organization projection. |
 
 `kind` in the existing provider routes supplies the canonical `providerType`;
 the stored namespace supplies `providerId`. The directory is a combined view,

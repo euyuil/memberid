@@ -40,6 +40,10 @@ func TestManagementOperationMatrix(t *testing.T) {
 			{organizationEventsResource, []string{targetOrganization}, base + "/managementEvents", []string{"list"}, []string{"list"}, nil},
 			{memberDirectoryResource, nil, "memberDirectory", []string{"list"}, nil, nil},
 			{managementEventsResource, nil, "managementEvents", []string{"list"}, nil, nil},
+			{authenticationEventsResource, nil, "authenticationEvents", []string{"list"}, nil, nil},
+			{authenticationEventResource, []string{"event-example"}, "authenticationEvents/event-example", []string{"get"}, nil, nil},
+			{organizationAuthenticationEventsResource, []string{targetOrganization}, base + "/authenticationEvents", []string{"list"}, []string{"list"}, nil},
+			{organizationAuthenticationEventResource, []string{targetOrganization, "event-example"}, base + "/authenticationEvents/event-example", []string{"get"}, []string{"get"}, nil},
 		}
 		covered := map[managementResource]bool{}
 		for _, test := range cases {

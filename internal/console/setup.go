@@ -56,7 +56,7 @@ func New(ctx context.Context, store *identity.Store, installation *config.Loaded
 	if err != nil {
 		return nil, err
 	}
-	s := &Service{management: identity.NewManagementService(store, dingTalkApps, feishuApps), sessions: consolestate.New(store.Database()), origin: settings.Origin, clientID: settings.ClientID, party: party, routes: http.NewServeMux()}
+	s := &Service{management: identity.NewManagementService(store, dingTalkApps, feishuApps, installation.AuthenticationEventRetention()), sessions: consolestate.New(store.Database()), origin: settings.Origin, clientID: settings.ClientID, party: party, routes: http.NewServeMux()}
 	s.routes.HandleFunc("GET /auth/login", s.login)
 	s.routes.HandleFunc("GET /auth/callback", s.callback)
 	s.routes.HandleFunc("POST /api/logout", s.logout)
@@ -79,6 +79,10 @@ func New(ctx context.Context, store *identity.Store, installation *config.Loaded
 	s.routes.HandleFunc("PATCH /api/organizations/{organizationId}/members/{memberId}", s.mutate)
 	s.routes.HandleFunc("PUT /api/organizations/{organizationId}/members/{memberId}/administrator", s.administrator)
 	s.routes.HandleFunc("GET /api/events", s.events)
+	s.routes.HandleFunc("GET /api/authentication-events", s.authenticationEvents)
+	s.routes.HandleFunc("GET /api/authentication-events/{eventId}", s.authenticationEvent)
+	s.routes.HandleFunc("GET /api/organizations/{organizationId}/authentication-events", s.authenticationEvents)
+	s.routes.HandleFunc("GET /api/organizations/{organizationId}/authentication-events/{eventId}", s.authenticationEvent)
 	s.registerProviderRoutes(installation)
 	static, _ := fs.Sub(assets, "static")
 	registerPages(s.routes, static)

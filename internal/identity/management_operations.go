@@ -22,40 +22,48 @@ const (
 type managementResource string
 
 const (
-	organizationsResource      managementResource = "organizations"
-	organizationResource       managementResource = organizationsResource + "/{organizationId}"
-	membersResource            managementResource = organizationResource + "/members"
-	memberResource             managementResource = membersResource + "/{memberId}"
-	bindingsResource           managementResource = memberResource + "/bindings"
-	bindingResource            managementResource = bindingsResource + "/{bindingId}"
-	roleAssignmentsResource    managementResource = organizationResource + "/roleAssignments"
-	roleAssignmentResource     managementResource = roleAssignmentsResource + "/{memberId}"
-	providersResource          managementResource = organizationResource + "/providers"
-	providerTypeResource       managementResource = providersResource + "/{providerType}"
-	providerResource           managementResource = providerTypeResource + "/{providerId}"
-	organizationEventsResource managementResource = organizationResource + "/managementEvents"
-	memberDirectoryResource    managementResource = "memberDirectory"
-	managementEventsResource   managementResource = "managementEvents"
+	organizationsResource                    managementResource = "organizations"
+	organizationResource                     managementResource = organizationsResource + "/{organizationId}"
+	membersResource                          managementResource = organizationResource + "/members"
+	memberResource                           managementResource = membersResource + "/{memberId}"
+	bindingsResource                         managementResource = memberResource + "/bindings"
+	bindingResource                          managementResource = bindingsResource + "/{bindingId}"
+	roleAssignmentsResource                  managementResource = organizationResource + "/roleAssignments"
+	roleAssignmentResource                   managementResource = roleAssignmentsResource + "/{memberId}"
+	providersResource                        managementResource = organizationResource + "/providers"
+	providerTypeResource                     managementResource = providersResource + "/{providerType}"
+	providerResource                         managementResource = providerTypeResource + "/{providerId}"
+	organizationEventsResource               managementResource = organizationResource + "/managementEvents"
+	memberDirectoryResource                  managementResource = "memberDirectory"
+	managementEventsResource                 managementResource = "managementEvents"
+	authenticationEventsResource             managementResource = "authenticationEvents"
+	authenticationEventResource              managementResource = authenticationEventsResource + "/{eventId}"
+	organizationAuthenticationEventsResource managementResource = organizationResource + "/authenticationEvents"
+	organizationAuthenticationEventResource  managementResource = organizationAuthenticationEventsResource + "/{eventId}"
 )
 
 // Registered operations constrain even a platform-wide wildcard. Adding a
 // permission does not introduce an endpoint or bypass its entry contract.
 // Existing assignments use the Member ID as their logical deletion key.
 var managementOperations = map[managementResource][]string{
-	organizationsResource:      {actionCreate, actionList},
-	organizationResource:       {actionGet, actionUpdate, actionStatusUpdate},
-	membersResource:            {actionCreate, actionList},
-	memberResource:             {actionGet, actionUpdate, actionStatusUpdate},
-	bindingsResource:           {actionList, actionCreate},
-	bindingResource:            {actionDelete},
-	roleAssignmentsResource:    {actionCreate, actionList},
-	roleAssignmentResource:     {actionDelete},
-	providersResource:          {actionList},
-	providerTypeResource:       {actionCreate},
-	providerResource:           {actionUpdate, actionStatusUpdate},
-	organizationEventsResource: {actionList},
-	memberDirectoryResource:    {actionList},
-	managementEventsResource:   {actionList},
+	organizationsResource:                    {actionCreate, actionList},
+	organizationResource:                     {actionGet, actionUpdate, actionStatusUpdate},
+	membersResource:                          {actionCreate, actionList},
+	memberResource:                           {actionGet, actionUpdate, actionStatusUpdate},
+	bindingsResource:                         {actionList, actionCreate},
+	bindingResource:                          {actionDelete},
+	roleAssignmentsResource:                  {actionCreate, actionList},
+	roleAssignmentResource:                   {actionDelete},
+	providersResource:                        {actionList},
+	providerTypeResource:                     {actionCreate},
+	providerResource:                         {actionUpdate, actionStatusUpdate},
+	organizationEventsResource:               {actionList},
+	memberDirectoryResource:                  {actionList},
+	managementEventsResource:                 {actionList},
+	authenticationEventsResource:             {actionList},
+	authenticationEventResource:              {actionGet},
+	organizationAuthenticationEventsResource: {actionList},
+	organizationAuthenticationEventResource:  {actionGet},
 }
 
 func (resource managementResource) require(action string, ids ...string) authorization.Requirement {
@@ -131,6 +139,8 @@ func validManagementPart(template, value string) bool {
 		return ValidID(value, MemberKind)
 	case "{bindingId}":
 		return ValidUUID(value)
+	case "{eventId}":
+		return validEventReference(value)
 	case "{providerType}":
 		return value == "dingtalk" || value == "feishu"
 	case "{providerId}":
