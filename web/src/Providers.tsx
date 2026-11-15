@@ -4,6 +4,8 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import {
   DirectoryToolbar,
   DirectoryFooter,
+  DirectoryResults,
+  DirectoryState,
   RecordIdentity,
   RecordIdentifier,
   RecordTime,
@@ -76,75 +78,90 @@ export function Providers({
   return (
     <section className="directory" aria-label="身份提供商列表">
       <DirectoryToolbar title="已配置的应用">
-        <Button disabled={!enabled} onClick={() => setEditing("new")}>
-          <Plus data-icon="inline-start" />
-          添加提供商
-        </Button>
+        {directory.items.length > 0 && (
+          <Button disabled={!enabled} onClick={() => setEditing("new")}>
+            <Plus data-icon="inline-start" />
+            添加提供商
+          </Button>
+        )}
       </DirectoryToolbar>
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>显示名称</TableHead>
-            <TableHead>类型</TableHead>
-            <TableHead>状态</TableHead>
-            <TableHead>创建时间</TableHead>
-            <TableHead className="row-actions">操作</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {directory.items.map((item) => (
-            <TableRow key={item.id}>
-              <TableCell>
-                <RecordIdentity
-                  name={item.displayName}
-                  icon={<KeyRound />}
-                  onClick={() => setViewing(item)}
-                />
-              </TableCell>
-              <TableCell>{names[item.type]}</TableCell>
-              <TableCell>
-                <StatusBadge
-                  tone={
-                    !item.enabled
-                      ? "neutral"
-                      : item.authorizationStatus === "revoked"
-                        ? "negative"
-                        : "positive"
-                  }
-                >
-                  {!item.enabled
-                    ? "已停用"
-                    : item.authorizationStatus === "revoked"
-                      ? "已撤权"
-                      : "已启用"}
-                </StatusBadge>
-              </TableCell>
-              <TableCell>
-                <RecordTime value={item.createdAt} />
-              </TableCell>
-              <TableCell className="row-actions">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  disabled={!enabled}
-                  aria-label={`编辑 ${item.displayName}`}
-                  onClick={() => setEditing(item)}
-                >
-                  编辑
+      <DirectoryResults
+        count={directory.items.length}
+        empty={
+          <DirectoryState
+            kind="empty"
+            title="尚未配置身份提供商"
+            action={
+              enabled && (
+                <Button onClick={() => setEditing("new")}>
+                  <Plus data-icon="inline-start" />
+                  添加提供商
                 </Button>
-              </TableCell>
-            </TableRow>
-          ))}
-          {directory.items.length === 0 && (
+              )
+            }
+          />
+        }
+      >
+        <Table>
+          <TableHeader>
             <TableRow>
-              <TableCell colSpan={5} className="directory-empty">
-                本组织尚未配置提供商。
-              </TableCell>
+              <TableHead>显示名称</TableHead>
+              <TableHead>类型</TableHead>
+              <TableHead>状态</TableHead>
+              <TableHead>创建时间</TableHead>
+              <TableHead className="row-actions">操作</TableHead>
             </TableRow>
-          )}
-        </TableBody>
-      </Table>
-      <DirectoryFooter count={directory.items.length} />
+          </TableHeader>
+          <TableBody>
+            {directory.items.map((item) => (
+              <TableRow key={item.id}>
+                <TableCell>
+                  <RecordIdentity
+                    name={item.displayName}
+                    icon={<KeyRound />}
+                    onClick={() => setViewing(item)}
+                  />
+                </TableCell>
+                <TableCell>{names[item.type]}</TableCell>
+                <TableCell>
+                  <StatusBadge
+                    tone={
+                      !item.enabled
+                        ? "neutral"
+                        : item.authorizationStatus === "revoked"
+                          ? "negative"
+                          : "positive"
+                    }
+                  >
+                    {!item.enabled
+                      ? "已停用"
+                      : item.authorizationStatus === "revoked"
+                        ? "已撤权"
+                        : "已启用"}
+                  </StatusBadge>
+                </TableCell>
+                <TableCell>
+                  <RecordTime value={item.createdAt} />
+                </TableCell>
+                <TableCell className="row-actions">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={!enabled}
+                    aria-label={`编辑 ${item.displayName}`}
+                    onClick={() => setEditing(item)}
+                  >
+                    编辑
+                  </Button>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </DirectoryResults>
+      {directory.items.length > 0 && (
+        <DirectoryFooter count={directory.items.length} />
+      )}
       {viewing && (
         <Dialog
           open
