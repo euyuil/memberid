@@ -14,14 +14,15 @@ func TestActionPatternsAndRead(t *testing.T) {
 	}{
 		{"update", []string{"update"}, []string{"status.update", "Update"}},
 		{"status.update", []string{"status.update"}, []string{"update", "settings.update"}},
-		{"*.update", []string{"status.update", "settings.update"}, []string{"update", "security.credentials.update"}},
-		{"**.update", []string{"update", "status.update", "security.credentials.update"}, []string{"create", "get"}},
-		{"*", []string{"create", "get", "update", "delete"}, []string{"status.update"}},
-		{"**", []string{"get", "status.update", "security.credentials.update"}, nil},
+		{"?.update", []string{"status.update", "settings.update"}, []string{"update", "security.credentials.update"}},
+		{"?.?.update", []string{"security.credentials.update"}, []string{"update", "status.update", "account.security.credentials.update"}},
+		{"*.update", []string{"update", "status.update", "security.credentials.update"}, []string{"create", "get"}},
+		{"?", []string{"create", "get", "update", "delete"}, []string{"status.update"}},
+		{"*", []string{"get", "status.update", "security.credentials.update"}, nil},
 		{"read", []string{"list", "get"}, []string{"settings.get", "update"}},
 		{"settings.read", []string{"settings.list", "settings.get"}, []string{"get", "list", "settings.update"}},
-		{"*.read", []string{"settings.list", "status.get"}, []string{"list", "security.credentials.get"}},
-		{"**.read", []string{"get", "settings.list", "security.credentials.get"}, []string{"update", "status.update"}},
+		{"?.read", []string{"settings.list", "status.get"}, []string{"list", "security.credentials.get"}},
+		{"*.read", []string{"get", "settings.list", "security.credentials.get"}, []string{"update", "status.update"}},
 	} {
 		t.Run(test.pattern, func(t *testing.T) {
 			permissions := []Permission{{Scope: Scope{Pattern: "organizations/org_example"}, Actions: []string{test.pattern}}}
@@ -45,12 +46,13 @@ func TestScopePatternsAndCollectionBoundaries(t *testing.T) {
 		allow   []string
 		deny    []string
 	}{
-		{"organizations/*", []string{"organizations/org_a"}, []string{"organizations", "organizations/org_a/members"}},
-		{"organizations/**", []string{"organizations", "organizations/org_a", "organizations/org_a/members/member_a"}, []string{"memberDirectory"}},
-		{"organizations/*/roleAssignments/*", []string{"organizations/org_a/roleAssignments/assignment_a"}, []string{"organizations/org_a/roleAssignments", "organizations/org_a/roleAssignments/assignment_a/details"}},
-		{"organizations/org_a/**/roleAssignments", []string{"organizations/org_a/roleAssignments", "organizations/org_a/members/member_a/roleAssignments"}, []string{"organizations/org_b/roleAssignments", "organizations/org_a/roleAssignments/assignment_a"}},
-		{"*", []string{"organizations"}, []string{"organizations/org_a"}},
-		{"**", []string{"organizations", "organizations/org_a", "memberDirectory"}, nil},
+		{"organizations/?", []string{"organizations/org_a"}, []string{"organizations", "organizations/org_a/members"}},
+		{"organizations/*", []string{"organizations", "organizations/org_a", "organizations/org_a/members/member_a"}, []string{"memberDirectory"}},
+		{"organizations/?/roleAssignments/?", []string{"organizations/org_a/roleAssignments/assignment_a"}, []string{"organizations/org_a/roleAssignments", "organizations/org_a/roleAssignments/assignment_a/details"}},
+		{"organizations/org_a/*/roleAssignments", []string{"organizations/org_a/roleAssignments", "organizations/org_a/members/member_a/roleAssignments"}, []string{"organizations/org_b/roleAssignments", "organizations/org_a/roleAssignments/assignment_a"}},
+		{"organizations/?/*/roleAssignments/?", []string{"organizations/org_a/roleAssignments/assignment_a", "organizations/org_a/members/member_a/roleAssignments/assignment_a"}, []string{"organizations/roleAssignments/assignment_a", "organizations/org_a/roleAssignments", "organizations/org_a/roleAssignments/assignment_a/details", "Organizations/org_a/roleAssignments/assignment_a"}},
+		{"?", []string{"organizations"}, []string{"organizations/org_a"}},
+		{"*", []string{"organizations", "organizations/org_a", "memberDirectory"}, nil},
 	} {
 		t.Run(test.pattern, func(t *testing.T) {
 			permissions := []Permission{{Scope: Scope{Pattern: test.pattern}, Actions: []string{"read"}}}
@@ -96,17 +98,17 @@ func TestAllRequirementsAndPermissionPairing(t *testing.T) {
 }
 
 func TestInvalidDescriptionsNeverGrantAccess(t *testing.T) {
-	for _, pattern := range []string{"", "/organizations", "organizations/", "organizations//members", "org_*", "**/**", "organizations/**/members/**", "org?", "[org]", "(org)", "org|members", "org\\members", "org\x00", " org"} {
-		if err := Check([]Permission{{Scope: Scope{pattern}, Actions: []string{"**"}}}, Requirement{"organizations", "list"}); !errors.Is(err, ErrInvalid) {
+	for _, pattern := range []string{"", "/organizations", "organizations/", "organizations//members", "org_?", "org_*", "*/*", "organizations/*/members/*", "**", "organizations/**", "??", "?*", "org?", "[org]", "(org)", "org|members", "org\\members", "org\x00", " org"} {
+		if err := Check([]Permission{{Scope: Scope{pattern}, Actions: []string{"*"}}}, Requirement{"organizations", "list"}); !errors.Is(err, ErrInvalid) {
 			t.Errorf("scope %q: %v", pattern, err)
 		}
 	}
-	for _, action := range []string{"", ".update", "status.", "status..update", "status/update", "re*", "status*", "**.**", "get|update", "get\n"} {
-		if err := Check([]Permission{{Scope: Scope{"**"}, Actions: []string{action}}}, Requirement{"organizations", "list"}); !errors.Is(err, ErrInvalid) {
+	for _, action := range []string{"", ".update", "status.", "status..update", "status/update", "re?", "status?", "re*", "status*", "*.*", "*.status.*", "**", "**.update", "??", "?*", "get|update", "get\n"} {
+		if err := Check([]Permission{{Scope: Scope{"*"}, Actions: []string{action}}}, Requirement{"organizations", "list"}); !errors.Is(err, ErrInvalid) {
 			t.Errorf("action %q: %v", action, err)
 		}
 	}
-	for _, encoded := range []string{`{}`, `{"scope":null,"actions":["**"]}`, `{"scope":{"pattern":"**"},"actions":[]}`} {
+	for _, encoded := range []string{`{}`, `{"scope":null,"actions":["*"]}`, `{"scope":{"pattern":"*"},"actions":[]}`} {
 		var permission Permission
 		if err := json.Unmarshal([]byte(encoded), &permission); err != nil {
 			t.Fatal(err)
@@ -115,8 +117,8 @@ func TestInvalidDescriptionsNeverGrantAccess(t *testing.T) {
 			t.Errorf("incomplete permission %s: %v", encoded, err)
 		}
 	}
-	full := []Permission{{Scope: Scope{"**"}, Actions: []string{"**"}}}
-	for _, requirement := range []Requirement{{"", "get"}, {"organizations/*", "get"}, {"organizations", "*"}, {"organizations", "read"}, {"organizations", "status..update"}} {
+	full := []Permission{{Scope: Scope{"*"}, Actions: []string{"*"}}}
+	for _, requirement := range []Requirement{{"", "get"}, {"organizations", ""}, {"organizations/?", "get"}, {"organizations/*", "get"}, {"organizations/**", "get"}, {"organizations//members", "get"}, {"organizations", "?"}, {"organizations", "*"}, {"organizations", "**"}, {"organizations", "?.update"}, {"organizations", "*.update"}, {"organizations", "read"}, {"organizations", "status..update"}} {
 		if err := Check(full, requirement); !errors.Is(err, ErrInvalid) {
 			t.Errorf("invalid requirement %+v: %v", requirement, err)
 		}

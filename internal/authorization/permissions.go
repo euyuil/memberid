@@ -102,7 +102,7 @@ func segments(value string, separator rune, pattern bool) ([]string, error) {
 		return nil, ErrInvalid
 	}
 	for _, char := range value {
-		if unicode.IsSpace(char) || unicode.IsControl(char) || strings.ContainsRune(`?[]{}()|^$+\`, char) || separator == '.' && char == '/' {
+		if unicode.IsSpace(char) || unicode.IsControl(char) || strings.ContainsRune(`[]{}()|^$+\`, char) || separator == '.' && char == '/' {
 			return nil, ErrInvalid
 		}
 	}
@@ -112,11 +112,11 @@ func segments(value string, separator rune, pattern bool) ([]string, error) {
 		if part == "" {
 			return nil, ErrInvalid
 		}
-		if strings.Contains(part, "*") {
-			if !pattern || part != "*" && part != "**" || part == "**" && deep {
+		if strings.ContainsAny(part, "*?") {
+			if !pattern || part != "?" && part != "*" || part == "*" && deep {
 				return nil, ErrInvalid
 			}
-			deep = deep || part == "**"
+			deep = deep || part == "*"
 		}
 	}
 	return parts, nil
@@ -125,7 +125,7 @@ func segments(value string, separator rune, pattern bool) ([]string, error) {
 func matches(pattern, target []string) bool {
 	deep := -1
 	for index, part := range pattern {
-		if part == "**" {
+		if part == "*" {
 			deep = index
 			break
 		}
@@ -141,7 +141,7 @@ func matches(pattern, target []string) bool {
 
 func matchesSingle(pattern, target []string) bool {
 	for index, part := range pattern {
-		if part != "*" && part != target[index] {
+		if part != "?" && part != target[index] {
 			return false
 		}
 	}

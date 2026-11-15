@@ -46,6 +46,8 @@ func TestScopedOrganizationUpdates(t *testing.T) {
 	for _, requirement := range []authorization.Requirement{
 		{Target: "organizations/" + org.ID, Action: "delete"},
 		{Target: "organizations/" + org.ID, Action: "**"},
+		{Target: "organizations/" + org.ID, Action: "*"},
+		{Target: "organizations/" + org.ID, Action: "?"},
 		{Target: "unregistered/" + org.ID, Action: "get"},
 	} {
 		if err := authorizeAll(t.Context(), s.pool, platformPrincipal, requirement); !errors.Is(err, ErrInvalid) {
