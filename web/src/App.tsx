@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react"
 import {
   Building2,
-  Check,
-  ChevronDown,
+  ChevronsUpDown,
   ChevronRight,
   Fingerprint,
   History,
@@ -44,6 +43,22 @@ import {
 } from "@/components/ui/dialog"
 import { Skeleton } from "@/components/ui/skeleton"
 import { ConsoleLayout, type BreadcrumbItem } from "@/components/console-layout"
+import {
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  useSidebar,
+} from "@/components/ui/sidebar"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import {
   DirectoryToolbar,
   DirectoryFooter,
@@ -672,23 +687,17 @@ export default function App() {
         }
       }}
       scope={
-        <>
-          {actor.platform ? (
-            <OrganizationSwitcher
-              organizationId={org}
-              name={scopeName}
-              onSelect={(id) =>
-                navigate({
-                  view: activeView,
-                  ...(id ? { org: id } : {}),
-                })
-              }
-            />
-          ) : (
-            <strong title={scopeName}>{scopeName}</strong>
-          )}
-          {org === "org_system" && <Badge variant="outline">系统组织</Badge>}
-        </>
+        <OrganizationSwitcher
+          organizationId={org}
+          name={scopeName}
+          canSwitch={actor.platform}
+          onSelect={(id) =>
+            navigate({
+              view: activeView,
+              ...(id ? { org: id } : {}),
+            })
+          }
+        />
       }
     >
       <div className="page-heading">
@@ -1427,43 +1436,81 @@ export default function App() {
 function OrganizationSwitcher({
   organizationId,
   name,
+  canSwitch,
   onSelect,
 }: {
   organizationId: string
   name: string
+  canSwitch: boolean
   onSelect: (id: string) => void
 }) {
   const [open, setOpen] = useState(false)
+  const { isMobile, setOpenMobile, state } = useSidebar()
+  const identity = (
+    <>
+      <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+        <Fingerprint aria-hidden="true" />
+      </span>
+      <div className="grid min-w-0 flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden">
+        <span className="truncate font-medium" title={name}>
+          {name}
+        </span>
+        <span className="truncate text-xs">
+          {organizationId === "org_system" ? "MemberID · 系统组织" : "MemberID"}
+        </span>
+      </div>
+    </>
+  )
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger
-        render={
-          <Button
-            variant="outline"
-            className="max-w-full min-w-0"
-            title={name}
-          />
-        }
-        aria-label={`切换组织，当前为${name}`}
-      >
-        <span className="truncate">{name}</span>
-        <ChevronDown data-icon="inline-end" />
-      </DialogTrigger>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>切换管理组织</DialogTitle>
-        </DialogHeader>
-        {open && (
-          <OrganizationChoices
-            organizationId={organizationId}
-            onSelect={(id) => {
-              setOpen(false)
-              if (id !== organizationId) onSelect(id)
-            }}
-          />
+    <SidebarMenu>
+      <SidebarMenuItem>
+        {canSwitch ? (
+          <DropdownMenu open={open} onOpenChange={setOpen}>
+            <DropdownMenuTrigger
+              render={
+                <SidebarMenuButton
+                  size="lg"
+                  tooltip={{
+                    children: name,
+                    hidden: open || isMobile || state !== "collapsed",
+                  }}
+                  className="data-open:bg-sidebar-accent data-open:text-sidebar-accent-foreground"
+                />
+              }
+              aria-label={`切换组织，当前为${name}`}
+            >
+              {identity}
+              <ChevronsUpDown
+                aria-hidden="true"
+                className="ml-auto group-data-[collapsible=icon]:hidden"
+              />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              aria-label="切换组织"
+              className="w-64 max-w-[calc(100vw-2rem)]"
+              align="start"
+              side={isMobile ? "bottom" : "right"}
+              sideOffset={4}
+            >
+              {open && (
+                <OrganizationChoices
+                  organizationId={organizationId}
+                  onSelect={(id) => {
+                    setOpen(false)
+                    setOpenMobile(false)
+                    if (id !== organizationId) onSelect(id)
+                  }}
+                />
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : (
+          <SidebarMenuButton size="lg" render={<div />} title={name}>
+            {identity}
+          </SidebarMenuButton>
         )}
-      </DialogContent>
-    </Dialog>
+      </SidebarMenuItem>
+    </SidebarMenu>
   )
 }
 
@@ -1501,73 +1548,91 @@ function OrganizationChoices({
   }
 
   return (
-    <div className="grid min-w-0 gap-2">
-      <Button
-        variant="ghost"
-        className="w-full justify-between"
-        aria-current={!organizationId ? "true" : undefined}
-        onClick={() => onSelect("")}
-      >
-        所有组织
-        {!organizationId && <Check aria-hidden="true" />}
-      </Button>
-      <div className="grid max-h-[45dvh] min-h-20 content-start gap-1 overflow-y-auto border-y py-2">
-        {page ? (
-          page.items.map((organization) => (
-            <Button
-              key={organization.id}
-              variant="ghost"
-              className="min-w-0 justify-between gap-3 text-left"
-              aria-current={
-                organizationId === organization.id ? "true" : undefined
-              }
-              onClick={() => onSelect(organization.id)}
-            >
-              <span className="truncate" title={organization.name}>
-                {organization.name}
-              </span>
-              {organization.status !== "enabled" && <span>已停用</span>}
-              {organizationId === organization.id && (
-                <Check aria-hidden="true" />
-              )}
-            </Button>
-          ))
-        ) : error ? (
-          <div className="grid justify-items-start gap-2 p-2">
-            <p role="status">{error}</p>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setError("")
-                setRetry((attempt) => attempt + 1)
-              }}
-            >
-              重试
-            </Button>
+    <>
+      <DropdownMenuGroup>
+        <DropdownMenuRadioGroup value={organizationId}>
+          <DropdownMenuRadioItem
+            value=""
+            className="gap-2 p-2 pr-8"
+            closeOnClick
+            onClick={() => onSelect("")}
+          >
+            <span className="flex size-6 shrink-0 items-center justify-center rounded-md border">
+              <Fingerprint aria-hidden="true" />
+            </span>
+            所有组织
+          </DropdownMenuRadioItem>
+          <DropdownMenuSeparator />
+          <div className="max-h-[50dvh] overflow-y-auto">
+            {page ? (
+              page.items.map((organization) => (
+                <DropdownMenuRadioItem
+                  key={organization.id}
+                  value={organization.id}
+                  className="gap-2 p-2 pr-8"
+                  closeOnClick
+                  onClick={() => onSelect(organization.id)}
+                >
+                  <span className="flex size-6 shrink-0 items-center justify-center rounded-md border">
+                    <Building2 aria-hidden="true" />
+                  </span>
+                  <span className="truncate" title={organization.name}>
+                    {organization.name}
+                  </span>
+                  {organization.status !== "enabled" && (
+                    <Badge variant="secondary">已停用</Badge>
+                  )}
+                </DropdownMenuRadioItem>
+              ))
+            ) : error ? (
+              <Alert variant="destructive">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            ) : (
+              <p className="p-2 text-sm text-muted-foreground" role="status">
+                正在加载组织…
+              </p>
+            )}
           </div>
-        ) : (
-          <p className="muted p-2" role="status">
-            正在加载组织…
-          </p>
-        )}
-      </div>
-      <div className="flex justify-end gap-2">
-        <Button
-          variant="outline"
-          disabled={!page || !after}
-          onClick={() => goToPage("")}
-        >
-          第一页
-        </Button>
-        <Button
-          variant="outline"
-          disabled={!nextAfter}
-          onClick={() => nextAfter && goToPage(nextAfter)}
-        >
-          下一页
-        </Button>
-      </div>
-    </div>
+        </DropdownMenuRadioGroup>
+      </DropdownMenuGroup>
+      {error && (
+        <DropdownMenuGroup>
+          <DropdownMenuItem
+            closeOnClick={false}
+            onClick={() => {
+              setError("")
+              setRetry((attempt) => attempt + 1)
+            }}
+          >
+            重试
+          </DropdownMenuItem>
+        </DropdownMenuGroup>
+      )}
+      {(after || nextAfter) && (
+        <>
+          <DropdownMenuSeparator />
+          <DropdownMenuGroup className="flex gap-1">
+            <DropdownMenuItem
+              className="flex-1 justify-center"
+              closeOnClick={false}
+              disabled={!page || !after}
+              onClick={() => goToPage("")}
+            >
+              第一页
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              className="flex-1 justify-center"
+              closeOnClick={false}
+              disabled={!nextAfter}
+              onClick={() => nextAfter && goToPage(nextAfter)}
+            >
+              下一页
+            </DropdownMenuItem>
+          </DropdownMenuGroup>
+        </>
+      )}
+    </>
   )
 }
 

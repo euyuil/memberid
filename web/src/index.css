@@ -144,9 +144,6 @@ code { font-size: 11px; color: var(--muted-foreground); overflow-wrap: anywhere;
 .account-menu-item[data-highlighted] { background: var(--muted); }
 .account-menu-item[data-disabled] { opacity: .5; cursor: default; }
 .scope-bar { display: flex; align-items: center; gap: 12px; min-height: 65px; padding: 12px 28px; border-bottom: 1px solid var(--border); background: var(--card); font-size: 12px; }
-.scope-control { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-left: auto; min-width: 0; max-width: min(40vw, 360px); flex-shrink: 0; }
-.scope-control strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.scope-control [data-slot=badge] { flex-shrink: 0; }
 .console-breadcrumbs { flex: 1; min-width: 0; }
 .console-breadcrumbs ol { display: flex; align-items: center; gap: 8px; min-width: 0; margin: 0; padding: 0; list-style: none; }
 .console-breadcrumbs li { display: flex; align-items: center; gap: 8px; min-width: 0; }
@@ -228,10 +225,7 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
 .skip-link { position: fixed; top: -100px; left: 16px; z-index: 70; padding: 10px 16px; border-radius: 8px; background: var(--primary); color: var(--primary-foreground); }
 .skip-link:focus { top: 12px; }
 @media (max-width: 767px) {
- .scope-divider { display: none; }
- .scope-bar { display: grid; grid-template-columns: 32px minmax(0, 1fr); padding: 12px 16px; gap: 12px; }
- .scope-control { grid-column: 2; grid-row: 1; justify-self: end; max-width: 100%; }
- .console-breadcrumbs { grid-column: 1 / -1; grid-row: 2; }
+ .scope-bar { padding: 12px 16px; }
  .console-breadcrumbs ol { min-height: 20px; }
  .page-content { padding: 24px 16px 20px; }
  .page-heading { gap: 16px; align-items: flex-start; flex-wrap: wrap; }
