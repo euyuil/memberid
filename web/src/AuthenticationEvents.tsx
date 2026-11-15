@@ -1,6 +1,15 @@
 import { useEffect, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import {
   Table,
   TableBody,
@@ -17,11 +26,9 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog"
 import {
-  DirectoryFooter,
   DirectoryState,
   RecordIdentifier,
   RecordTime,
-  StatusBadge,
 } from "@/components/directory"
 import { Link, navigate } from "@/navigation"
 import {
@@ -34,6 +41,7 @@ import {
   eventMethods,
   localEventTime,
   type AuthenticationEvent,
+  type AuthenticationEventPage,
 } from "@/authentication-events"
 
 export function AuthenticationEventFilters({
@@ -56,7 +64,7 @@ export function AuthenticationEventFilters({
     query.has("to")
   return (
     <form
-      className="mb-4 space-y-3"
+      className="mb-4 flex flex-col gap-4"
       aria-label="筛选认证记录"
       onInput={(event) => {
         const end = event.currentTarget.elements.namedItem(
@@ -92,7 +100,7 @@ export function AuthenticationEventFilters({
         navigate(authenticationEventLocation(org, next))
       }}
     >
-      <div className="flex flex-wrap items-end gap-3">
+      <FieldGroup className="flex-row flex-wrap items-end gap-3">
         {(
           [
             ["type", "事件类型", eventTypes],
@@ -100,21 +108,34 @@ export function AuthenticationEventFilters({
             ["method", "认证方式", eventMethods],
           ] as const
         ).map(([key, label, choices]) => (
-          <label key={key} className="grid gap-1 text-sm">
-            {label}
-            <select
+          <Field key={key} className="w-full sm:w-auto">
+            <FieldLabel htmlFor={`event-${key}`}>{label}</FieldLabel>
+            <Select
               name={key}
               defaultValue={query.get(key) ?? ""}
-              className="h-9 rounded-md border bg-background px-2"
+              items={[
+                { value: "", label: "全部" },
+                ...Object.entries(choices).map(([value, label]) => ({
+                  value,
+                  label,
+                })),
+              ]}
             >
-              <option value="">全部</option>
-              {Object.entries(choices).map(([value, text]) => (
-                <option key={value} value={value}>
-                  {text}
-                </option>
-              ))}
-            </select>
-          </label>
+              <SelectTrigger id={`event-${key}`} className="w-full sm:w-44">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectItem value="">全部</SelectItem>
+                  {Object.entries(choices).map(([value, text]) => (
+                    <SelectItem key={value} value={value}>
+                      {text}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </Field>
         ))}
         <Button type="submit">筛选</Button>
         <Button
@@ -127,19 +148,20 @@ export function AuthenticationEventFilters({
         <span className="self-center text-sm text-muted-foreground">
           记录可能不完整
         </span>
-      </div>
+      </FieldGroup>
       <details open={advanced || undefined}>
         <summary className="w-fit cursor-pointer text-sm">更多筛选</summary>
-        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <FieldGroup className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {Object.entries(fields).map(([key, label]) => (
-            <label key={key} className="grid gap-1 text-sm">
-              {label}
+            <Field key={key}>
+              <FieldLabel htmlFor={`event-${key}`}>{label}</FieldLabel>
               <Input
+                id={`event-${key}`}
                 name={key}
                 defaultValue={query.get(key) ?? ""}
                 maxLength={128}
               />
-            </label>
+            </Field>
           ))}
           {(
             [
@@ -147,17 +169,18 @@ export function AuthenticationEventFilters({
               ["to", "结束时间（本地，不含）"],
             ] as const
           ).map(([key, label]) => (
-            <label key={key} className="grid gap-1 text-sm">
-              {label}
+            <Field key={key}>
+              <FieldLabel htmlFor={`event-${key}`}>{label}</FieldLabel>
               <Input
+                id={`event-${key}`}
                 type="datetime-local"
                 step="1"
                 name={key}
                 defaultValue={localEventTime(query.get(key) ?? "")}
               />
-            </label>
+            </Field>
           ))}
-        </div>
+        </FieldGroup>
       </details>
     </form>
   )
@@ -344,7 +367,7 @@ export function AuthenticationEvents({
 }: {
   org: string
   query: URLSearchParams
-  page: { items: AuthenticationEvent[]; nextAfter?: string }
+  page: AuthenticationEventPage
   loadEvent: LoadEvent
 }) {
   const [selected, setSelected] = useState("")
@@ -354,91 +377,93 @@ export function AuthenticationEvents({
   const next = new URLSearchParams(query)
   if (page.nextAfter) next.set("after", page.nextAfter)
   return (
-    <section className="directory" aria-label="认证记录列表">
-      {page.items.length ? (
-        <Table className="directory-table">
-          <TableHeader>
-            <TableRow>
-              <TableHead>发生时间</TableHead>
-              <TableHead>事件</TableHead>
-              <TableHead>结果</TableHead>
-              <TableHead>认证方式</TableHead>
-              {!org && <TableHead>组织</TableHead>}
-              <TableHead>客户端</TableHead>
-              <TableHead>
-                <span className="sr-only">详情</span>
-              </TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {page.items.map((event) => (
-              <TableRow key={event.eventId}>
-                <TableCell>
-                  <RecordTime value={event.occurredAt} compact />
-                </TableCell>
-                <TableCell>{eventTypes[event.type] ?? event.type}</TableCell>
-                <TableCell>
-                  <StatusBadge
-                    tone={
-                      event.outcome === "succeeded"
-                        ? "positive"
-                        : event.outcome === "failed" ||
-                            event.outcome === "rejected"
-                          ? "negative"
-                          : "neutral"
-                    }
-                  >
+    <section aria-label="认证记录列表">
+      <div className="overflow-hidden rounded-md border">
+        {page.items.length ? (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>发生时间</TableHead>
+                <TableHead>事件</TableHead>
+                <TableHead>结果</TableHead>
+                <TableHead>认证方式</TableHead>
+                {!org && <TableHead>组织</TableHead>}
+                <TableHead>客户端</TableHead>
+                <TableHead>
+                  <span className="sr-only">详情</span>
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {page.items.map((event) => (
+                <TableRow key={event.eventId}>
+                  <TableCell>
+                    <RecordTime value={event.occurredAt} compact />
+                  </TableCell>
+                  <TableCell>{eventTypes[event.type] ?? event.type}</TableCell>
+                  <TableCell>
                     {eventOutcomes[event.outcome] ?? event.outcome}
-                  </StatusBadge>
-                </TableCell>
-                <TableCell>
-                  {event.method
-                    ? (eventMethods[event.method] ?? event.method)
-                    : "—"}
-                </TableCell>
-                {!org && (
+                  </TableCell>
+                  <TableCell>
+                    {event.method
+                      ? (eventMethods[event.method] ?? event.method)
+                      : "—"}
+                  </TableCell>
+                  {!org && (
+                    <TableCell>
+                      <span
+                        className="block max-w-48 truncate"
+                        title={
+                          event.organizationId
+                            ? page.organizationNames[event.organizationId]
+                            : undefined
+                        }
+                      >
+                        {event.organizationId
+                          ? (page.organizationNames[event.organizationId] ??
+                            "未知组织")
+                          : "共享或未确定"}
+                      </span>
+                    </TableCell>
+                  )}
                   <TableCell>
                     <span
-                      className="block max-w-48 truncate"
-                      title={event.organizationId}
+                      className="block max-w-40 truncate"
+                      title={event.clientId}
                     >
-                      {event.organizationId ?? "共享或未确定"}
+                      {event.clientId ?? "—"}
                     </span>
                   </TableCell>
-                )}
-                <TableCell>
-                  <span
-                    className="block max-w-40 truncate"
-                    title={event.clientId}
-                  >
-                    {event.clientId ?? "—"}
-                  </span>
-                </TableCell>
-                <TableCell>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={(click) => {
-                      trigger.current = click.currentTarget
-                      setSelected(event.eventId)
-                    }}
-                  >
-                    查看详情
-                  </Button>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      ) : (
-        <DirectoryState
-          kind={first.size ? "filtered" : "empty"}
-          title="暂无匹配的认证记录"
-        />
-      )}
-      <DirectoryFooter count={page.items.length}>
+                  <TableCell>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={(click) => {
+                        trigger.current = click.currentTarget
+                        setSelected(event.eventId)
+                      }}
+                    >
+                      查看详情
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        ) : (
+          <DirectoryState
+            kind={first.size ? "filtered" : "empty"}
+            title="暂无匹配的认证记录"
+          />
+        )}
+      </div>
+      <div className="flex items-center justify-end gap-2 py-4">
+        <div className="flex-1 text-sm text-muted-foreground">
+          本页 {page.items.length} 条记录
+        </div>
         <Button
           variant="outline"
+          size="sm"
           disabled={!query.has("after")}
           render={<Link href={authenticationEventLocation(org, first)} />}
           nativeButton={false}
@@ -447,13 +472,14 @@ export function AuthenticationEvents({
         </Button>
         <Button
           variant="outline"
+          size="sm"
           disabled={!page.nextAfter}
           render={<Link href={authenticationEventLocation(org, next)} />}
           nativeButton={false}
         >
           更早记录
         </Button>
-      </DirectoryFooter>
+      </div>
       <Dialog
         open={!!selected}
         onOpenChange={(open) => {

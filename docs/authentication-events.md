@@ -186,13 +186,15 @@ these GET endpoints. They do not accept installation management credentials:
 | `/api/organizations/{organizationId}/authentication-events` | Organization collection. |
 | `/api/organizations/{organizationId}/authentication-events/{eventId}` | Organization detail. |
 
-Lists return `{ "items": [], "nextAfter": "..." }`, omitting `nextAfter` on the
+Lists return `{ "items": [], "organizationNames": {}, "nextAfter": "..." }`, omitting `nextAfter` on the
 last page. Optional exact filters are `type`, `outcome`, `method`, `memberId`,
 `clientId`, `grantId`, `requestId`, and `interactionId`. `from` is inclusive and
 `to` exclusive; both accept RFC 3339 timestamps with an explicit timezone.
 `limit` defaults to 50 and accepts 1–100. Pass the returned opaque `nextAfter`
 value as `after` while keeping the filters and organization unchanged. Changing
 a filter starts a new first page.
+
+`organizationNames` maps only the organization IDs present on the authorized page to current display names. These names are presentation metadata, not historical event evidence; renaming an organization does not change stored events. Empty pages expose no organization names.
 
 Results sort by descending `occurredAt`, then `eventId`, using database timestamp
 precision. Pagination is a live view, not a frozen snapshot: later audit delivery

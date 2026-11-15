@@ -20,6 +20,11 @@ type AuthenticationEventFilter struct {
 	Limit                                                                        int
 }
 
+type AuthenticationEventPage struct {
+	Page[authevent.Event]
+	OrganizationNames map[string]string `json:"organizationNames"`
+}
+
 var eventReference = regexp.MustCompile(`^[A-Za-z0-9_.:-]{1,128}$`)
 
 func validEventReference(value string) bool { return eventReference.MatchString(value) }
@@ -107,8 +112,8 @@ func readAuthenticationEvent(row pgx.Row, organizationView bool) (authevent.Even
 	return event, nil
 }
 
-func (service *ManagementService) AuthenticationEvents(ctx context.Context, principal Principal, organizationID string, filter AuthenticationEventFilter) (Page[authevent.Event], error) {
-	page := Page[authevent.Event]{Items: []authevent.Event{}}
+func (service *ManagementService) AuthenticationEvents(ctx context.Context, principal Principal, organizationID string, filter AuthenticationEventFilter) (AuthenticationEventPage, error) {
+	page := AuthenticationEventPage{Page: Page[authevent.Event]{Items: []authevent.Event{}}, OrganizationNames: map[string]string{}}
 	requirement := authenticationEventsResource.require(actionList)
 	if organizationID != "" {
 		requirement = organizationAuthenticationEventsResource.require(actionList, organizationID)
@@ -165,7 +170,34 @@ func (service *ManagementService) AuthenticationEvents(ctx context.Context, prin
 		}
 		page.Items = append(page.Items, event)
 	}
-	return page, rows.Err()
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return page, err
+	}
+	organizationIDs := []string{}
+	for _, event := range page.Items {
+		if event.OrganizationID != "" && !slices.Contains(organizationIDs, event.OrganizationID) {
+			organizationIDs = append(organizationIDs, event.OrganizationID)
+		}
+	}
+	if len(organizationIDs) == 0 {
+		return page, nil
+	}
+	// Resolve current display names only for organizations in the authorized page.
+	// These names are presentation metadata, not historical event snapshots.
+	names, err := service.store.pool.Query(ctx, "SELECT id,name FROM organizations WHERE id=ANY($1)", organizationIDs)
+	if err != nil {
+		return page, err
+	}
+	defer names.Close()
+	for names.Next() {
+		var id, name string
+		if err := names.Scan(&id, &name); err != nil {
+			return page, err
+		}
+		page.OrganizationNames[id] = name
+	}
+	return page, names.Err()
 }
 
 func (service *ManagementService) AuthenticationEvent(ctx context.Context, principal Principal, organizationID, eventID string) (authevent.Event, error) {

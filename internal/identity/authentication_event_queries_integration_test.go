@@ -58,6 +58,9 @@ func TestAuthenticationEventQueryIsolationProjectionAndRetention(t *testing.T) {
 	if err != nil || len(page.Items) != 6 {
 		t.Fatal(page, err)
 	}
+	if len(page.OrganizationNames) != 1 || page.OrganizationNames[org.ID] != org.Name {
+		t.Fatal("organization names escaped the authorized page", page.OrganizationNames)
+	}
 	for _, event := range page.Items {
 		if event.OrganizationID != org.ID || event.FactorID != "" || event.SessionID != "" || event.Actor != (authevent.Actor{}) {
 			t.Fatal("unsafe organization projection", event)
@@ -77,6 +80,21 @@ func TestAuthenticationEventQueryIsolationProjectionAndRetention(t *testing.T) {
 	all, err := service.AuthenticationEvents(t.Context(), global, "", filter)
 	if err != nil || len(all.Items) != 9 {
 		t.Fatal(all, err)
+	}
+	if len(all.OrganizationNames) != 3 || all.OrganizationNames[other.ID] != other.Name || all.OrganizationNames[SystemOrganizationID] == "" {
+		t.Fatal("missing organization display names", all.OrganizationNames)
+	}
+	renamed := "Renamed organization"
+	if _, err := s.UpdateOrganization(t.Context(), OperatorPrincipal(), org.ID, OrganizationChange{Name: &renamed}); err != nil {
+		t.Fatal(err)
+	}
+	current, err := service.AuthenticationEvents(t.Context(), local, org.ID, filter)
+	if err != nil || current.OrganizationNames[org.ID] != renamed || !reflect.DeepEqual(current.Items, page.Items) {
+		t.Fatal("current display names changed event evidence", current, err)
+	}
+	empty, err := service.AuthenticationEvents(t.Context(), local, org.ID, AuthenticationEventFilter{Limit: 100, RequestID: "no-matching-request"})
+	if err != nil || len(empty.Items) != 0 || len(empty.OrganizationNames) != 0 {
+		t.Fatal("empty query exposed organization names", empty, err)
 	}
 	full, err := service.AuthenticationEvent(t.Context(), global, "", "local-global-cause")
 	if err != nil || full.FactorID != "shared-factor" || full.SessionID != "shared-session" || full.CausationID != "global" {

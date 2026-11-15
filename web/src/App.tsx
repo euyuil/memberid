@@ -73,7 +73,7 @@ import {
 import {
   authenticationEventPath,
   authenticationEventQuery,
-  type AuthenticationEvent,
+  type AuthenticationEventPage,
 } from "@/authentication-events"
 import { Providers, type ProviderDirectory } from "@/Providers"
 import { memberListLocation, parseRoute, routeURL, type Route } from "@/routes"
@@ -118,7 +118,7 @@ type Data = {
   members?: MemberPage
   detail?: Detail
   events?: ManagementEvent[]
-  authenticationEvents?: Page<AuthenticationEvent>
+  authenticationEvents?: AuthenticationEventPage
   historyMember?: Member
   providers?: ProviderDirectory
 }
@@ -419,7 +419,7 @@ export default function App() {
         let result: Data
         if (authenticationEvents) {
           const [page, organization] = await Promise.all([
-            request<Page<AuthenticationEvent>>(
+            request<AuthenticationEventPage>(
               `/api${authenticationEventPath(org)}?${authenticationEventQuery(params)}`,
               options
             ),
