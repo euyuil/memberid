@@ -1,11 +1,9 @@
 import { useState, type ReactNode } from "react"
-import {
-  CircleAlert,
-  Copy,
-  FolderOpen,
-  LockKeyhole,
-  SearchX,
-} from "lucide-react"
+import { Copy } from "lucide-react"
+import accessDenied from "@/assets/directory-states/access-denied.webp"
+import emptyDirectory from "@/assets/directory-states/empty.webp"
+import loadFailed from "@/assets/directory-states/load-failed.webp"
+import noMatches from "@/assets/directory-states/no-matches.webp"
 import { Badge } from "@/components/ui/badge"
 import {
   Empty,
@@ -52,11 +50,11 @@ export function DirectoryFooter({
   )
 }
 
-const directoryStateIcons = {
-  empty: FolderOpen,
-  filtered: SearchX,
-  forbidden: LockKeyhole,
-  error: CircleAlert,
+const directoryStateImages = {
+  empty: emptyDirectory,
+  filtered: noMatches,
+  forbidden: accessDenied,
+  error: loadFailed,
 }
 
 export function DirectoryState({
@@ -64,16 +62,21 @@ export function DirectoryState({
   title,
   action,
 }: {
-  kind: keyof typeof directoryStateIcons
+  kind: keyof typeof directoryStateImages
   title: string
   action?: ReactNode
 }) {
-  const Icon = directoryStateIcons[kind]
   return (
-    <Empty className="min-h-56 py-10">
+    <Empty className="min-h-72 py-8 sm:py-10">
       <EmptyHeader role={kind === "error" ? "alert" : "status"}>
-        <EmptyMedia variant="icon" aria-hidden="true">
-          <Icon />
+        <EmptyMedia aria-hidden="true">
+          <img
+            alt=""
+            src={directoryStateImages[kind]}
+            width={432}
+            height={288}
+            className="h-auto w-44 sm:w-54"
+          />
         </EmptyMedia>
         <EmptyTitle>{title}</EmptyTitle>
       </EmptyHeader>
