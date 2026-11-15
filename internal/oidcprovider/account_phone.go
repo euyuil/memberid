@@ -152,13 +152,19 @@ func (service *Service) accountPhonePost(w http.ResponseWriter, r *http.Request,
 			http.Error(w, "No pending phone verification", 400)
 			return
 		}
-		_, err := service.phone.VerifyAndApply(r.Context(), request.ID, request.ChallengeID, r.PostForm.Get("code"), func(tx pgx.Tx, verified identity.Verification) error {
+		verified, err := service.phone.VerifyAndApply(r.Context(), request.ID, request.ChallengeID, r.PostForm.Get("code"), func(tx pgx.Tx, verified identity.Verification) error {
 			current, err := service.accountSession(r, tx, true)
-			if err != nil || current.id != request.SessionID || current.verified.Factor.ID != request.FactorID || !service.freshAccountSession(current) {
+			if err != nil {
+				return accountVerificationError(err)
+			}
+			if current.id != request.SessionID || current.verified.Factor.ID != request.FactorID || !service.freshAccountSession(current) {
 				return identity.ErrIneligible
 			}
 			var state, challenge string
-			if err := tx.QueryRow(r.Context(), "SELECT state,data->>'challengeId' FROM account_link_requests WHERE id=$1 AND expires_at>$2 FOR UPDATE", request.ID, service.now()).Scan(&state, &challenge); err != nil || state != "pending" || challenge != request.ChallengeID || !service.accountClient(request.accountDetails) {
+			if err := tx.QueryRow(r.Context(), "SELECT state,data->>'challengeId' FROM account_link_requests WHERE id=$1 AND expires_at>$2 FOR UPDATE", request.ID, service.now()).Scan(&state, &challenge); err != nil {
+				return accountVerificationError(err)
+			}
+			if state != "pending" || challenge != request.ChallengeID || !service.accountClient(request.accountDetails) {
 				return identity.ErrIneligible
 			}
 			principal := identity.AccountPrincipal(current.id, request.MemberID, current.verified.Factor.ID, request.BindingID)
@@ -169,6 +175,13 @@ func (service *Service) accountPhonePost(w http.ResponseWriter, r *http.Request,
 			_, err = tx.Exec(r.Context(), "UPDATE account_link_requests SET state='completed' WHERE id=$1", request.ID)
 			return err
 		})
+		event := accountEvent(request, session)
+		// These fields describe the newly verified factor, not the source binding.
+		event.FactorID, event.BindingID = "", ""
+		if err == nil {
+			event.FactorID = verified.Factor.ID
+		}
+		service.recordVerification(r, event, "sms", err)
 		if err != nil {
 			message := "The code is invalid, expired, or unavailable. Cancel verification to request another code if needed."
 			if !errors.Is(err, identity.ErrPhoneChallenge) {

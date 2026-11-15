@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/euyuil/memberid/internal/authevent"
 	"github.com/euyuil/memberid/internal/config"
 	"github.com/euyuil/memberid/internal/identity"
 	"github.com/jackc/pgx/v5"
@@ -17,7 +18,7 @@ func (service *Service) verifyPhoneLogin(w http.ResponseWriter, r *http.Request,
 	id, secret := newID(), config.RandomSecret()
 	completed := *request
 	var expires time.Time
-	_, err := service.phone.VerifyAndApply(r.Context(), request.ID, request.ChallengeID, code, func(tx pgx.Tx, verified identity.Verification) error {
+	verified, err := service.phone.VerifyAndApply(r.Context(), request.ID, request.ChallengeID, code, func(tx pgx.Tx, verified identity.Verification) error {
 		completed.SessionID = id
 		setVerification(&completed, verified)
 		data, err := json.Marshal(&completed)
@@ -41,6 +42,12 @@ func (service *Service) verifyPhoneLogin(w http.ResponseWriter, r *http.Request,
 		_, err = tx.Exec(r.Context(), "INSERT INTO oidc_sessions(id,secret_hash,verification,expires_at,absolute_expires_at) VALUES($1,$2,$3,$4,$5)", id, config.SecretHash(secret), session, expires, completed.AbsoluteExpiry)
 		return err
 	})
+	event := service.loginEvent(request)
+	if err == nil {
+		event.Actor = authevent.Actor{Kind: "factor", ID: verified.Factor.ID}
+		event.FactorID, event.SessionID = verified.Factor.ID, id
+	}
+	service.recordVerification(r, event, "sms", err)
 	if err != nil {
 		return err
 	}

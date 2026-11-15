@@ -2,6 +2,7 @@ package identity
 
 import (
 	"context"
+	"errors"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -27,27 +28,38 @@ func LinkPhone(ctx context.Context, tx pgx.Tx, principal Principal, verified Ver
 	}
 	var id string
 	if err := tx.QueryRow(ctx, "SELECT id FROM organizations WHERE id=$1 AND status='enabled' FOR SHARE", target.OrganizationID).Scan(&id); err != nil {
-		return ErrIneligible
+		return phoneLinkError(err)
 	}
 	if err := tx.QueryRow(ctx, "SELECT id FROM authentication_factors WHERE id=$1 AND status='active' FOR SHARE", target.SourceFactorID).Scan(&id); err != nil {
-		return ErrIneligible
+		return phoneLinkError(err)
 	}
 	if err := tx.QueryRow(ctx, "SELECT id::text FROM member_auth_factor_bindings WHERE id=$1 AND member_id=$2 AND organization_id=$3 AND authentication_factor_id=$4 AND status='active' FOR SHARE", target.SourceBindingID, target.MemberID, target.OrganizationID, target.SourceFactorID).Scan(&id); err != nil {
-		return ErrIneligible
+		return phoneLinkError(err)
 	}
 	if err := tx.QueryRow(ctx, "SELECT id FROM members WHERE id=$1 AND organization_id=$2 AND NOT manual_block AND NOT external_departure FOR UPDATE", target.MemberID, target.OrganizationID).Scan(&id); err != nil {
-		return ErrIneligible
+		return phoneLinkError(err)
 	}
 	binding, err := MemberEvidence(ctx, tx, target.SourceFactorID, target.MemberID, target.OrganizationID)
-	if err != nil || binding != target.SourceBindingID {
+	if err != nil {
+		return phoneLinkError(err)
+	}
+	if binding != target.SourceBindingID {
 		return ErrIneligible
 	}
 	result, err := tx.Exec(ctx, "INSERT INTO member_auth_factor_bindings(member_id,organization_id,authentication_factor_id,factor_type) VALUES($1,$2,$3,'phone') ON CONFLICT DO NOTHING", target.MemberID, target.OrganizationID, verified.Factor.ID)
 	if err != nil {
-		return storageError(err)
+		return err
 	}
 	if result.RowsAffected() != 1 {
 		return ErrConflict
 	}
 	return nil
+}
+
+// Missing eligibility is a denial; a failed database read is operational failure.
+func phoneLinkError(err error) error {
+	if errors.Is(err, pgx.ErrNoRows) || errors.Is(err, ErrNotFound) {
+		return ErrIneligible
+	}
+	return err
 }

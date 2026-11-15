@@ -50,8 +50,8 @@ These events are a limited management change history, not a complete authenticat
 
 The [authentication event contract](authentication-events.md) separately defines
 authentication/lifecycle events, organization visibility, retention, and
-best-effort delivery. Its store, writer, retention cleanup, and SMS send events
-are implemented; other event producers and authorized queries remain planned.
+best-effort delivery. Its store, writer, retention cleanup, and SMS send/verification
+events are implemented; other event producers and authorized queries remain planned.
 This does not change the existing transactional management events.
 
 ## Validation boundaries
