@@ -34,8 +34,9 @@ The [Member role definitions](roles.md) and [management scopes and actions](mana
 | Grant/revoke administrator assignment | Any organization | Own organization |
 | Read bindings and management events | Any organization | Own organization |
 | List, configure and disable identity providers | Any organization | Own organization |
+| Create, inspect, update, disable and retire SAML applications | Any organization | Own organization |
 
-Platform administrators can switch organizations from the management scope in the header while retaining their original operator identity. The sidebar has separate Organizations, Members, Identity providers, and Operation history entries. Switching between them keeps the selected organization. In the all-organization scope, platform administrators see members from every organization. Each row identifies its organization and opens the member detail in that organization. Organization administrators see their own organization in the header. These permissions belong exclusively to MemberID management and are not added to business application identity claims. There are no custom roles, invitations, deletion, bulk operations, credential resets or client-registration pages in this version. Explicit operator binding and first-administrator recovery use the operator tools.
+Platform administrators can switch organizations from the management scope in the header while retaining their original operator identity. The sidebar has separate Organizations, Members, Identity providers, and Operation history entries. Switching between them keeps the selected organization. In the all-organization scope, platform administrators see members from every organization. Each row identifies its organization and opens the member detail in that organization. Organization administrators see their own organization in the header. These permissions belong exclusively to MemberID management and are not added to business application identity claims. There are no custom roles, invitations, deletion, bulk operations, credential resets or OIDC client-registration pages in this version. Explicit operator binding and first-administrator recovery use the operator tools.
 
 ## Console navigation and directories
 
@@ -52,6 +53,16 @@ Choose an organization, then open **身份提供商** (Identity providers). This
 Saving a new secret verifies the application credentials before storing an encrypted value. Leaving the secret blank during editing keeps the existing one. An operator-initiated disable is rejected if it would remove the last eligible administrator from an organization that currently has one. Confirmed upstream revocation applies even in that case. Configuration changes are audited with actor and provider IDs, display name, type, and enabled state.
 
 See [Feishu setup](feishu.md) and [DingTalk setup](dingtalk.md) for the required application and runtime settings.
+
+## SAML applications
+
+Choose an organization, then open **SAML 应用**. Platform administrators can select any organization; organization administrators remain in their own organization. Ordinary Members cannot access this directory or its API. The all-organization entry is an organization picker, not an aggregate of foreign trust policies.
+
+Add an application with its immutable registration ID and entity ID, exact HTTPS POST ACS, request-signature certificates and policy, allowed attributes, consent policy, and enabled state. The initial profile fixes the binding and persistent NameID format; the detail view displays them. The form accepts PEM public certificates, never private keys. Signed requests are required by default; the unsigned exception is explicit and does not bypass verification of a present signature. Registration does not enable the SAML listener or configure its signing identity.
+
+Edit an application's enabled state to disable it reversibly. The detail dialog offers permanent retirement with a separate confirmation and a reversible disable alternative. Retirement preserves the entity ID and NameID mappings, cannot be undone, and does not sign out existing downstream sessions. Retired applications remain inspectable. A concurrent update returns a conflict without overwriting the other administrator's work; refresh and inspect before saving again. An uncertain response is not retried automatically.
+
+The directory is paginated by stable registration ID, 50 per page. Its same-origin API uses `/api/organizations/{organizationId}/saml-service-providers` with the registration contract in the [private API guide](management-api.md#saml-service-provider-registration), but uses the console session, CSRF protection, and current Member authorization. It returns 200 for successful writes. Service authorization constrains every operation to its organization's resources; installation credentials and account self-service contexts cannot enter this boundary. Public before/after trust settings and the authenticated actor are captured atomically in operation history. History links open the referenced application even when it is not on the directory's first page.
 
 ## Page URLs and navigation
 
@@ -71,6 +82,8 @@ and Member IDs identify resources; names do not participate in routing.
 | `/authentication-events` | Platform authentication events. |
 | `/organizations/{organizationId}/authentication-events` | Organization authentication events. |
 | `/providers` | Organization picker for provider management (platform administrators). |
+| `/saml-service-providers` | Organization picker for SAML application management (platform administrators). |
+| `/organizations/{organizationId}/saml-service-providers` | Organization SAML applications; `after` cursor and optional `serviceProviderId` detail selection. |
 
 After login, `/` replaces itself with `/organizations` for a platform administrator
 or `/organizations/{organizationId}/members` for an organization administrator.

@@ -822,6 +822,230 @@
           }
         ]
       }
+    },
+    "/v1/organizations/{organizationId}/saml-service-providers": {
+      "get": {
+        "operationId": "listSAMLServiceProviders",
+        "parameters": [
+          {
+            "name": "organizationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/OrganizationID"
+            }
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,64}$"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful operation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SAMLServiceProviderPage"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createSAMLServiceProvider",
+        "parameters": [
+          {
+            "name": "organizationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/OrganizationID"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Successful operation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SAMLServiceProvider"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SAMLServiceProviderInput"
+              }
+            }
+          }
+        },
+        "description": "Revision must be zero. Duplicate registration or entity IDs return 409."
+      }
+    },
+    "/v1/organizations/{organizationId}/saml-service-providers/{serviceProviderId}": {
+      "get": {
+        "operationId": "getSAMLServiceProvider",
+        "parameters": [
+          {
+            "name": "organizationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/OrganizationID"
+            }
+          },
+          {
+            "name": "serviceProviderId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,64}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful operation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SAMLServiceProvider"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "put": {
+        "operationId": "replaceSAMLServiceProvider",
+        "parameters": [
+          {
+            "name": "organizationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/OrganizationID"
+            }
+          },
+          {
+            "name": "serviceProviderId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,64}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful operation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SAMLServiceProvider"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SAMLServiceProviderInput"
+              }
+            }
+          }
+        },
+        "description": "Body id must match the path. Positive current revision required. Set enabled=false to disable. Stale revisions and retired registrations return 409; ownership and entity ID are immutable."
+      }
+    },
+    "/v1/organizations/{organizationId}/saml-service-providers/{serviceProviderId}/retire": {
+      "post": {
+        "operationId": "retireSAMLServiceProvider",
+        "parameters": [
+          {
+            "name": "organizationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/OrganizationID"
+            }
+          },
+          {
+            "name": "serviceProviderId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,64}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful operation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SAMLServiceProvider"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RetireSAMLServiceProvider"
+              }
+            }
+          }
+        },
+        "description": "Irreversible retirement preserves entity ID and subject mappings. Current revision required. Audit and change commit atomically."
+      }
     }
   },
   "components": {
@@ -1485,6 +1709,201 @@
         "required": [
           "eligibleMemberIds"
         ]
+      },
+      "SAMLServiceProviderInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "entityId",
+          "acsUrl"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,64}$"
+          },
+          "displayName": {
+            "type": "string",
+            "maxLength": 128,
+            "description": "Optional display name; empty or omitted uses the registration ID."
+          },
+          "entityId": {
+            "type": "string",
+            "maxLength": 1024,
+            "format": "uri",
+            "description": "Immutable, installation-unique absolute entity URI."
+          },
+          "acsUrl": {
+            "type": "string",
+            "maxLength": 2048,
+            "format": "uri",
+            "description": "One exact HTTPS HTTP-POST recipient; no wildcard or fragment."
+          },
+          "enabled": {
+            "type": "boolean",
+            "default": false
+          },
+          "allowUnsignedRequests": {
+            "type": "boolean",
+            "default": false
+          },
+          "signingCertificates": {
+            "type": "array",
+            "maxItems": 4,
+            "items": {
+              "type": "string",
+              "maxLength": 32768
+            },
+            "description": "PEM public RSA certificates; at least one unless unsigned requests are explicitly allowed.",
+            "default": []
+          },
+          "preauthorized": {
+            "type": "boolean",
+            "default": false
+          },
+          "attributes": {
+            "type": "array",
+            "maxItems": 1,
+            "items": {
+              "type": "string",
+              "enum": [
+                "DisplayName"
+              ]
+            },
+            "default": []
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "description": "Zero on creation; the current positive revision on replacement."
+          }
+        },
+        "description": "Complete replacement; only the route selects ownership. Request size is limited to 32 KiB. Binding is fixed to Redirect input and POST output, NameID to persistent."
+      },
+      "SAMLServiceProvider": {
+        "type": "object",
+        "required": [
+          "id",
+          "displayName",
+          "entityId",
+          "acsUrl",
+          "enabled",
+          "allowUnsignedRequests",
+          "signingCertificates",
+          "preauthorized",
+          "attributes",
+          "revision",
+          "organizationId",
+          "retired"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,64}$"
+          },
+          "displayName": {
+            "type": "string",
+            "maxLength": 128,
+            "description": "Optional display name; empty or omitted uses the registration ID."
+          },
+          "entityId": {
+            "type": "string",
+            "maxLength": 1024,
+            "format": "uri",
+            "description": "Immutable, installation-unique absolute entity URI."
+          },
+          "acsUrl": {
+            "type": "string",
+            "maxLength": 2048,
+            "format": "uri",
+            "description": "One exact HTTPS HTTP-POST recipient; no wildcard or fragment."
+          },
+          "enabled": {
+            "type": "boolean",
+            "default": false
+          },
+          "allowUnsignedRequests": {
+            "type": "boolean",
+            "default": false
+          },
+          "signingCertificates": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "maxItems": 4,
+            "items": {
+              "type": "string",
+              "maxLength": 32768
+            },
+            "description": "PEM public RSA certificates; at least one unless unsigned requests are explicitly allowed.",
+            "default": []
+          },
+          "preauthorized": {
+            "type": "boolean",
+            "default": false
+          },
+          "attributes": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "maxItems": 1,
+            "items": {
+              "type": "string",
+              "enum": [
+                "DisplayName"
+              ]
+            },
+            "default": []
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "description": "Zero on creation; the current positive revision on replacement."
+          },
+          "organizationId": {
+            "$ref": "#/components/schemas/OrganizationID"
+          },
+          "retired": {
+            "type": "boolean"
+          }
+        }
+      },
+      "SAMLServiceProviderPage": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SAMLServiceProvider"
+            }
+          },
+          "nextAfter": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,64}$"
+          }
+        }
+      },
+      "RetireSAMLServiceProvider": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "revision"
+        ],
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          }
+        }
       }
     }
   }

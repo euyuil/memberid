@@ -9,7 +9,7 @@ authoritative. The catalog does not itself add endpoints, token claims, or schem
 
 The catalog covers the console, account linking, and the corresponding private
 management API and operator commands. Protocol login, token issuance/renewal,
-provider callbacks for ordinary login, process setup, signing keys, and client
+provider callbacks for ordinary login, process setup, signing keys, and OIDC client
 registration keep their separate documented contracts. They are not implicitly
 Member management operations.
 
@@ -107,6 +107,7 @@ comes from stored relationships, not caller-supplied path strings.
 | `O/providers` | Combined directory of configured provider applications. |
 | `O/providers/{providerType}` | Typed destination collection, currently `dingtalk` or `feishu`. |
 | `O/providers/{providerType}/{providerId}` | One provider application. Preserve its namespace ID and resolve it with its type and organization. |
+| `O/samlServiceProviders`, `O/samlServiceProviders/{serviceProviderId}` | Organization SAML registrations and their trust policy. HTTP paths use `saml-service-providers`. |
 | `O/managementEvents` | Organization-owned management history collection, optionally filtered by Member. |
 | `memberDirectory` | Platform aggregate Member directory view. Listing this view does not grant individual Member mutations. |
 | `managementEvents` | Platform aggregate management history view. It does not make events Member-owned merely because they reference a Member. |
@@ -136,6 +137,7 @@ Member. All administrative entries require current identity/session eligibility.
 | Read bindings and assignment lists | Any organization | Own organization | No administrative list; only the account flow's necessary source context |
 | Grant/revoke administrator | `create` / `delete` for assignments in any organization | `create` / `delete` for assignments in own ordinary organization | No |
 | List/create/configure providers | Any supported organization: `list`, `create`, `update`, `status.update` on the relevant targets | Same operations within own organization | No |
+| Manage SAML registrations | Any organization: collection `list`/`create`; item `get`/`update`/`status.update`/`delete` | Same operations within own organization | No |
 | Read management events | Global view or any organization's collection | Own organization's collection | No |
 | Self-service phone/DingTalk binding | As Self, with the same verification requirements | As Self, with the same verification requirements | `create` on selected Self's binding collection, through the account flow |
 
@@ -150,6 +152,12 @@ System organization membership grants nothing by itself, and there is no system
 organization administrator role. Platform authority does not override the rule
 that `org_system` cannot be disabled. Provider support restrictions also remain:
 Feishu configuration and binding in the system organization are not supported.
+
+## SAML registration operations
+
+The console collection `/api/organizations/{organizationId}/saml-service-providers` maps to `O/samlServiceProviders`. Listing requires `list`, creation requires `create`, and individual inspection requires `get`. A complete configuration replacement requires both `update` and `status.update` on the item. Permanent retirement uses `delete` authority but preserves the registration and subject reservations; there is no physical-delete endpoint. Organization and entity ID are immutable.
+
+These operations are enforced by `ManagementService` and the registered resource/action catalog. Reads resolve current administrator eligibility before querying the organization's data. Writes acquire the management lock, authorize the caller, lock the current registration, check ownership/revision, and commit the change with its audit record. The private `/v1` API uses `installation-manager`; the CLI uses `installation-operator`. Neither credential is a Member role, and neither can enter the console's Member-only service methods. The protocol reads the same authoritative registration and rejects stale in-flight revisions at issuance.
 
 ## Organization and Member operations
 
