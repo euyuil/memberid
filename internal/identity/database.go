@@ -21,6 +21,19 @@ var ErrDatabaseConfiguration = errors.New("invalid database connection settings"
 
 // Initialize only applies the initial schema to an explicitly selected empty database.
 func Initialize(ctx context.Context, databaseURL string) error {
+	return initialize(ctx, databaseURL, nil)
+}
+
+// InitializeWithRoot provisions the initial administrator in the schema
+// transaction. A successful password file write is required before commit.
+func InitializeWithRoot(ctx context.Context, databaseURL string, savePassword func(string) error) error {
+	if savePassword == nil {
+		return ErrInvalid
+	}
+	return initialize(ctx, databaseURL, savePassword)
+}
+
+func initialize(ctx context.Context, databaseURL string, savePassword func(string) error) error {
 	if strings.TrimSpace(databaseURL) == "" {
 		return ErrDatabaseConfiguration
 	}
@@ -49,8 +62,10 @@ func Initialize(ctx context.Context, databaseURL string) error {
 		if populated {
 			return ErrDatabaseNotEmpty
 		}
-		_, err = transaction.Exec(ctx, initialSchema)
-		return err
+		if _, err = transaction.Exec(ctx, initialSchema); err != nil || savePassword == nil {
+			return err
+		}
+		return provisionRoot(ctx, transaction, savePassword)
 	})
 }
 
@@ -71,7 +86,7 @@ func Open(ctx context.Context, databaseURL string) (*Store, error) {
 		return nil, err
 	}
 	var version int
-	if err = pool.QueryRow(ctx, "SELECT version FROM memberid_schema").Scan(&version); err != nil || version != 20 {
+	if err = pool.QueryRow(ctx, "SELECT version FROM memberid_schema").Scan(&version); err != nil || version != 21 {
 		pool.Close()
 		var postgresError *pgconn.PgError
 		if err == nil || errors.Is(err, pgx.ErrNoRows) || errors.As(err, &postgresError) && postgresError.Code == "42P01" {

@@ -52,7 +52,7 @@ func RotateManagementSecret(directory, outputFile string) error {
 	}
 	// Never overwrite an operator file. If this or the final replacement fails,
 	// a candidate file can remain, but it does not establish successful rotation.
-	if err := writeExclusive(outputFile, []byte(secret+"\n")); err != nil {
+	if err := WriteExclusive(outputFile, []byte(secret+"\n")); err != nil {
 		return err
 	}
 	return os.Rename(temporary.Name(), filepath.Join(directory, loaded.SecretsFile))

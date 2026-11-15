@@ -12,20 +12,15 @@ import (
 )
 
 func manageSetup(ctx context.Context, args []string, stdout io.Writer) error {
-	if len(args) != 1 || (args[0] != "code" && args[0] != "reset-password") {
-		return errors.New("usage: memberid setup <code|reset-password>")
+	if len(args) != 1 || args[0] != "reset-password" {
+		return errors.New("usage: memberid setup reset-password")
 	}
 	store, err := identity.Open(ctx, os.Getenv("MEMBERID_DATABASE_URL"))
 	if err != nil {
 		return err
 	}
 	defer store.Close()
-	var secret string
-	if args[0] == "code" {
-		secret, err = store.IssueSetupCode(ctx, identity.OperatorPrincipal())
-	} else {
-		secret, err = store.ResetRootPassword(ctx, identity.OperatorPrincipal())
-	}
+	secret, err := store.ResetRootPassword(ctx, identity.OperatorPrincipal())
 	if err != nil {
 		return err
 	}

@@ -123,7 +123,11 @@ with (installation / "console.json").open("x", encoding="utf-8") as output:
 PY
 
 docker compose --env-file "$state/compose.env" up -d --wait postgres
-docker compose --env-file "$state/compose.env" run --rm --no-deps auth database init
+mkdir "$state/bootstrap"
+docker compose --env-file "$state/compose.env" run --rm --no-deps -T \
+  --volume "$absolute_state/bootstrap:/bootstrap-output" auth database init \
+  --initial-root-password-file /bootstrap-output/initial-root-password
 trap - EXIT
 printf 'Local installation ready. Review %s/auth.env, then start the Compose stack.\n' "$state"
 printf 'OIDC issuer: %s\nAdministration console: %s\n' "$issuer" "$console_origin"
+printf 'Platform administrator: org_system/root\nInitial password file: %s/bootstrap/initial-root-password\n' "$state"

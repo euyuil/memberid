@@ -115,7 +115,7 @@ targets. Explicit console logout returns to `/`.
 
 Build with `sh scripts/check.sh` or `sh scripts/package.sh VERSION NEW_OUTPUT_DIRECTORY`. Both build the locked frontend before embedding it in Go. Node/npm are build dependencies; the resulting executable needs neither at runtime.
 
-Initialize a protected installation and a new database as described in [operator setup](operations.md). This increment uses fresh schema version **20**. Existing databases are not migrated or erased. Start the OIDC process before starting the console so its discovery and keys are reachable.
+Initialize a protected installation and a new database as described in [operator setup](operations.md). This increment uses fresh schema version **21**. Existing databases are not migrated or erased. Start the OIDC process before starting the console so its discovery and keys are reachable.
 
 Register a dedicated confidential Member client with no organization restriction:
 
@@ -146,7 +146,7 @@ For production, set the console origin to the HTTPS origin at the root of its ho
 
 ## Bootstrap and recovery
 
-Follow [first-time setup](administration.md#first-time-setup) to provision `org_system/root` and sign in with the generated password. The [operator bootstrap](administration.md#bootstrap-and-recovery) supports installations that prefer a verified phone or DingTalk binding. The console checks administrator access at the OIDC callback and on subsequent management requests.
+Follow [first-time setup](administration.md#first-time-setup) to provision `org_system/root` during deployment. Then open the standard administration console and sign in with the password from the protected file. The [operator bootstrap](administration.md#bootstrap-and-recovery) supports installations that prefer a verified phone or DingTalk binding. The console checks administrator access at the OIDC callback and on subsequent management requests.
 
 Ordinary organization administrators can then be assigned in the console once their login binding is available. Creating a Member does not verify a phone or fabricate an external binding. Operator recovery, last-available-administrator protection, and external-departure precedence are described in the same guide.
 
