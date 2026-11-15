@@ -7,6 +7,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/euyuil/memberid/internal/authevent"
 	"github.com/euyuil/memberid/internal/config"
 	"github.com/jackc/pgx/v5"
 	"github.com/zitadel/oidc/v3/pkg/oidc"
@@ -76,26 +77,32 @@ func (s *storage) rotateRefresh(ctx context.Context, request *refreshRequest, se
 	now := s.service.now()
 	accessID, nextSecret := newID(), config.RandomSecret()
 	expiry := minimum(now.Add(accessLifetime), request.AbsoluteExpiry)
-	replayed := false
+	replayed, revoked, commitReady := false, false, false
+	var reuse authevent.Event
 	observation, observationErr := s.observeDirectory(ctx, &request.grant)
 	err = pgx.BeginFunc(ctx, s.service.store.Database(), func(tx pgx.Tx) error {
 		var sessionID string
 		// A refresh does not depend on a browser cookie or the browser SSO idle deadline.
 		// Lock sessions before grants, matching code issuance and RP-initiated logout.
 		if err := tx.QueryRow(ctx, "SELECT id FROM oidc_sessions WHERE id=$1 AND revoked_at IS NULL AND absolute_expires_at>$2 FOR UPDATE", request.SessionID, now).Scan(&sessionID); err != nil {
-			return oidc.ErrInvalidGrant()
+			return grantEligibilityError(err)
 		}
 		var grantID string
 		if err := tx.QueryRow(ctx, "SELECT id FROM oidc_grants WHERE id=$1 AND client_id=$2 AND session_id=$3 AND revoked_at IS NULL AND expires_at>$4 AND absolute_expires_at>$4 FOR UPDATE", request.ID, request.ClientID, sessionID, now).Scan(&grantID); err != nil {
-			return oidc.ErrInvalidGrant()
+			return grantEligibilityError(err)
 		}
 		var consumed *time.Time
 		if err := tx.QueryRow(ctx, "SELECT consumed_at FROM oidc_refresh_tokens WHERE id=$1 AND grant_id=$2 AND secret_hash=$3 FOR UPDATE", request.tokenID, grantID, request.secretHash).Scan(&consumed); err != nil {
-			return oidc.ErrInvalidGrant()
+			return grantEligibilityError(err)
 		}
 		if consumed != nil {
 			replayed = true
-			_, err := tx.Exec(ctx, "UPDATE oidc_grants SET revoked_at=$2 WHERE id=$1", grantID, now)
+			reuse = grantEvent(ctx, &request.grant)
+			reuse.EventID, reuse.Type, reuse.Outcome = authevent.NewID(), "oidc.refreshToken.reuse", "detected"
+			reuse.Actor = authevent.Actor{Kind: "client", ID: request.ClientID}
+			reuse.OccurredAt = s.service.now().UTC()
+			changed, err := tx.Exec(ctx, "UPDATE oidc_grants SET revoked_at=$2 WHERE id=$1 AND revoked_at IS NULL", grantID, now)
+			revoked, commitReady = changed.RowsAffected() == 1, err == nil
 			return err
 		}
 		if !request.AbsoluteExpiry.After(now.Add(5 * time.Minute)) {
@@ -118,6 +125,9 @@ func (s *storage) rotateRefresh(ctx context.Context, request *refreshRequest, se
 		}
 		return s.persistTokens(ctx, tx, &request.grant, accessID, nextSecret, expiry)
 	})
+	if replayed {
+		s.recordReuse(reuse, revoked, err, commitReady)
+	}
 	if err != nil {
 		return "", "", time.Time{}, err
 	}

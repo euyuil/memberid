@@ -75,6 +75,12 @@ Production cookies use `Secure`, `HttpOnly`, `SameSite=Lax`, and the `__Host-` p
 
 Authentication pages use `Referrer-Policy: same-origin`: same-origin form submissions retain their `Origin`, while cross-origin navigations send no `Referer`. Keep this policy at reverse proxies. `no-referrer` causes browsers to send `Origin: null` on ordinary form POSTs and breaks the strict origin check; see the [Fetch origin-header algorithm](https://fetch.spec.whatwg.org/#append-a-request-origin-header). Login submissions still require the exact issuer origin, a valid transaction cookie, and the transaction's CSRF value. Missing, opaque (`null`), and foreign origins are rejected.
 
+Initial grant establishment and confirmed code/Refresh Token reuse produce
+[best-effort authentication events](authentication-events.md). A replay observation
+and its actual grant revocation are separate events; audit failure never replaces
+or gates the protocol transaction. Issuance success means committed grant/token
+records, not confirmation that the client received the response.
+
 ## Standard refresh
 
 Request `offline_access` during authorization only for a client whose operator registration enables refresh. MemberID obtains explicit consent during that login unless a preauthorized policy supplies the operator's prior consent decision. Once the grant exists, refresh does not require another confirmation, browser navigation, iframe, SSO cookie, or shared origin:
