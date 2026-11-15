@@ -25,6 +25,7 @@ Register one organization-scoped SP using a JSON file:
 ```json
 {
   "id": "example-sp",
+  "displayName": "Example application",
   "entityId": "https://sp.example.test/metadata",
   "organizationId": "org_REPLACE_WITH_CREATED_ORGANIZATION",
   "acsUrl": "https://sp.example.test/saml/acs",
@@ -45,9 +46,11 @@ memberid saml signing inspect --directory ./installation
 memberid saml sp disable --directory ./installation --id example-sp --revision 1
 ```
 
-Commands use `MEMBERID_DATABASE_URL` and the local operator authority. There is no SAML management API or console editor. Being a Member, organization administrator, or installation management-API client does not grant registration authority. All writes are audited and require the inspected current revision; zero creates a registration. Organization and entity ID are immutable. `saml sp retire` permanently disables the registration; its entity ID and subject mappings remain reserved and cannot be reassigned. Update the inspected JSON and apply it for other policy changes.
+Commands use `MEMBERID_DATABASE_URL` and the local operator authority. Registrations can also be managed through the [administration console](console.md#saml-applications) and [private management API](management-api.md#saml-service-provider-registration). Platform administrators can manage any organization; organization administrators can manage only their own organization's registrations. Ordinary Members and account self-service sessions have no registration authority. The private API's installation credential has installation-wide authority and is never sent to the browser.
 
-Each registration has exactly one HTTPS POST ACS. No metadata fetching, wildcards, dynamic ACS selection, or indexed ACS is supported. Explicit loopback-development configuration permits `http://127.0.0.1` only. Redirect requests must be signed using RSA-SHA256 against one of up to four pinned SP certificates. SP certificates establish key trust rather than Web PKI trust; their dates are not used for request admission. `allowUnsignedRequests: true` is an explicit per-SP exception. A present but invalid signature is always rejected, including under that exception. Enveloped XML signatures are outside this Redirect-only input profile.
+All writes are audited and require the inspected current revision; zero creates a registration. Organization, registration ID, and entity ID are immutable. Display names are optional, nonblank text of at most 128 Unicode code points; an omitted name is displayed as the registration ID. `saml sp retire` permanently disables the registration; its entity ID and subject mappings remain reserved and cannot be reassigned. Update the inspected JSON and apply it for other policy changes. Use disable for a reversible interruption. A stale revision or retired registration returns a conflict; reload and inspect before making a new intentional change. After an uncertain response, inspect the current registration rather than automatically retrying a write.
+
+Each registration has exactly one HTTPS POST ACS. No metadata fetching, wildcards, dynamic ACS selection, or indexed ACS is supported. The operator CLI's explicit loopback-development configuration permits `http://127.0.0.1` only; both HTTP management interfaces require HTTPS recipients. Redirect requests must be signed using RSA-SHA256 against one of up to four pinned SP certificates. SP certificates establish key trust rather than Web PKI trust; their dates are not used for request admission. `allowUnsignedRequests: true` is an explicit per-SP exception. A present but invalid signature is always rejected, including under that exception. Enveloped XML signatures are outside this Redirect-only input profile.
 
 An enabled SAML installation can start without OIDC clients if it has at least one active SP. It still uses the standard installation secrets and OIDC key files. Disabled SAML exposes neither endpoint. Unknown or disabled SPs cannot start authentication.
 
@@ -73,8 +76,8 @@ Immediately before issuance, a database transaction rechecks the session, reques
 
 ## Boundaries and validation
 
-This first slice does not implement IdP-initiated SSO, Artifact/SOAP bindings, encrypted assertions, SLO, SCIM, trusted email release, legacy subject mapping, SP administration UI/API, or managed signing-key rotation. These remain separate work. Shared authentication tables are protocol-neutral; OIDC grants, codes, and token endpoints remain OIDC-only.
+This profile does not implement IdP-initiated SSO, Artifact/SOAP bindings, encrypted assertions, SLO, SCIM, trusted email release, legacy subject mapping, or managed signing-key rotation. These remain separate work. Shared authentication tables are protocol-neutral; OIDC grants, codes, and token endpoints remain OIDC-only.
 
 Run `go test ./internal/samlprovider ./internal/config` for parsing, signing, metadata, and key configuration. Run the [disposable PostgreSQL tests](../CONTRIBUTING.md#postgresql-integration-tests) for registry authority, revisions, persistent NameID allocation, HTTP login through each synthetic provider, concurrent completion, policy invalidation, shared OIDC SSO, and protocol separation. Real DingTalk/Feishu/SMS calls are not made by these tests. Actual GitLab SAML compatibility and complete SAML conformance are not established by a simulated SP or by the existing GitLab OIDC acceptance check.
 
-Authentication events include `saml.request`, `saml.request.reuse`, and `saml.assertion.issue`, with the existing bounded asynchronous persistence/retention model. They contain internal correlation identifiers and safe result codes, never request XML, assertions, RelayState, or private keys. Registration changes use the transactional management audit, including public trust configuration.
+Authentication events include `saml.request`, `saml.request.reuse`, and `saml.assertion.issue`, with the existing bounded asynchronous persistence/retention model. They contain internal correlation identifiers and safe result codes, never request XML, assertions, RelayState, or private keys. Registration changes use the transactional management audit, including the authenticated actor, organization and application display-name snapshots, and previous/resulting public trust configuration. A failed audit write rolls back the registration change. Certificate input accepts public certificates only; private keys are never registration data.

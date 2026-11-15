@@ -26,6 +26,7 @@ func TestConsolePageRequests(t *testing.T) {
 		"/organizations/org_example/members/mbr_example", "/organizations/org_example/providers",
 		"/organizations/org_system/events?memberId=mbr_example",
 		"/authentication-events?type=sms.send", "/organizations/org_example/authentication-events?requestId=example",
+		"/saml-service-providers", "/organizations/org_example/saml-service-providers?serviceProviderId=example",
 	} {
 		for _, method := range []string{http.MethodGet, http.MethodHead} {
 			t.Run(method+" "+path, func(t *testing.T) {

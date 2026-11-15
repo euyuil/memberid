@@ -51,6 +51,24 @@ Every Member lookup or mutation is constrained by its organization. A Member in 
 
 Binding requires an existing verified factor ID. This API does not create a factor from a phone number, verify a contact attribute, create a login session, or infer that two Members represent the same person. Repeating an active identical binding preserves its identity. A conflicting or revoked relationship remains reserved and returns 409 instead of transferring access. One factor can be explicitly bound to independent Members in different organizations, but cannot be shared by different Members in the same organization.
 
+## SAML service provider registration
+
+Use `/v1/organizations/{organizationId}/saml-service-providers` for the organization-owned [SAML registry](saml.md). Registration is available even when protocol serving is disabled; adding a registration does not enable SAML or provision IdP signing keys.
+
+| Method and suffix | Behavior |
+| --- | --- |
+| `GET` collection | Bounded directory with `after` and `limit`, including disabled and retired registrations. |
+| `POST` collection | Create an unused registration ID and entity ID; revision zero; 201. |
+| `GET /{serviceProviderId}` | Read one registration within the route's organization; 200. |
+| `PUT /{serviceProviderId}` | Replace the editable configuration using its positive current revision; 200. Set `enabled` to false to disable. |
+| `POST /{serviceProviderId}/retire` | Body `{"revision": CURRENT_REVISION}`; permanently retire and disable; 200. |
+
+POST and PUT accept `id`, optional `displayName`, `entityId`, `acsUrl`, `enabled`, `allowUnsignedRequests`, `signingCertificates`, `preauthorized`, `attributes`, and `revision`. The shape is flat JSON, limited to 32 KiB, with exact, unique field names. Missing booleans default to false and missing arrays to empty policy sets; PUT is a complete replacement, not a patch. The path supplies `organizationId`; a body ownership, actor, retirement, binding, or NameID-format override is rejected. PUT requires `id` to match the path. The returned registration also includes `organizationId` and `retired`.
+
+Registration IDs contain 1–64 ASCII letters, digits, underscores, or hyphens and are installation-wide. Entity IDs are absolute URIs. Both remain reserved after retirement. Organization and entity ID cannot change on an existing registration. The implemented profile fixes input to HTTP-Redirect, output to one exact HTTPS HTTP-POST ACS, and NameID to persistent. Only `DisplayName` is available in the attribute allowlist. At least one RSA signing certificate is required unless `allowUnsignedRequests` explicitly permits unsigned requests. Up to four PEM public certificates are accepted; private-key material is rejected. See the protocol guide for trust and signing constraints.
+
+Malformed policy returns 400, foreign-organization item lookup returns 404, and duplicate entity IDs, stale revisions, or changes to a retired registration return 409. Every successful write increments revision and invalidates in-flight requests that hold the prior revision. Retirement does not delete mappings or terminate an SP's existing application session. Inspect the latest registration after a conflict or uncertain response; do not retry writes automatically. Audit records use `installation-manager`, preserve public before/after policy, and commit with the change. The browser console uses a separate Member-scoped service boundary and never impersonates this credential.
+
 ## Retrying Member updates
 
 Use the immutable update resource when an integration must recover from an uncertain response. Generate and durably save a fresh UUID `updateId` and the complete intended request before sending `PUT /v1/organizations/{organizationId}/members/{memberId}/updates/{updateId}`. The body has the same allowed fields as Member PATCH: at least one of `displayName` and `manualBlocked`. The ID is installation-wide; reuse it only for the same organization, Member, and field values. UUID casing and JSON object field order do not change operation identity.
@@ -61,11 +79,11 @@ The receipt contains `id`, `organizationId`, `memberId`, the resulting `member` 
 
 Receipts persist across restarts and have no automatic expiry or deletion endpoint. Include them in database backups and capacity planning. Deleting receipts directly would destroy the safe-retry guarantee. A new intentional update uses a new ID. Ordinary PATCH remains available, but repeating PATCH after an uncertain result can overwrite an intervening update; it does not provide an immutable receipt.
 
-Updates use the same installation management credential and organization-bound lookup as other management operations. They do not impersonate an initiating Member or assign application permissions. The fresh-install schema is version 18; startup rejects older schemas without resetting or migrating existing data.
+Updates use the same installation management credential and organization-bound lookup as other management operations. They do not impersonate an initiating Member or assign application permissions. The fresh-install schema is version 19; startup rejects older schemas without resetting or migrating existing data.
 
 ## Directory pagination
 
-Organization and Member directories return `{"items": [...], "nextAfter": "..."}`. `nextAfter` is omitted on the final page. Send that value as `after` in the next request. `limit` defaults to 50 and accepts 1 through 100. Only these two query parameters are accepted, once each; query parameters are not supported on other operations.
+Organization, Member, and SAML registration directories return `{"items": [...], "nextAfter": "..."}`. `nextAfter` is omitted on the final page. Send that value as `after` in the next request. `limit` defaults to 50 and accepts 1 through 100. Only these two query parameters are accepted, once each; query parameters are not supported on other operations.
 
 Results are ordered by stable identifier, using a bounded keyset cursor. Pages are current database observations, not a frozen snapshot across requests. Names and contact attributes are not identity selectors. These administrative directories expose all records in scope to the installation manager; they are not an end-user resource directory or a business-authorization filter.
 

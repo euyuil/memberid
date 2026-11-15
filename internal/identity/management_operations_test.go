@@ -33,6 +33,8 @@ func TestManagementOperationMatrix(t *testing.T) {
 			{roleAssignmentsResource, []string{targetOrganization}, base + "/roleAssignments", []string{"create", "list"}, []string{"create", "list"}, nil},
 			{roleAssignmentResource, []string{targetOrganization, memberID}, base + "/roleAssignments/" + memberID, []string{"delete"}, []string{"delete"}, nil},
 			{providersResource, []string{targetOrganization}, base + "/providers", []string{"list"}, []string{"list"}, nil},
+			{samlServiceProvidersResource, []string{targetOrganization}, base + "/samlServiceProviders", []string{"create", "list"}, []string{"create", "list"}, nil},
+			{samlServiceProviderResource, []string{targetOrganization, "example-sp"}, base + "/samlServiceProviders/example-sp", []string{"get", "update", "status.update", "delete"}, []string{"get", "update", "status.update", "delete"}, nil},
 			{providerTypeResource, []string{targetOrganization, "dingtalk"}, base + "/providers/dingtalk", []string{"create"}, []string{"create"}, nil},
 			{providerTypeResource, []string{targetOrganization, "feishu"}, base + "/providers/feishu", []string{"create"}, []string{"create"}, nil},
 			{providerResource, []string{targetOrganization, "dingtalk", "example"}, base + "/providers/dingtalk/example", []string{"update", "status.update"}, []string{"update", "status.update"}, nil},
