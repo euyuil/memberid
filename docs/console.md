@@ -174,6 +174,15 @@ From a Member detail page, open the operation history filtered to that Member. T
 
 Successful console changes and administrator CLI operations write atomic events containing the actor Member ID, target IDs, action, changed fields, and timestamp. Events also preserve the actor, organization, and target display names at the time of the write, along with previous editable values for renames, manual blocks, organization status, administrator assignments, system admission, and provider configuration. Later renames do not rewrite these snapshots. Provider events identify the application and record credential updates only as a boolean. Missing historical names or previous values are not inferred from live entities; known submitted values remain visible without an invented before value. A removed manual block is shown as unblocked, not as proof of overall sign-in eligibility. Selected operator update/revocation operations use `installation-operator`. The console summarizes known changes and retains the raw payload for each record. These are management change records, not a complete authentication/security log; failed attempts, provider reconciliation, and historical operations are not reconstructed. No tokens, codes, provider secrets, or admission union IDs are included. Configure database access, backups, and retention for private identity data; automatic event retention is not implemented.
 
+## Authentication event API
+
+The authorized [authentication-event query API](authentication-events.md#query-api)
+provides platform and organization list/detail endpoints with bounded filtering,
+cursor pagination, retention exclusion and organization-safe fields. It uses this
+console's session and authorization boundary. The event browser is planned separately.
+Authentication events are best-effort evidence and have a default 90-day retention;
+this policy does not change transactional management history.
+
 ## Validation
 
 Database/HTTP integration tests cover scoped access, ordinary-member rejection, explicit system admission, browser-bound callbacks, replay rejection, CSRF, current eligibility, audit attribution, and last-administrator concurrency. They use synthetic phone/provider fixtures. They do not establish real SMS delivery, live DingTalk behavior, or a deployed HTTPS/proxy configuration.

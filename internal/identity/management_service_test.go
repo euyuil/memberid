@@ -3,11 +3,12 @@ package identity
 import (
 	"errors"
 	"testing"
+	"time"
 )
 
 func TestManagementServiceRejectsOtherEntryContexts(t *testing.T) {
 	store := &Store{}
-	service := NewManagementService(store, nil, nil)
+	service := NewManagementService(store, nil, nil, 90*24*time.Hour)
 	org, _ := NewID(OrganizationKind)
 	member, _ := NewID(MemberKind)
 	factor, _ := NewID(FactorKind)

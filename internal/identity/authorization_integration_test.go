@@ -5,6 +5,7 @@ package identity
 import (
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/euyuil/memberid/internal/authorization"
 )
@@ -17,12 +18,12 @@ func TestScopedOrganizationUpdates(t *testing.T) {
 	principal := administratorActor(t, s, local, factor).Principal()
 	platformPrincipal := administratorActor(t, s, platform, platformFactor).Principal()
 	name := "Allowed name"
-	if _, err := NewManagementService(s, nil, nil).Manage(t.Context(), principal, "organization.update", org.ID, "", ManagementChange{Name: &name}); err != nil {
+	if _, err := NewManagementService(s, nil, nil, 90*24*time.Hour).Manage(t.Context(), principal, "organization.update", org.ID, "", ManagementChange{Name: &name}); err != nil {
 		t.Fatal(err)
 	}
 	for _, status := range []string{"enabled", "disabled"} {
 		deniedName := "Must not be written"
-		if _, err := NewManagementService(s, nil, nil).Manage(t.Context(), principal, "organization.update", org.ID, "", ManagementChange{Name: &deniedName, Status: &status}); !errors.Is(err, ErrForbidden) {
+		if _, err := NewManagementService(s, nil, nil, 90*24*time.Hour).Manage(t.Context(), principal, "organization.update", org.ID, "", ManagementChange{Name: &deniedName, Status: &status}); !errors.Is(err, ErrForbidden) {
 			t.Fatal("mixed update did not require status authority", status, err)
 		}
 		current, err := s.Organization(t.Context(), org.ID)
@@ -30,17 +31,17 @@ func TestScopedOrganizationUpdates(t *testing.T) {
 			t.Fatal("denied combined update had an effect", current, err)
 		}
 	}
-	if _, err := NewManagementService(s, nil, nil).Manage(t.Context(), principal, "organization.update", SystemOrganizationID, "", ManagementChange{Name: &name}); !errors.Is(err, ErrForbidden) {
+	if _, err := NewManagementService(s, nil, nil, 90*24*time.Hour).Manage(t.Context(), principal, "organization.update", SystemOrganizationID, "", ManagementChange{Name: &name}); !errors.Is(err, ErrForbidden) {
 		t.Fatal("organization scope escaped", err)
 	}
 	disabled, enabled := "disabled", "enabled"
-	if _, err := NewManagementService(s, nil, nil).Manage(t.Context(), platformPrincipal, "organization.update", org.ID, "", ManagementChange{Status: &disabled}); err != nil {
+	if _, err := NewManagementService(s, nil, nil, 90*24*time.Hour).Manage(t.Context(), platformPrincipal, "organization.update", org.ID, "", ManagementChange{Status: &disabled}); err != nil {
 		t.Fatal("platform status permission", err)
 	}
-	if _, err := NewManagementService(s, nil, nil).Manage(t.Context(), platformPrincipal, "organization.update", org.ID, "", ManagementChange{Name: &name, Status: &enabled}); err != nil {
+	if _, err := NewManagementService(s, nil, nil, 90*24*time.Hour).Manage(t.Context(), platformPrincipal, "organization.update", org.ID, "", ManagementChange{Name: &name, Status: &enabled}); err != nil {
 		t.Fatal("platform combined permission", err)
 	}
-	if _, err := NewManagementService(s, nil, nil).Manage(t.Context(), platformPrincipal, "organization.update", SystemOrganizationID, "", ManagementChange{Status: &disabled}); !errors.Is(err, ErrForbidden) {
+	if _, err := NewManagementService(s, nil, nil, 90*24*time.Hour).Manage(t.Context(), platformPrincipal, "organization.update", SystemOrganizationID, "", ManagementChange{Status: &disabled}); !errors.Is(err, ErrForbidden) {
 		t.Fatal("permission bypassed system lifecycle constraint", err)
 	}
 	for _, requirement := range []authorization.Requirement{
@@ -97,7 +98,7 @@ func TestScopedAuthorizationRevocationBoundary(t *testing.T) {
 	if err := authorizeAll(t.Context(), s.pool, principal, requirements...); !errors.Is(err, ErrForbidden) {
 		t.Fatal("new decision retained revoked authority", err)
 	}
-	if _, err := NewManagementService(s, nil, nil).Manage(t.Context(), principal, "organization.update", org.ID, "", ManagementChange{Name: &name}); !errors.Is(err, ErrForbidden) {
+	if _, err := NewManagementService(s, nil, nil, 90*24*time.Hour).Manage(t.Context(), principal, "organization.update", org.ID, "", ManagementChange{Name: &name}); !errors.Is(err, ErrForbidden) {
 		t.Fatal("next service operation retained revoked authority", err)
 	}
 	current, err := s.Organization(t.Context(), org.ID)
@@ -115,23 +116,23 @@ func TestScopedManagementWrites(t *testing.T) {
 	localPrincipal := administratorActor(t, s, local, factor).Principal()
 	platformPrincipal := administratorActor(t, s, platform, platformFactor).Principal()
 	name, blocked := "Scoped member", true
-	if _, err := NewManagementService(s, nil, nil).Manage(t.Context(), localPrincipal, "member.update", org.ID, target.ID, ManagementChange{DisplayName: &name, ManualBlocked: &blocked}); err != nil {
+	if _, err := NewManagementService(s, nil, nil, 90*24*time.Hour).Manage(t.Context(), localPrincipal, "member.update", org.ID, target.ID, ManagementChange{DisplayName: &name, ManualBlocked: &blocked}); err != nil {
 		t.Fatal("organization administrator member status", err)
 	}
-	if _, err := NewManagementService(s, nil, nil).Manage(t.Context(), localPrincipal, "member.create", org.ID, "", ManagementChange{DisplayName: &name}); err != nil {
+	if _, err := NewManagementService(s, nil, nil, 90*24*time.Hour).Manage(t.Context(), localPrincipal, "member.create", org.ID, "", ManagementChange{DisplayName: &name}); err != nil {
 		t.Fatal(err)
 	}
 	for _, operation := range []func() error{
 		func() error {
-			_, err := NewManagementService(s, nil, nil).Manage(t.Context(), localPrincipal, "member.create", otherOrg.ID, "", ManagementChange{DisplayName: &name})
+			_, err := NewManagementService(s, nil, nil, 90*24*time.Hour).Manage(t.Context(), localPrincipal, "member.create", otherOrg.ID, "", ManagementChange{DisplayName: &name})
 			return err
 		},
 		func() error {
-			_, err := NewManagementService(s, nil, nil).Manage(t.Context(), localPrincipal, "member.update", otherOrg.ID, otherMember.ID, ManagementChange{DisplayName: &name})
+			_, err := NewManagementService(s, nil, nil, 90*24*time.Hour).Manage(t.Context(), localPrincipal, "member.update", otherOrg.ID, otherMember.ID, ManagementChange{DisplayName: &name})
 			return err
 		},
 		func() error {
-			_, err := NewManagementService(s, nil, nil).Manage(t.Context(), localPrincipal, "member.create", SystemOrganizationID, "", ManagementChange{DisplayName: &name})
+			_, err := NewManagementService(s, nil, nil, 90*24*time.Hour).Manage(t.Context(), localPrincipal, "member.create", SystemOrganizationID, "", ManagementChange{DisplayName: &name})
 			return err
 		},
 	} {
@@ -139,13 +140,13 @@ func TestScopedManagementWrites(t *testing.T) {
 			t.Fatal("cross-organization mutation", err)
 		}
 	}
-	if _, err := NewManagementService(s, nil, nil).Manage(t.Context(), localPrincipal, "member.update", org.ID, otherMember.ID, ManagementChange{DisplayName: &name}); !errors.Is(err, ErrNotFound) {
+	if _, err := NewManagementService(s, nil, nil, 90*24*time.Hour).Manage(t.Context(), localPrincipal, "member.update", org.ID, otherMember.ID, ManagementChange{DisplayName: &name}); !errors.Is(err, ErrNotFound) {
 		t.Fatal("forged ownership", err)
 	}
-	if _, err := NewManagementService(s, nil, nil).Manage(t.Context(), platformPrincipal, "organization.create", "", "", ManagementChange{Name: &name}); err != nil {
+	if _, err := NewManagementService(s, nil, nil, 90*24*time.Hour).Manage(t.Context(), platformPrincipal, "organization.create", "", "", ManagementChange{Name: &name}); err != nil {
 		t.Fatal(err)
 	}
-	result, err := NewManagementService(s, nil, nil).Manage(t.Context(), platformPrincipal, "member.create", SystemOrganizationID, "", ManagementChange{DisplayName: &name})
+	result, err := NewManagementService(s, nil, nil, 90*24*time.Hour).Manage(t.Context(), platformPrincipal, "member.create", SystemOrganizationID, "", ManagementChange{DisplayName: &name})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -176,23 +177,23 @@ func TestScopedAdministratorAssignments(t *testing.T) {
 	localPrincipal := administratorActor(t, s, local, factor).Principal()
 	platformPrincipal := administratorActor(t, s, platform, platformFactor).Principal()
 	for _, enabled := range []bool{false, true} {
-		if err := NewManagementService(s, nil, nil).SetAdministrator(t.Context(), localPrincipal, org.ID, recipient.ID, enabled); err != nil {
+		if err := NewManagementService(s, nil, nil, 90*24*time.Hour).SetAdministrator(t.Context(), localPrincipal, org.ID, recipient.ID, enabled); err != nil {
 			t.Fatal(err)
 		}
-		if err := NewManagementService(s, nil, nil).SetAdministrator(t.Context(), localPrincipal, SystemOrganizationID, platform.ID, enabled); !errors.Is(err, ErrForbidden) {
+		if err := NewManagementService(s, nil, nil, 90*24*time.Hour).SetAdministrator(t.Context(), localPrincipal, SystemOrganizationID, platform.ID, enabled); !errors.Is(err, ErrForbidden) {
 			t.Fatal("cross-scope assignment", err)
 		}
-		if err := NewManagementService(s, nil, nil).SetAdministrator(t.Context(), localPrincipal, org.ID, platform.ID, enabled); !errors.Is(err, ErrNotFound) {
+		if err := NewManagementService(s, nil, nil, 90*24*time.Hour).SetAdministrator(t.Context(), localPrincipal, org.ID, platform.ID, enabled); !errors.Is(err, ErrNotFound) {
 			t.Fatal("forged assignment ownership", err)
 		}
 	}
-	if err := NewManagementService(s, nil, nil).SetAdministrator(t.Context(), platformPrincipal, org.ID, local.ID, false); err != nil {
+	if err := NewManagementService(s, nil, nil, 90*24*time.Hour).SetAdministrator(t.Context(), platformPrincipal, org.ID, local.ID, false); err != nil {
 		t.Fatal(err)
 	}
-	if err := NewManagementService(s, nil, nil).SetAdministrator(t.Context(), localPrincipal, org.ID, local.ID, true); !errors.Is(err, ErrForbidden) {
+	if err := NewManagementService(s, nil, nil, 90*24*time.Hour).SetAdministrator(t.Context(), localPrincipal, org.ID, local.ID, true); !errors.Is(err, ErrForbidden) {
 		t.Fatal("revoked principal restored itself", err)
 	}
-	if err := NewManagementService(s, nil, nil).SetAdministrator(t.Context(), platformPrincipal, org.ID, recipient.ID, false); !errors.Is(err, ErrLastAdministrator) {
+	if err := NewManagementService(s, nil, nil, 90*24*time.Hour).SetAdministrator(t.Context(), platformPrincipal, org.ID, recipient.ID, false); !errors.Is(err, ErrLastAdministrator) {
 		t.Fatal("last administrator", err)
 	}
 	ids, err := s.AdministratorIDs(t.Context(), org.ID)

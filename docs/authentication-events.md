@@ -4,8 +4,8 @@ This document records the agreed design for MemberID authentication events:
 event meaning, correlation, organization visibility, retention, and delivery
 failure behavior. **The store, bounded writer, retention cleanup, `sms.send`,
 supported-method `authentication.verify`, initial grant issuance, confirmed OIDC
-reuse, and explicit session/grant revocation producers are implemented.** Authorized
-queries and console views remain planned.
+reuse, explicit session/grant revocation producers, and authorized queries are
+implemented.** Console views remain planned.
 Authentication policy and token claims are unchanged.
 
 The existing [management history](administration.md#availability-and-audit)
@@ -136,8 +136,7 @@ or retrospectively expose them when a new binding appears.
 | Organization administrator | Events owned by the administrator's own ordinary organization, with the organization-safe field projection. |
 | Ordinary Member | No event-query access in the first version. A self-service history requires a separate ownership and visibility design. |
 
-Use the existing [scope/action model](management-permissions.md). The planned
-authorization targets are:
+Use the existing [scope/action model](management-permissions.md). The authorization targets are:
 
 | Target | Supported read semantics |
 | --- | --- |
@@ -148,8 +147,8 @@ Describe permissions as `read` where both `list` and `get` are allowed; the
 existing action normalization applies. A collection-only permission does not
 implicitly cover instance paths. An organization grant can select its collection
 and instances with `organizations/{organizationId}/authenticationEvents/*`.
-These are planned authorization paths, not implemented endpoints or registrations
-in the [current operation catalog](management-operation-catalog.md).
+These targets are registered in the
+[current operation catalog](management-operation-catalog.md).
 
 Server-derived ownership, current role eligibility, and field projection still
 apply when a scope pattern matches. A Member filter does not turn the records
@@ -175,6 +174,37 @@ not an extra `create` permission required for login or revocation. Retention
 cleanup is a system operation. Existing installation interfaces keep their
 separate authority contracts; this design adds no credential or token claim.
 
+## Query API
+
+The console's existing opaque session and current administrator eligibility protect
+these GET endpoints. They do not accept installation management credentials:
+
+| Endpoint | View |
+| --- | --- |
+| `/api/authentication-events` | Platform collection. |
+| `/api/authentication-events/{eventId}` | Platform detail. |
+| `/api/organizations/{organizationId}/authentication-events` | Organization collection. |
+| `/api/organizations/{organizationId}/authentication-events/{eventId}` | Organization detail. |
+
+Lists return `{ "items": [], "nextAfter": "..." }`, omitting `nextAfter` on the
+last page. Optional exact filters are `type`, `outcome`, `method`, `memberId`,
+`clientId`, `grantId`, `requestId`, and `interactionId`. `from` is inclusive and
+`to` exclusive; both accept RFC 3339 timestamps with an explicit timezone.
+`limit` defaults to 50 and accepts 1–100. Pass the returned opaque `nextAfter`
+value as `after` while keeping the filters and organization unchanged. Changing
+a filter starts a new first page.
+
+Results sort by descending `occurredAt`, then `eventId`, using database timestamp
+precision. Pagination is a live view, not a frozen snapshot: later audit delivery
+or retention cleanup can change subsequent results. There is no total count.
+An expired or foreign event ID in an authorized organization view returns the same
+not-found response as an absent ID. Global collection access does not implicitly
+fall back to an organization view. A platform administrator selecting an organization
+receives the same safe projection as its administrator. Factor actors are omitted;
+a Member actor is exposed only when it is the established local target Member.
+Causal links are included only when their target is retained and visible in the
+same organization. The API never returns raw stored JSON as an unfiltered payload.
+
 ## Storage and retention
 
 A separate PostgreSQL `authentication_events` store is implemented. Existing
@@ -185,12 +215,12 @@ logical fields above do not prescribe a completed schema or JSON API.
 Default retention is **90 days from `occurredAt`**, with a positive,
 operator-configurable duration. This is a product default, not a legal retention
 claim. Set `authenticationEventRetentionDays` in `memberid.json` to 1–36500 days;
-omitting it or using zero selects 90. Restart the authentication process to apply
+omitting it or using zero selects 90. Restart the authentication and console processes to apply
 a change, and use the same policy for all replicas. The policy applies to persisted
 authentication events, not to
 the existing management history, business session/grant lifetimes, or SMS quotas.
 
-The planned query interfaces must exclude records past their retention deadline.
+The query interfaces exclude records past their retention deadline.
 Cleanup removes expired
 records in bounded batches, scheduled at least daily while the service is
 healthy. Report cleanup failures and lag; a stopped/failing cleaner cannot
