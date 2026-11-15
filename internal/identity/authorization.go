@@ -16,26 +16,26 @@ func permission(scope string, actions ...string) authorization.Permission {
 // from storage for each operation; these descriptions are not session claims.
 func managementPermissions(actor ManagementActor) []authorization.Permission {
 	if actor.Platform {
-		return []authorization.Permission{permission("**", "**")}
+		return []authorization.Permission{permission("*", "*")}
 	}
 	organization := "organizations/" + actor.OrganizationID
 	return []authorization.Permission{
 		permission(organization, "get", "update"),
 		permission(organization+"/members", "list", "create"),
-		permission(organization+"/members/*", "get", "update", "status.update"),
-		permission(organization+"/members/*/bindings", "list"),
+		permission(organization+"/members/?", "get", "update", "status.update"),
+		permission(organization+"/members/?/bindings", "list"),
 		permission(organization+"/roleAssignments", "list", "create"),
-		permission(organization+"/roleAssignments/*", "delete"),
+		permission(organization+"/roleAssignments/?", "delete"),
 		permission(organization+"/managementEvents", "list"),
 		permission(organization+"/providers", "list"),
-		permission(organization+"/providers/*", "create"),
-		permission(organization+"/providers/*/*", "update", "status.update"),
+		permission(organization+"/providers/?", "create"),
+		permission(organization+"/providers/?/?", "update", "status.update"),
 	}
 }
 
 func authorizeAll(ctx context.Context, db queryer, principal Principal, requirements ...authorization.Requirement) error {
 	if principal.installation() {
-		return checkManagementPermissions([]authorization.Permission{permission("**", "**")}, requirements...)
+		return checkManagementPermissions([]authorization.Permission{permission("*", "*")}, requirements...)
 	}
 	if principal.kind == accountPrincipal {
 		organizationID, err := accountOrganization(ctx, db, principal)

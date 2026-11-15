@@ -123,7 +123,7 @@ Member. All administrative entries require current identity/session eligibility.
 
 The status distinction is in permissions: organization administrators receive
 `status.update` for their Members and providers, not for `O` itself. Do not grant
-them `status.update` or `**.update` indiscriminately over `O/**`; that would also
+them `status.update` or `*.update` indiscriminately over `O/*`; that would also
 cover organization status. Broad scope coverage can instead be paired with
 narrow actions, and status authority scoped to the applicable resource kinds.
 No additional role-name check is needed after those permission decisions.
@@ -285,9 +285,9 @@ Review must verify the following against the catalog and sources:
 - Every console resource route, related private route and CLI command maps to a
   row or an explicitly classified workflow/session endpoint.
 - Organization admin permissions cover Member/provider `status.update` but not
-  organization `status.update`; neither system membership nor `O/**` by itself
+  organization `status.update`; neither system membership nor `O/*` by itself
   grants authority. Ordinary Members receive no administrative directory access.
-- `update`, `*.update`, `**.update`, `*`, and `**` have the documented positive
+- `update`, `?.update`, `*.update`, `?`, and `*` have the documented positive
   and negative matches. Read normalization stays within one scope and namespace.
 - Creation/listing use collection targets; reads/updates/deletions use actual
   instance targets. Binding lookup uses the stored binding, not a factor ID

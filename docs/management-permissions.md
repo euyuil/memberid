@@ -40,7 +40,7 @@ operations. It does not require a baseline role-assignment record. The operation
 catalog maps existing functionality to these roles without enabling new APIs.
 
 The system organization, `org_system`, is one organization, not the platform
-scope. The selector `organizations/*/**` includes it, along with all ordinary
+scope. The selector `organizations/?/*` includes it, along with all ordinary
 organizations and their descendants, but excludes the top-level organization
 collection and unrelated global platform resources. Selecting only ordinary
 organizations requires an explicit distinction; wildcard matching does not
@@ -66,7 +66,7 @@ A permission description pairs a resource selector with actions:
 ```json
 {
   "scope": {
-    "pattern": "organizations/{organizationId}/roleAssignments/**"
+    "pattern": "organizations/{organizationId}/roleAssignments/*"
   },
   "actions": ["create", "read", "delete"]
 }
@@ -86,13 +86,13 @@ specify HTTP endpoint URLs.
 
 | Path or pattern | Meaning |
 | --- | --- |
-| `**` | All registered management targets in the installation, including global resources. |
+| `*` | All registered management targets in the installation, including global resources. |
 | `organizations` | The organization collection itself. |
 | `organizations/{organizationId}` | One organization itself. |
-| `organizations/{organizationId}/**` | That organization and all of its owned descendants. |
+| `organizations/{organizationId}/*` | That organization and all of its owned descendants. |
 | `organizations/{organizationId}/members` | That organization's Member collection. |
 | `organizations/{organizationId}/members/{memberId}` | One Member itself. |
-| `organizations/{organizationId}/members/{memberId}/**` | That Member and its owned descendants. |
+| `organizations/{organizationId}/members/{memberId}/*` | That Member and its owned descendants. |
 | `organizations/{organizationId}/roleAssignments` | That organization's role-assignment collection. |
 | `organizations/{organizationId}/roleAssignments/{roleAssignmentId}` | One role assignment in that organization. |
 
@@ -125,7 +125,7 @@ scope with a `get` grant in another scope.
 
 The same rule applies within an action namespace: `settings.read` expands to
 `settings.list` and `settings.get`, not unqualified `list` or `get`. Expand a
-terminal `read` segment before matching action patterns, so `**.read` permits
+terminal `read` segment before matching action patterns, so `*.read` permits
 registered `list` and `get` operations at any namespace depth. Normalize a pair
 only when its namespace or namespace pattern and its scope are identical.
 This does not register new namespaced read operations or automatically split
@@ -178,56 +178,62 @@ delegation, and resource lifecycle constraints still apply.
 
 ## Wildcard grammar
 
+MemberID uses its own whole-segment syntax: `?` means one segment, not one
+character as in character-based globs. The previous recursive `**` spelling is
+invalid; there is no legacy syntax mode. Existing permission descriptions must
+replace each old single-segment `*` with `?` and each old `**` with `*` together
+to preserve their coverage. Built-in permissions use the new syntax.
+
 Scope patterns match complete resource paths by segment:
 
 - A literal segment matches only the identical segment.
-- `*` matches exactly one nonempty segment and never crosses `/`.
-- `**` matches zero or more complete segments.
+- `?` matches exactly one nonempty segment and never crosses `/`.
+- `*` matches zero or more complete segments.
 - Matching is case-sensitive and anchored to the entire path, with no implicit
   prefix or descendant matching.
-- A wildcard must occupy a whole segment. Partial globs such as `org_*` and
-  `role*`, empty segments, `?`, regular expressions, and other pattern operators
-  are invalid.
-- Each pattern may contain at most one `**` segment. Multiple `*` segments are
+- A wildcard must occupy a whole segment. Partial globs such as `org_*`, `org_?`,
+  and `role*`, empty segments, `**`, regular expressions, and other pattern
+  operators are invalid.
+- Each pattern may contain at most one `*` segment. Multiple `?` segments are
   allowed.
 
 | Pattern | Matches | Does not match |
 | --- | --- | --- |
-| `organizations/*` | Each organization itself. | `organizations`; Member or role-assignment paths. |
-| `organizations/**` | The organization collection itself and all paths below it. | Global resources outside that path. |
-| `organizations/*/roleAssignments` | Each organization's role-assignment collection. | Individual role assignments. |
-| `organizations/*/roleAssignments/*` | Individual role assignments in any organization. | The collection itself or deeper paths. |
-| `organizations/*/roleAssignments/**` | Each role-assignment collection and all paths below it. | Member paths or unrelated global resources. |
-| `organizations/{organizationId}/**/roleAssignments` | That organization's role-assignment collection and any registered descendant collection with the same final segment. | Paths ending in an individual assignment ID. |
+| `organizations/?` | Each organization itself. | `organizations`; Member or role-assignment paths. |
+| `organizations/*` | The organization collection itself and all paths below it. | Global resources outside that path. |
+| `organizations/?/roleAssignments` | Each organization's role-assignment collection. | Individual role assignments. |
+| `organizations/?/roleAssignments/?` | Individual role assignments in any organization. | The collection itself or deeper paths. |
+| `organizations/?/roleAssignments/*` | Each role-assignment collection and all paths below it. | Member paths or unrelated global resources. |
+| `organizations/{organizationId}/*/roleAssignments` | That organization's role-assignment collection and any registered descendant collection with the same final segment. | Paths ending in an individual assignment ID. |
 
-The zero-segment case is intentional: `organizations/{organizationId}/**` matches
-the organization itself as well as descendants. `*` and `**` are not synonyms;
-`*` alone matches only a one-segment target.
+The zero-segment case is intentional: `organizations/{organizationId}/*` matches
+the organization itself as well as descendants. `?` and `*` are not synonyms;
+`?` alone matches only a one-segment target.
 
 Action patterns use the same whole-segment rules, with `.` instead of `/` as the
-separator. A literal matches exactly, `*` matches one nonempty segment, and `**`
+separator. A literal matches exactly, `?` matches one nonempty segment, and `*`
 matches zero or more segments. Matching is anchored and case-sensitive, each
-pattern permits at most one `**`, and partial globs such as `re*` or `status*`
+pattern permits at most one `*`, and partial globs such as `re?` or `status*`
 are invalid. Empty segments and alternate separators are invalid.
 
 | Action or pattern | Matches | Does not match |
 | --- | --- | --- |
 | `update` | Ordinary `update`. | `status.update`. |
 | `status.update` | Exactly `status.update`. | Ordinary `update`; other namespaces. |
-| `*.update` | `status.update` and other one-prefix update actions. | Ordinary `update`; actions with two or more prefix segments. |
-| `**.update` | Ordinary `update` and update actions at any namespace depth. | `create`, `delete`, or read operations. |
-| `*` | Every registered single-segment action. | `status.update` or any other multi-segment action. |
-| `**` | Every registered action at any depth. | Unregistered or unsupported operations. |
+| `?.update` | `status.update` and other one-prefix update actions. | Ordinary `update`; actions with two or more prefix segments. |
+| `*.update` | Ordinary `update` and update actions at any namespace depth. | `create`, `delete`, or read operations. |
+| `?` | Every registered single-segment action. | `status.update` or any other multi-segment action. |
+| `*` | Every registered action at any depth. | Unregistered or unsupported operations. |
 
 For grammar illustration, `security.credentials.update` would match
-`**.update`, but not `*.update`; that example does not register an operation.
-The zero-segment case makes `**.update` match ordinary `update` without requiring
-a leading dot. `*` and `**` are no longer interchangeable for actions. Use `**`
+`*.update`, but not `?.update`; that example does not register an operation.
+The zero-segment case makes `*.update` match ordinary `update` without requiring
+a leading dot. `?` and `*` are not interchangeable for actions. Use `*`
 when intentionally granting all actions, including namespaced operations.
 
 Patterns apply dynamically to future matching resources and supported, enabled
-operations. Consequently, action `*` includes future single-segment predicates,
-not only CRUD; `**` also includes future namespaced actions, and `**.update`
+operations. Consequently, action `?` includes future single-segment predicates,
+not only CRUD; `*` also includes future namespaced actions, and `*.update`
 includes future update namespaces. An explicit action list does not acquire
 newly named operations. Patterns never create resources, enable unsupported
 operations, or turn arbitrary strings into
@@ -246,9 +252,9 @@ For example:
 | Create or list role assignments | `organizations/{organizationId}/roleAssignments` |
 | Get or delete one role assignment | `organizations/{organizationId}/roleAssignments/{roleAssignmentId}` |
 
-The permission example above covers both targets because its trailing `**`
+The permission example above covers both targets because its trailing `*`
 matches the collection itself and its descendants. A selector ending in
-`roleAssignments/*` covers individual assignments but does not authorize
+`roleAssignments/?` covers individual assignments but does not authorize
 creation or collection listing. An exact collection selector permits its allowed
 collection operations but does not authorize direct operations on the entries.
 In particular, `read` on that exact collection allows `list`; its `get` component

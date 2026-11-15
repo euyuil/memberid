@@ -34,7 +34,7 @@ func TestManagementWritePermissionBoundaries(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := authorization.Check([]authorization.Permission{permission(base+"/members/*", "update")}, requirements...); !errors.Is(err, authorization.ErrDenied) {
+	if err := authorization.Check([]authorization.Permission{permission(base+"/members/?", "update")}, requirements...); !errors.Is(err, authorization.ErrDenied) {
 		t.Fatal("explicit unchanged status did not require status.update", err)
 	}
 	for _, action := range []string{"organization.create", "organization.update", "member.create", "member.update", "unknown"} {
@@ -44,6 +44,46 @@ func TestManagementWritePermissionBoundaries(t *testing.T) {
 	}
 	if err := (&Store{}).SetAdministrator(t.Context(), InstallationManagerPrincipal(), org, member, true); !errors.Is(err, ErrForbidden) {
 		t.Fatal("private installation principal acquired administrator entry", err)
+	}
+}
+
+func TestBuiltInWildcardDepthBoundaries(t *testing.T) {
+	org, _ := NewID(OrganizationKind)
+	member, _ := NewID(MemberKind)
+	base := "organizations/" + org
+	permissions := managementPermissions(ManagementActor{OrganizationID: org})
+	// Check raw grants as well as the operation registry: a notation change must
+	// not grant authority over deeper resources if they are registered later.
+	for _, test := range []struct {
+		target, action string
+		allow          bool
+	}{
+		{base + "/members/" + member, "get", true},
+		{base + "/members", "get", false},
+		{base + "/members/" + member + "/bindings", "get", false},
+		{base + "/members/" + member + "/bindings", "list", true},
+		{base + "/members/" + member + "/nested/bindings", "list", false},
+		{base + "/roleAssignments/" + member, "delete", true},
+		{base + "/roleAssignments", "delete", false},
+		{base + "/roleAssignments/" + member + "/details", "delete", false},
+		{base + "/providers/feishu", "create", true},
+		{base + "/providers", "create", false},
+		{base + "/providers/feishu/example", "create", false},
+		{base + "/providers/feishu/example", "status.update", true},
+		{base + "/providers/feishu", "status.update", false},
+		{base + "/providers/feishu/example/credentials", "update", false},
+	} {
+		required := authorization.Requirement{Target: test.target, Action: test.action}
+		err := authorization.Check(permissions, required)
+		if test.allow && err != nil || !test.allow && !errors.Is(err, authorization.ErrDenied) {
+			t.Errorf("%s %s: %v", test.action, test.target, err)
+		}
+	}
+	if err := checkManagementPermissions(managementPermissions(ManagementActor{Platform: true}),
+		authorization.Requirement{Target: "organizations", Action: "create"},
+		authorization.Requirement{Target: base + "/providers/feishu/example", Action: "status.update"},
+	); err != nil {
+		t.Fatal("platform wildcard lost multi-segment authority", err)
 	}
 }
 
@@ -70,7 +110,7 @@ func TestCompositeMemberReadRequiresEveryComponent(t *testing.T) {
 	if err := checkManagementPermissions([]authorization.Permission{permission(base+"/members", "list")}, memberReadRequirements(org, "")...); !errors.Is(err, ErrForbidden) {
 		t.Fatal("member listing implicitly included full assignment directory", err)
 	}
-	if err := checkManagementPermissions([]authorization.Permission{permission(base+"/members/*", "get")}, authorization.Requirement{Target: base + "/members", Action: "list"}); !errors.Is(err, ErrForbidden) {
+	if err := checkManagementPermissions([]authorization.Permission{permission(base+"/members/?", "get")}, authorization.Requirement{Target: base + "/members", Action: "list"}); !errors.Is(err, ErrForbidden) {
 		t.Fatal("instance get implied collection listing", err)
 	}
 }
@@ -83,17 +123,17 @@ func TestProviderActionsSeparateCreationConfigurationAndStatus(t *testing.T) {
 		t.Fatal("initial enabled is part of creation", err)
 	}
 	update := providerWriteRequirements(org, "dingtalk", "example-provider", true)
-	if err := checkManagementPermissions([]authorization.Permission{permission(base+"/*", "update")}, update...); !errors.Is(err, ErrForbidden) {
+	if err := checkManagementPermissions([]authorization.Permission{permission(base+"/?", "update")}, update...); !errors.Is(err, ErrForbidden) {
 		t.Fatal("submitted enabled did not require status authority", err)
 	}
 	if err := checkManagementPermissions(managementPermissions(ManagementActor{OrganizationID: org}), update...); err != nil {
 		t.Fatal(err)
 	}
 	credentials := providerWriteRequirements(org, "dingtalk", "example-provider", false)
-	if err := checkManagementPermissions([]authorization.Permission{permission(base+"/*", "update")}, credentials...); err != nil {
+	if err := checkManagementPermissions([]authorization.Permission{permission(base+"/?", "update")}, credentials...); err != nil {
 		t.Fatal("credential-only update required status authority", err)
 	}
-	if err := checkManagementPermissions([]authorization.Permission{permission("**", "**")}, authorization.Requirement{Target: base + "/example-provider", Action: "delete"}); !errors.Is(err, ErrInvalid) {
+	if err := checkManagementPermissions([]authorization.Permission{permission("*", "*")}, authorization.Requirement{Target: base + "/example-provider", Action: "delete"}); !errors.Is(err, ErrInvalid) {
 		t.Fatal("unsupported provider deletion", err)
 	}
 }
