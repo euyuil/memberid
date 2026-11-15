@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 
-	"github.com/euyuil/memberid/internal/authorization"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -83,7 +82,7 @@ func (store *Store) CreateOrganization(ctx context.Context, principal Principal,
 	if !ValidID(id, OrganizationKind) {
 		return Organization{}, ErrInvalid
 	}
-	if err := authorizeAll(ctx, store.pool, principal, authorization.Requirement{Target: "organizations", Action: "create"}); err != nil {
+	if err := authorizeAll(ctx, store.pool, principal, organizationsResource.require(actionCreate)); err != nil {
 		return Organization{}, err
 	}
 	return readOrganization(store.pool.QueryRow(ctx, "INSERT INTO organizations(id,name) VALUES($1,$2) RETURNING "+organizationColumns, id, name))
@@ -113,7 +112,7 @@ func (store *Store) CreateMember(ctx context.Context, principal Principal, organ
 	if !ValidID(id, MemberKind) {
 		return Member{}, ErrInvalid
 	}
-	if err := authorizeAll(ctx, store.pool, principal, authorization.Requirement{Target: "organizations/" + organizationID + "/members", Action: "create"}); err != nil {
+	if err := authorizeAll(ctx, store.pool, principal, membersResource.require(actionCreate, organizationID)); err != nil {
 		return Member{}, err
 	}
 	return readMember(store.pool.QueryRow(ctx, "INSERT INTO members(id,organization_id,display_name) VALUES($1,$2,$3) RETURNING "+memberColumns, id, organizationID, name))
@@ -185,7 +184,7 @@ func (store *Store) BindFactor(ctx context.Context, principal Principal, organiz
 	if !ValidID(organizationID, OrganizationKind) || !ValidID(memberID, MemberKind) || !ValidID(factorID, FactorKind) {
 		return Binding{}, ErrInvalid
 	}
-	if err := authorizeAll(ctx, store.pool, principal, authorization.Requirement{Target: "organizations/" + organizationID + "/members/" + memberID + "/bindings", Action: "create"}); err != nil {
+	if err := authorizeAll(ctx, store.pool, principal, bindingsResource.require(actionCreate, organizationID, memberID)); err != nil {
 		return Binding{}, err
 	}
 	var result Binding
@@ -249,7 +248,7 @@ func (store *Store) RevokeBinding(ctx context.Context, principal Principal, orga
 		if err := tx.QueryRow(ctx, "SELECT id::text FROM member_auth_factor_bindings WHERE member_id=$1 AND organization_id=$2 AND authentication_factor_id=$3", memberID, organizationID, factorID).Scan(&bindingID); err != nil {
 			return storageError(err)
 		}
-		if err := authorizeAll(ctx, tx, principal, authorization.Requirement{Target: "organizations/" + organizationID + "/members/" + memberID + "/bindings/" + bindingID, Action: "delete"}); err != nil {
+		if err := authorizeAll(ctx, tx, principal, bindingResource.require(actionDelete, organizationID, memberID, bindingID)); err != nil {
 			return err
 		}
 		before, err := availableAdministrators(ctx, tx, organizationID)

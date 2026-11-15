@@ -31,14 +31,14 @@ func (service *ManagementService) Organizations(ctx context.Context, principal P
 		return Page[Organization]{}, err
 	}
 	permissions := managementPermissions(actor)
-	err = checkManagementPermissions(permissions, authorization.Requirement{Target: "organizations", Action: "list"})
+	err = checkManagementPermissions(permissions, organizationsResource.require(actionList))
 	if err == nil {
 		return store.Organizations(ctx, after, limit)
 	}
 	if !errors.Is(err, ErrForbidden) {
 		return Page[Organization]{}, err
 	}
-	if err := checkManagementPermissions(permissions, authorization.Requirement{Target: "organizations/" + actor.OrganizationID, Action: "get"}); err != nil {
+	if err := checkManagementPermissions(permissions, organizationResource.require(actionGet, actor.OrganizationID)); err != nil {
 		return Page[Organization]{}, err
 	}
 	organization, err := store.Organization(ctx, actor.OrganizationID)
@@ -50,7 +50,7 @@ func (service *ManagementService) Organizations(ctx context.Context, principal P
 
 func (service *ManagementService) Organization(ctx context.Context, principal Principal, organizationID string) (Organization, error) {
 	store := service.store
-	if err := store.authorizeManagementRead(ctx, principal, authorization.Requirement{Target: "organizations/" + organizationID, Action: "get"}); err != nil {
+	if err := store.authorizeManagementRead(ctx, principal, organizationResource.require(actionGet, organizationID)); err != nil {
 		return Organization{}, err
 	}
 	return store.Organization(ctx, organizationID)
@@ -63,12 +63,17 @@ type ManagementMemberPage struct {
 }
 
 func memberReadRequirements(organizationID, memberID string) []authorization.Requirement {
-	organization := "organizations/" + organizationID
 	if memberID == "" {
-		return []authorization.Requirement{{Target: organization + "/members", Action: "list"}, {Target: organization + "/roleAssignments", Action: "list"}}
+		return []authorization.Requirement{
+			membersResource.require(actionList, organizationID),
+			roleAssignmentsResource.require(actionList, organizationID),
+		}
 	}
-	member := organization + "/members/" + memberID
-	return []authorization.Requirement{{Target: member, Action: "get"}, {Target: member + "/bindings", Action: "list"}, {Target: organization + "/roleAssignments", Action: "list"}}
+	return []authorization.Requirement{
+		memberResource.require(actionGet, organizationID, memberID),
+		bindingsResource.require(actionList, organizationID, memberID),
+		roleAssignmentsResource.require(actionList, organizationID),
+	}
 }
 
 func (service *ManagementService) Members(ctx context.Context, principal Principal, organizationID, after string, limit int, filter MemberDirectoryFilter) (ManagementMemberPage, error) {
@@ -118,7 +123,7 @@ func (service *ManagementService) Member(ctx context.Context, principal Principa
 
 func (service *ManagementService) MemberDirectory(ctx context.Context, principal Principal, after string, limit int, filter MemberDirectoryFilter) (Page[MemberDirectoryEntry], error) {
 	store := service.store
-	if err := store.authorizeManagementRead(ctx, principal, authorization.Requirement{Target: "memberDirectory", Action: "list"}); err != nil {
+	if err := store.authorizeManagementRead(ctx, principal, memberDirectoryResource.require(actionList)); err != nil {
 		return Page[MemberDirectoryEntry]{}, err
 	}
 	return store.AllOrganizationMembers(ctx, after, limit, filter)
@@ -135,7 +140,7 @@ func (service *ManagementService) History(ctx context.Context, principal Princip
 	}
 	permissions := managementPermissions(actor)
 	if organizationID == "" {
-		err := checkManagementPermissions(permissions, authorization.Requirement{Target: "managementEvents", Action: "list"})
+		err := checkManagementPermissions(permissions, managementEventsResource.require(actionList))
 		if err == nil {
 			return store.ManagementEvents(ctx, "", memberID, before)
 		}
@@ -144,7 +149,7 @@ func (service *ManagementService) History(ctx context.Context, principal Princip
 		}
 		organizationID = actor.OrganizationID
 	}
-	if err := checkManagementPermissions(permissions, authorization.Requirement{Target: "organizations/" + organizationID + "/managementEvents", Action: "list"}); err != nil {
+	if err := checkManagementPermissions(permissions, organizationEventsResource.require(actionList, organizationID)); err != nil {
 		return nil, err
 	}
 	return store.ManagementEvents(ctx, organizationID, memberID, before)

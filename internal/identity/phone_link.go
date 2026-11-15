@@ -3,7 +3,6 @@ package identity
 import (
 	"context"
 
-	"github.com/euyuil/memberid/internal/authorization"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -23,7 +22,7 @@ func LinkPhone(ctx context.Context, tx pgx.Tx, principal Principal, verified Ver
 	if !ValidID(target.OrganizationID, OrganizationKind) || !ValidID(target.MemberID, MemberKind) || !ValidID(target.SourceFactorID, FactorKind) || !ValidUUID(target.SourceBindingID) || !ValidID(verified.Factor.ID, FactorKind) || verified.Method != "sms" || verified.Factor.Type != "phone" || verified.Factor.Namespace != "phone:e164" {
 		return ErrInvalid
 	}
-	if err := authorizeAll(ctx, tx, principal, authorization.Requirement{Target: "organizations/" + target.OrganizationID + "/members/" + target.MemberID + "/bindings", Action: "create"}); err != nil {
+	if err := authorizeAll(ctx, tx, principal, bindingsResource.require(actionCreate, target.OrganizationID, target.MemberID)); err != nil {
 		return err
 	}
 	var id string

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/euyuil/memberid/internal/authorization"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -88,10 +87,9 @@ func (store *Store) setAdministrator(ctx context.Context, principal Principal, o
 		if err := managementLock(ctx, tx); err != nil {
 			return err
 		}
-		requirement := authorization.Requirement{Target: "organizations/" + organizationID + "/roleAssignments", Action: "create"}
+		requirement := roleAssignmentsResource.require(actionCreate, organizationID)
 		if !enabled {
-			requirement.Target += "/" + memberID
-			requirement.Action = "delete"
+			requirement = roleAssignmentResource.require(actionDelete, organizationID, memberID)
 		}
 		if err := authorizeAll(ctx, tx, principal, requirement); err != nil {
 			return err

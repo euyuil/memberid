@@ -9,8 +9,10 @@ import (
 )
 
 func accountPermissions(organizationID, memberID string) []authorization.Permission {
-	member := "organizations/" + organizationID + "/members/" + memberID
-	return []authorization.Permission{permission(member, "get"), permission(member+"/bindings", "create")}
+	return []authorization.Permission{
+		permission(memberResource.pattern(organizationID, memberID), actionGet),
+		permission(bindingsResource.pattern(organizationID, memberID), actionCreate),
+	}
 }
 
 // Account authority comes from the selected Member's current source binding and
@@ -36,5 +38,5 @@ func (store *Store) AuthorizeAccountView(ctx context.Context, principal Principa
 	if principal.kind != accountPrincipal {
 		return ErrForbidden
 	}
-	return authorizeAll(ctx, store.pool, principal, authorization.Requirement{Target: "organizations/" + organizationID + "/members/" + principal.memberID, Action: "get"})
+	return authorizeAll(ctx, store.pool, principal, memberResource.require(actionGet, organizationID, principal.memberID))
 }

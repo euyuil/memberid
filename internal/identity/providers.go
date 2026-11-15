@@ -78,7 +78,7 @@ func (app DingTalkApplication) Provider() Provider {
 
 func (service *ManagementService) Providers(ctx context.Context, principal Principal, organizationID string) ([]Provider, error) {
 	store := service.store
-	if err := store.authorizeManagementRead(ctx, principal, authorization.Requirement{Target: "organizations/" + organizationID + "/providers", Action: "list"}); err != nil {
+	if err := store.authorizeManagementRead(ctx, principal, providersResource.require(actionList, organizationID)); err != nil {
 		return nil, err
 	}
 	return store.Providers(ctx, organizationID)

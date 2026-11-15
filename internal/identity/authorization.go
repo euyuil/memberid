@@ -3,7 +3,6 @@ package identity
 import (
 	"context"
 	"errors"
-	"strings"
 
 	"github.com/euyuil/memberid/internal/authorization"
 )
@@ -18,18 +17,18 @@ func managementPermissions(actor ManagementActor) []authorization.Permission {
 	if actor.Platform {
 		return []authorization.Permission{permission("*", "*")}
 	}
-	organization := "organizations/" + actor.OrganizationID
+	organizationID := actor.OrganizationID
 	return []authorization.Permission{
-		permission(organization, "get", "update"),
-		permission(organization+"/members", "list", "create"),
-		permission(organization+"/members/?", "get", "update", "status.update"),
-		permission(organization+"/members/?/bindings", "list"),
-		permission(organization+"/roleAssignments", "list", "create"),
-		permission(organization+"/roleAssignments/?", "delete"),
-		permission(organization+"/managementEvents", "list"),
-		permission(organization+"/providers", "list"),
-		permission(organization+"/providers/?", "create"),
-		permission(organization+"/providers/?/?", "update", "status.update"),
+		permission(organizationResource.pattern(organizationID), actionGet, actionUpdate),
+		permission(membersResource.pattern(organizationID), actionList, actionCreate),
+		permission(memberResource.pattern(organizationID, "?"), actionGet, actionUpdate, actionStatusUpdate),
+		permission(bindingsResource.pattern(organizationID, "?"), actionList),
+		permission(roleAssignmentsResource.pattern(organizationID), actionList, actionCreate),
+		permission(roleAssignmentResource.pattern(organizationID, "?"), actionDelete),
+		permission(organizationEventsResource.pattern(organizationID), actionList),
+		permission(providersResource.pattern(organizationID), actionList),
+		permission(providerTypeResource.pattern(organizationID, "?"), actionCreate),
+		permission(providerResource.pattern(organizationID, "?", "?"), actionUpdate, actionStatusUpdate),
 	}
 }
 
@@ -71,71 +70,16 @@ func checkManagementPermissions(permissions []authorization.Permission, requirem
 	return nil
 }
 
-// Registered operations constrain even a platform-wide wildcard. Adding a
-// permission does not introduce an endpoint or bypass its entry contract.
-func registeredManagementOperation(requirement authorization.Requirement) bool {
-	parts := strings.Split(requirement.Target, "/")
-	if requirement.Target == "organizations" {
-		return requirement.Action == "create" || requirement.Action == "list"
-	}
-	if requirement.Target == "memberDirectory" || requirement.Target == "managementEvents" {
-		return requirement.Action == "list"
-	}
-	if len(parts) < 2 || parts[0] != "organizations" || !ValidID(parts[1], OrganizationKind) {
-		return false
-	}
-	if len(parts) == 2 {
-		return requirement.Action == "get" || requirement.Action == "update" || requirement.Action == "status.update"
-	}
-	switch parts[2] {
-	case "members":
-		if len(parts) == 3 {
-			return requirement.Action == "create" || requirement.Action == "list"
-		}
-		if !ValidID(parts[3], MemberKind) {
-			return false
-		}
-		if len(parts) >= 5 && parts[4] == "bindings" {
-			if len(parts) == 5 {
-				return requirement.Action == "list" || requirement.Action == "create"
-			}
-			return len(parts) == 6 && ValidUUID(parts[5]) && requirement.Action == "delete"
-		}
-		return len(parts) == 4 && (requirement.Action == "get" || requirement.Action == "update" || requirement.Action == "status.update")
-	case "providers":
-		if len(parts) == 3 {
-			return requirement.Action == "list"
-		}
-		if parts[3] != "dingtalk" && parts[3] != "feishu" {
-			return false
-		}
-		if len(parts) == 4 {
-			return requirement.Action == "create"
-		}
-		return len(parts) == 5 && validText(parts[4], 128) && (requirement.Action == "update" || requirement.Action == "status.update")
-	case "managementEvents":
-		return len(parts) == 3 && requirement.Action == "list"
-	case "roleAssignments":
-		if len(parts) == 3 {
-			return requirement.Action == "create" || requirement.Action == "list"
-		}
-		// Existing assignments are keyed by Member, not a separate public ID.
-		return len(parts) == 4 && ValidID(parts[3], MemberKind) && requirement.Action == "delete"
-	}
-	return false
-}
-
 func memberUpdateRequirements(organizationID, memberID string, change MemberChange) ([]authorization.Requirement, error) {
 	if !ValidID(organizationID, OrganizationKind) || !ValidID(memberID, MemberKind) || !validMemberChange(change) {
 		return nil, ErrInvalid
 	}
-	target := "organizations/" + organizationID + "/members/" + memberID
 	var requirements []authorization.Requirement
 	if change.DisplayName != nil {
-		requirements = append(requirements, authorization.Requirement{Target: target, Action: "update"})
+		requirements = append(requirements, memberResource.require(actionUpdate, organizationID, memberID))
 	}
 	if change.ManualBlocked != nil {
-		requirements = append(requirements, authorization.Requirement{Target: target, Action: "status.update"})
+		requirements = append(requirements, memberResource.require(actionStatusUpdate, organizationID, memberID))
 	}
 	return requirements, nil
 }
@@ -144,7 +88,7 @@ func managementWriteRequirements(action, organizationID, memberID string, change
 	switch action {
 	case "organization.create":
 		if organizationID == "" && memberID == "" && change.Name != nil && validText(*change.Name, 128) && change.Status == nil && change.DisplayName == nil && change.ManualBlocked == nil {
-			return []authorization.Requirement{{Target: "organizations", Action: "create"}}, nil
+			return []authorization.Requirement{organizationsResource.require(actionCreate)}, nil
 		}
 	case "organization.update":
 		if memberID == "" && change.DisplayName == nil && change.ManualBlocked == nil {
@@ -152,7 +96,7 @@ func managementWriteRequirements(action, organizationID, memberID string, change
 		}
 	case "member.create":
 		if ValidID(organizationID, OrganizationKind) && memberID == "" && change.DisplayName != nil && validText(*change.DisplayName, 128) && change.Name == nil && change.Status == nil && change.ManualBlocked == nil {
-			return []authorization.Requirement{{Target: "organizations/" + organizationID + "/members", Action: "create"}}, nil
+			return []authorization.Requirement{membersResource.require(actionCreate, organizationID)}, nil
 		}
 	case "member.update":
 		if change.Name == nil && change.Status == nil {
@@ -166,26 +110,23 @@ func organizationUpdateRequirements(organizationID string, change OrganizationCh
 	if !ValidID(organizationID, OrganizationKind) || change.Name == nil && change.Status == nil {
 		return nil, ErrInvalid
 	}
-	target := "organizations/" + organizationID
 	var requirements []authorization.Requirement
 	if change.Name != nil {
-		requirements = append(requirements, authorization.Requirement{Target: target, Action: "update"})
+		requirements = append(requirements, organizationResource.require(actionUpdate, organizationID))
 	}
 	if change.Status != nil {
-		requirements = append(requirements, authorization.Requirement{Target: target, Action: "status.update"})
+		requirements = append(requirements, organizationResource.require(actionStatusUpdate, organizationID))
 	}
 	return requirements, nil
 }
 
 func providerWriteRequirements(organizationID, kind, namespace string, statusSubmitted bool) []authorization.Requirement {
-	target := "organizations/" + organizationID + "/providers/" + kind
 	if namespace == "" {
-		return []authorization.Requirement{{Target: target, Action: "create"}}
+		return []authorization.Requirement{providerTypeResource.require(actionCreate, organizationID, kind)}
 	}
-	target += "/" + namespace
-	requirements := []authorization.Requirement{{Target: target, Action: "update"}}
+	requirements := []authorization.Requirement{providerResource.require(actionUpdate, organizationID, kind, namespace)}
 	if statusSubmitted {
-		requirements = append(requirements, authorization.Requirement{Target: target, Action: "status.update"})
+		requirements = append(requirements, providerResource.require(actionStatusUpdate, organizationID, kind, namespace))
 	}
 	return requirements
 }

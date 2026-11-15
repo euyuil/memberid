@@ -20,6 +20,23 @@ documented whole-segment wildcards. The evaluator requires every target/action
 pair and rejects unsupported operations even for platform-wide permissions.
 Built-in role permissions live in code; assignments remain in `administrators`.
 
+`internal/identity/management_operations.go` defines the supported resource paths,
+identifier kinds, and actions. Protected services construct concrete requirements
+from those definitions; built-in policies use the same resource definitions for
+their selectors. The operation registry validates against that same catalog,
+including for platform-wide grants. Invalid arguments cannot produce a broader
+target, and wildcard selectors cannot be used as concrete operation arguments.
+The templates are internal Go definitions, not a new public scope syntax.
+
+Field mappings and composite response requirements remain explicit at the service
+boundary: updating an existing resource's status requires `status.update`, even
+when the submitted value is unchanged. A composite management response including
+bindings or role assignments requires their read permissions as well.
+The authorization matrix tests pin the literal paths and supported actions for
+platform, own-organization, foreign-organization, selected-self, and ordinary
+management contexts, including targets in the system organization. Adding an
+operation requires extending that matrix and this catalog as well as the code.
+
 | Operations | Enforcement status |
 | --- | --- |
 | O5-O6: organization updates | Shared scope/action checks at the existing transactional authorization point, including explicitly submitted unchanged status fields. Private/CLI updates retain their installation-only entry contract. |

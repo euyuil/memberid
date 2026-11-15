@@ -6,7 +6,6 @@ import (
 	"errors"
 	"time"
 
-	"github.com/euyuil/memberid/internal/authorization"
 	"github.com/euyuil/memberid/internal/dingtalk"
 	"github.com/jackc/pgx/v5"
 )
@@ -122,7 +121,7 @@ func (verifier *DingTalkVerifier) Link(ctx context.Context, tx pgx.Tx, principal
 	if !ValidID(memberID, MemberKind) {
 		return Verification{}, ErrInvalid
 	}
-	if err := authorizeAll(ctx, tx, principal, authorization.Requirement{Target: "organizations/" + proof.application.OrganizationID + "/members/" + memberID + "/bindings", Action: "create"}); err != nil {
+	if err := authorizeAll(ctx, tx, principal, bindingsResource.require(actionCreate, proof.application.OrganizationID, memberID)); err != nil {
 		return Verification{}, err
 	}
 	return verifier.admit(ctx, tx, proof, &dingTalkLinkTarget{memberID, principal.factorID, principal.bindingID})
