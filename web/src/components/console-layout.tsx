@@ -1,5 +1,4 @@
 import { useState, type ReactNode } from "react"
-import { Menu as AccountMenu } from "@base-ui/react/menu"
 import {
   ChevronRight,
   ChevronsUpDown,
@@ -9,6 +8,16 @@ import {
 } from "lucide-react"
 import { Link, type NavigationState } from "@/navigation"
 import { routeURL } from "@/routes"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Separator } from "@/components/ui/separator"
 import {
   Sidebar,
@@ -122,12 +131,11 @@ function ConsoleContents({
   }
   const accountIdentity = (
     <>
-      <span
-        className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted text-sm font-medium"
-        aria-hidden="true"
-      >
-        {Array.from(actor.displayName)[0] || "M"}
-      </span>
+      <Avatar aria-hidden="true">
+        <AvatarFallback>
+          {Array.from(actor.displayName)[0] || "M"}
+        </AvatarFallback>
+      </Avatar>
       <div className="grid min-w-0 flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden">
         <span className="truncate font-medium" title={actor.displayName}>
           {actor.displayName}
@@ -156,8 +164,8 @@ function ConsoleContents({
         <SidebarFooter>
           <SidebarMenu>
             <SidebarMenuItem>
-              <AccountMenu.Root>
-                <AccountMenu.Trigger
+              <DropdownMenu>
+                <DropdownMenuTrigger
                   render={<SidebarMenuButton size="lg" />}
                   aria-label={`账户菜单 · ${actor.displayName}`}
                   title={actor.displayName}
@@ -167,53 +175,53 @@ function ConsoleContents({
                     aria-hidden="true"
                     className="ml-auto group-data-[collapsible=icon]:hidden"
                   />
-                </AccountMenu.Trigger>
-                <AccountMenu.Portal>
-                  <AccountMenu.Positioner
-                    side={isMobile ? "bottom" : "right"}
-                    align="end"
-                    sideOffset={4}
-                    className="account-menu-positioner"
-                  >
-                    <AccountMenu.Popup
-                      className="account-menu"
-                      aria-label="账户菜单"
-                    >
-                      <div className="account-menu-identity">
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  side={isMobile ? "bottom" : "right"}
+                  align="end"
+                  sideOffset={4}
+                  className="max-w-[calc(100vw-1.5rem)] min-w-56"
+                  aria-label="账户菜单"
+                >
+                  <DropdownMenuGroup>
+                    <DropdownMenuLabel className="p-0">
+                      <div className="flex items-center gap-2 px-1 py-1.5">
                         {accountIdentity}
                       </div>
-                      <AccountMenu.Separator className="account-menu-separator" />
-                      <AccountMenu.LinkItem
-                        className="account-menu-item"
-                        closeOnClick
-                        render={
-                          <Link
-                            href={routeURL({
-                              view: "members",
-                              org: actor.organizationId,
-                              member: actor.memberId,
-                            })}
-                            onClick={() => setOpenMobile(false)}
-                          />
-                        }
-                      >
-                        <UserRound aria-hidden="true" />
-                        我的成员资料
-                      </AccountMenu.LinkItem>
-                      <AccountMenu.Separator className="account-menu-separator" />
-                      <AccountMenu.Item
-                        className="account-menu-item"
-                        disabled={signingOut}
-                        closeOnClick={false}
-                        onClick={signOut}
-                      >
-                        <LogOut aria-hidden="true" />
-                        {signingOut ? "正在退出…" : "退出后台"}
-                      </AccountMenu.Item>
-                    </AccountMenu.Popup>
-                  </AccountMenu.Positioner>
-                </AccountMenu.Portal>
-              </AccountMenu.Root>
+                    </DropdownMenuLabel>
+                  </DropdownMenuGroup>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuGroup>
+                    <DropdownMenuItem
+                      nativeButton={false}
+                      render={
+                        <Link
+                          href={routeURL({
+                            view: "members",
+                            org: actor.organizationId,
+                            member: actor.memberId,
+                          })}
+                          onClick={() => setOpenMobile(false)}
+                        />
+                      }
+                    >
+                      <UserRound aria-hidden="true" />
+                      我的成员资料
+                    </DropdownMenuItem>
+                  </DropdownMenuGroup>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuGroup>
+                    <DropdownMenuItem
+                      disabled={signingOut}
+                      closeOnClick={false}
+                      onClick={signOut}
+                    >
+                      <LogOut aria-hidden="true" />
+                      {signingOut ? "正在退出…" : "退出后台"}
+                    </DropdownMenuItem>
+                  </DropdownMenuGroup>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </SidebarMenuItem>
           </SidebarMenu>
         </SidebarFooter>
