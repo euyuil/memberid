@@ -16,7 +16,7 @@ import (
 )
 
 func (service *Service) loadSession(r *http.Request, request *authorizationRequest) bool {
-	if request.Fresh || request.externalPending() || slices.Contains(request.Input.Prompt, "login") {
+	if request.Fresh || request.externalPending() || slices.Contains(request.prompts(), "login") {
 		return false
 	}
 	secret := service.cookieValue(r, "session")
@@ -25,21 +25,21 @@ func (service *Service) loadSession(r *http.Request, request *authorizationReque
 	}
 	var data []byte
 	var id string
-	if err := service.store.Database().QueryRow(r.Context(), "SELECT id,verification FROM oidc_sessions WHERE secret_hash=$1 AND revoked_at IS NULL AND expires_at>$2 AND absolute_expires_at>$2", config.SecretHash(secret), service.now()).Scan(&id, &data); err != nil {
+	if err := service.store.Database().QueryRow(r.Context(), "SELECT id,verification FROM authentication_sessions WHERE secret_hash=$1 AND revoked_at IS NULL AND expires_at>$2 AND absolute_expires_at>$2", config.SecretHash(secret), service.now()).Scan(&id, &data); err != nil {
 		return false
 	}
 	var verified identity.Verification
 	if json.Unmarshal(data, &verified) != nil {
 		return false
 	}
-	if request.Input.MaxAge != nil && service.now().Sub(verified.AuthenticatedAt) > time.Duration(*request.Input.MaxAge)*time.Second {
+	if request.SAML == nil && request.Input.MaxAge != nil && service.now().Sub(verified.AuthenticatedAt) > time.Duration(*request.Input.MaxAge)*time.Second {
 		return false
 	}
 	factor, err := service.store.Factor(r.Context(), verified.Factor.ID)
 	if err != nil || factor.Status != "active" {
 		return false
 	}
-	registered, err := service.storage.client(request.ClientID)
+	registered, err := service.loginPolicy(r.Context(), request)
 	if err != nil || registered.registration.SubjectKind == "factor" && factor.Type != "phone" {
 		return false
 	}
@@ -82,7 +82,7 @@ func setVerification(request *authorizationRequest, verified identity.Verificati
 	request.AbsoluteExpiry = verified.AuthenticatedAt.Add(maximumLifetime)
 	request.MemberID, request.OrganizationID, request.BindingID = "", "", ""
 }
-func (service *Service) members(r *http.Request, request *authorizationRequest, client client) ([]identity.Member, error) {
+func (service *Service) members(r *http.Request, request *authorizationRequest, client loginPolicy) ([]identity.Member, error) {
 	if request.Verification == nil || client.registration.SubjectKind == "factor" {
 		return nil, nil
 	}
@@ -100,6 +100,9 @@ func (service *Service) members(r *http.Request, request *authorizationRequest, 
 }
 
 func (service *Service) finish(w http.ResponseWriter, r *http.Request, request *authorizationRequest) error {
+	if request.SAML != nil {
+		return service.finishSAML(w, r, request, "")
+	}
 	if request.HintSubject != "" && request.GetSubject() != request.HintSubject {
 		service.loginError(w, r, request, "login_required")
 		return nil
@@ -119,6 +122,12 @@ func (service *Service) finish(w http.ResponseWriter, r *http.Request, request *
 }
 
 func (service *Service) loginError(w http.ResponseWriter, r *http.Request, request *authorizationRequest, kind string) {
+	if request.SAML != nil {
+		if err := service.finishSAML(w, r, request, "NoPassive"); err != nil {
+			http.Error(w, "SAML login could not complete", http.StatusBadRequest)
+		}
+		return
+	}
 	protocolError := &oidc.Error{ErrorType: "login_required"}
 	switch kind {
 	case "consent_required":
@@ -135,17 +144,17 @@ func (service *Service) login(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	input, err := service.storage.AuthRequestByID(r.Context(), r.Form.Get("request"))
+	input, err := service.storage.loginRequestByID(r.Context(), r.Form.Get("request"))
 	if err != nil {
 		http.Error(w, "Invalid or expired login transaction", http.StatusBadRequest)
 		return
 	}
-	request := input.(*authorizationRequest)
+	request := input
 	if request.Complete {
 		http.Error(w, "Login transaction has already completed", http.StatusBadRequest)
 		return
 	}
-	registered, err := service.storage.client(request.ClientID)
+	registered, err := service.loginPolicy(r.Context(), request)
 	if err != nil {
 		http.Error(w, "Invalid client", http.StatusBadRequest)
 		return
@@ -246,7 +255,7 @@ func (service *Service) login(w http.ResponseWriter, r *http.Request) {
 				service.renderLogin(w, r, request, registered, message)
 				return
 			}
-			if (!registered.registration.Preauthorized || slices.Contains(request.Input.Prompt, "consent")) && r.PostForm.Get("consent") != "yes" {
+			if (!registered.registration.Preauthorized || slices.Contains(request.prompts(), "consent")) && r.PostForm.Get("consent") != "yes" {
 				message = "Approve the requested identity information before continuing."
 				service.renderLogin(w, r, request, registered, message)
 				return
@@ -293,7 +302,7 @@ func (service *Service) login(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	if slices.Contains(request.Input.Prompt, "none") {
+	if slices.Contains(request.prompts(), "none") {
 		if request.Verification == nil {
 			service.loginError(w, r, request, "login_required")
 			return

@@ -72,7 +72,7 @@ func TestGrantIssuanceEvents(t *testing.T) {
 			events := authenticationEvents(t, f)
 			var grants, tokens int
 			var consumed bool
-			if err := f.store.Database().QueryRow(t.Context(), "SELECT (SELECT count(*) FROM oidc_grants),(SELECT count(*) FROM oidc_access_tokens),EXISTS(SELECT 1 FROM oidc_authorization_requests WHERE consumed_at IS NOT NULL)").Scan(&grants, &tokens, &consumed); err != nil || (grants == 1 && tokens == 1 && consumed) != succeeded || !succeeded && (grants != 0 || tokens != 0 || consumed) {
+			if err := f.store.Database().QueryRow(t.Context(), "SELECT (SELECT count(*) FROM oidc_grants),(SELECT count(*) FROM oidc_access_tokens),EXISTS(SELECT 1 FROM authentication_requests WHERE consumed_at IS NOT NULL)").Scan(&grants, &tokens, &consumed); err != nil || (grants == 1 && tokens == 1 && consumed) != succeeded || !succeeded && (grants != 0 || tokens != 0 || consumed) {
 				t.Fatal("issuance transaction boundary", err, grants, tokens, consumed)
 			}
 			if mode == "audit failed" {
@@ -137,7 +137,7 @@ func TestCodeExpiryBetweenLookupAndConsumptionIsNotReuse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	eventSQL(t, f, "UPDATE oidc_authorization_requests SET expires_at=clock_timestamp()-interval '1 second'")
+	eventSQL(t, f, "UPDATE authentication_requests SET expires_at=clock_timestamp()-interval '1 second'")
 	recorder := enableAuthenticationEvents(t, f)
 	_, _, _, err = f.service.storage.createCodeTokens(authevent.RequestContext(t.Context()), request.(*authorizationRequest), false)
 	if err == nil {

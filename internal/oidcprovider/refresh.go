@@ -84,7 +84,7 @@ func (s *storage) rotateRefresh(ctx context.Context, request *refreshRequest, se
 		var sessionID string
 		// A refresh does not depend on a browser cookie or the browser SSO idle deadline.
 		// Lock sessions before grants, matching code issuance and RP-initiated logout.
-		if err := tx.QueryRow(ctx, "SELECT id FROM oidc_sessions WHERE id=$1 AND revoked_at IS NULL AND absolute_expires_at>$2 FOR UPDATE", request.SessionID, now).Scan(&sessionID); err != nil {
+		if err := tx.QueryRow(ctx, "SELECT id FROM authentication_sessions WHERE id=$1 AND revoked_at IS NULL AND absolute_expires_at>$2 FOR UPDATE", request.SessionID, now).Scan(&sessionID); err != nil {
 			return grantEligibilityError(err)
 		}
 		var grantID string

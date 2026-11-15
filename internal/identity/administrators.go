@@ -31,7 +31,7 @@ func managementActor(ctx context.Context, db queryer, memberID, grantID string) 
 	var actor ManagementActor
 	err := db.QueryRow(ctx, `SELECT m.id,m.organization_id,m.display_name`+eligibleBindings+`
  AND m.id=$1 AND EXISTS(SELECT 1 FROM administrators a WHERE a.member_id=m.id)
- AND EXISTS(SELECT 1 FROM oidc_grants g JOIN oidc_sessions s ON s.id=g.session_id
+ AND EXISTS(SELECT 1 FROM oidc_grants g JOIN authentication_sessions s ON s.id=g.session_id
  WHERE g.id=$2 AND g.revoked_at IS NULL AND s.revoked_at IS NULL
  AND g.expires_at>clock_timestamp() AND g.absolute_expires_at>clock_timestamp()
  AND s.expires_at>clock_timestamp() AND s.absolute_expires_at>clock_timestamp()

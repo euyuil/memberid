@@ -223,7 +223,7 @@ func administratorActor(t *testing.T, s *Store, member Member, factor Factor) Ma
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = s.pool.Exec(t.Context(), "INSERT INTO oidc_sessions(id,secret_hash,verification,expires_at,absolute_expires_at) VALUES($1,$1,'{}',clock_timestamp()+interval '1 hour',clock_timestamp()+interval '2 hours')", member.ID); err != nil {
+	if _, err = s.pool.Exec(t.Context(), "INSERT INTO authentication_sessions(id,secret_hash,verification,expires_at,absolute_expires_at) VALUES($1,$1,'{}',clock_timestamp()+interval '1 hour',clock_timestamp()+interval '2 hours')", member.ID); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = s.pool.Exec(t.Context(), "INSERT INTO oidc_grants(id,client_id,session_id,data,expires_at,absolute_expires_at) VALUES($1,'synthetic-management',$1,$2,clock_timestamp()+interval '1 hour',clock_timestamp()+interval '2 hours')", member.ID, data); err != nil {

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/euyuil/memberid/internal/authevent"
+	"github.com/euyuil/memberid/internal/browserauth"
 	"github.com/euyuil/memberid/internal/config"
 	"github.com/euyuil/memberid/internal/feishu"
 	"github.com/euyuil/memberid/internal/identity"
@@ -15,14 +16,9 @@ import (
 
 const feishuCallbackPath = "/login/feishu/callback"
 
-type feishuAttempt struct {
-	identity.FeishuLoginContext
-	StateHash string    `json:"stateHash"`
-	Verifier  string    `json:"verifier,omitempty"`
-	ExpiresAt time.Time `json:"expiresAt"`
-}
+type feishuAttempt = browserauth.FeishuAttempt
 
-func (service *Service) startFeishu(w http.ResponseWriter, r *http.Request, request *authorizationRequest, registered client) {
+func (service *Service) startFeishu(w http.ResponseWriter, r *http.Request, request *authorizationRequest, registered loginPolicy) {
 	if service.feishu == nil || registered.registration.SubjectKind != "member" || request.Verification != nil || request.phonePending() || request.externalPending() {
 		http.Error(w, "Feishu login is unavailable for this transaction.", http.StatusBadRequest)
 		return
@@ -38,7 +34,7 @@ func (service *Service) startFeishu(w http.ResponseWriter, r *http.Request, requ
 		return
 	}
 	state, verifier := config.RandomSecret(), oauth2.GenerateVerifier()
-	request.Feishu = &feishuAttempt{login, config.SecretHash(state), verifier, service.now().Add(5 * time.Minute)}
+	request.Feishu = &feishuAttempt{FeishuLoginContext: login, StateHash: config.SecretHash(state), Verifier: verifier, ExpiresAt: service.now().Add(5 * time.Minute)}
 	request.Fresh = true
 	request.ProviderOrganizationID = organizationID
 	if err := service.storage.saveRequest(r.Context(), request); err != nil {
@@ -92,7 +88,7 @@ func (service *Service) feishuCallback(w http.ResponseWriter, r *http.Request) {
 		event.OrganizationID = attempt.OrganizationID
 		event.ProviderID = attempt.ProviderID
 	}
-	registered, err := service.storage.client(request.ClientID)
+	registered, err := service.loginPolicy(r.Context(), request)
 	if err != nil || request.Complete || request.Verification != nil || attempt == nil || attempt.Verifier == "" ||
 		!attempt.ExpiresAt.After(service.now()) || !sameSecret(attempt.StateHash, hash) || registered.registration.SubjectKind != "member" ||
 		registered.registration.OrganizationID != "" && registered.registration.OrganizationID != attempt.OrganizationID {

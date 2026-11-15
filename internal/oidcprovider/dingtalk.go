@@ -10,18 +10,14 @@ import (
 	"time"
 
 	"github.com/euyuil/memberid/internal/authevent"
+	"github.com/euyuil/memberid/internal/browserauth"
 	"github.com/euyuil/memberid/internal/config"
 	"github.com/euyuil/memberid/internal/identity"
 	"github.com/jackc/pgx/v5"
 	"github.com/zitadel/oidc/v3/pkg/oidc"
 )
 
-type dingTalkAttempt struct {
-	StateHash string `json:"stateHash"`
-	identity.DingTalkLoginContext
-	ExpiresAt time.Time `json:"expiresAt"`
-	Consumed  bool      `json:"consumed"`
-}
+type dingTalkAttempt = browserauth.DingTalkAttempt
 
 func dingTalkCallbackCode(r *http.Request) (string, bool) {
 	if !accountFields(r, "state", "authCode", "code", "error", "error_description") {
@@ -36,7 +32,7 @@ func dingTalkCallbackCode(r *http.Request) (string, bool) {
 	return authCode, !r.Form.Has("code") || code == authCode
 }
 
-func (service *Service) startDingTalk(w http.ResponseWriter, r *http.Request, request *authorizationRequest, registered client) {
+func (service *Service) startDingTalk(w http.ResponseWriter, r *http.Request, request *authorizationRequest, registered loginPolicy) {
 	if service.dingtalk == nil || registered.registration.SubjectKind != "member" || request.Verification != nil || request.phonePending() || request.externalPending() {
 		http.Error(w, "Cancel the current verification before starting DingTalk login.", http.StatusBadRequest)
 		return
@@ -93,20 +89,20 @@ func (service *Service) dingTalkCallback(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "Invalid or expired DingTalk login", http.StatusBadRequest)
 		return
 	}
-	input, err := service.storage.AuthRequestByID(r.Context(), found.ID)
+	input, err := service.storage.loginRequestByID(r.Context(), found.ID)
 	if err != nil {
 		failure = err
 		http.Error(w, "Invalid or expired DingTalk login", http.StatusBadRequest)
 		return
 	}
-	request := input.(*authorizationRequest)
+	request := input
 	attempt := request.DingTalk
 	event = service.loginEvent(request)
 	if attempt != nil {
 		event.OrganizationID = attempt.OrganizationID
 		event.ProviderID = attempt.Namespace
 	}
-	registered, err := service.storage.client(request.ClientID)
+	registered, err := service.loginPolicy(r.Context(), request)
 	if err != nil || request.Complete || request.Verification != nil || attempt == nil || attempt.Consumed || !attempt.ExpiresAt.After(service.now()) || !sameSecret(attempt.StateHash, config.SecretHash(state)) || registered.registration.SubjectKind != "member" || registered.registration.OrganizationID != "" && registered.registration.OrganizationID != attempt.OrganizationID {
 		http.Error(w, "Invalid or expired DingTalk login", http.StatusBadRequest)
 		return
@@ -143,8 +139,11 @@ func (service *Service) completeExternalLogin(w http.ResponseWriter, r *http.Req
 	var admitted identity.MemberAdmission
 	completed := *request
 	err := pgx.BeginFunc(r.Context(), service.store.Database(), func(tx pgx.Tx) error {
+		if err := service.validateLoginPolicy(r.Context(), tx, request); err != nil {
+			return err
+		}
 		var revision int64
-		if err := tx.QueryRow(r.Context(), "SELECT revision FROM oidc_authorization_requests WHERE id=$1 AND code_hash IS NULL AND consumed_at IS NULL AND expires_at>$2 FOR UPDATE", request.ID, service.now()).Scan(&revision); err != nil {
+		if err := tx.QueryRow(r.Context(), "SELECT revision FROM authentication_requests WHERE id=$1 AND code_hash IS NULL AND consumed_at IS NULL AND expires_at>$2 FOR UPDATE", request.ID, service.now()).Scan(&revision); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				return oidc.ErrInvalidRequest()
 			}
@@ -168,7 +167,7 @@ func (service *Service) completeExternalLogin(w http.ResponseWriter, r *http.Req
 		}
 		absolute := verified.AuthenticatedAt.Add(maximumLifetime)
 		expires = minimum(service.now().Add(sessionIdleLifetime), absolute)
-		if _, err := tx.Exec(r.Context(), "INSERT INTO oidc_sessions(id,secret_hash,verification,expires_at,absolute_expires_at) VALUES($1,$2,$3,$4,$5)", id, config.SecretHash(secret), session, expires, absolute); err != nil {
+		if _, err := tx.Exec(r.Context(), "INSERT INTO authentication_sessions(id,secret_hash,verification,expires_at,absolute_expires_at) VALUES($1,$2,$3,$4,$5)", id, config.SecretHash(secret), session, expires, absolute); err != nil {
 			return err
 		}
 		completed.DingTalk, completed.Feishu = nil, nil
@@ -178,7 +177,7 @@ func (service *Service) completeExternalLogin(w http.ResponseWriter, r *http.Req
 		if err != nil {
 			return err
 		}
-		_, err = tx.Exec(r.Context(), "UPDATE oidc_authorization_requests SET data=$2,revision=revision+1 WHERE id=$1", request.ID, data)
+		_, err = tx.Exec(r.Context(), "UPDATE authentication_requests SET data=$2,revision=revision+1 WHERE id=$1", request.ID, data)
 		return err
 	})
 	if err == nil {

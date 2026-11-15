@@ -29,7 +29,7 @@ The check script installs the locked frontend dependencies, lints, tests, and bu
 
 For a focused frontend change, run `npm --prefix web ci`, `npm --prefix web run lint`, `npm --prefix web test`, and `npm --prefix web run build` before rebuilding or running Go. The frontend tests use Node's built-in test runner with TypeScript support. Generated assets under `internal/console/static/` are ignored. A Go-only build without those assets can run protocol and operator functions, but `serve-console` requires a frontend build. See [console setup](docs/console.md) and the opt-in browser fixture there.
 
-The executable can serve process health alone or the configured [OIDC provider](docs/oidc.md); operator commands and the separate [management process](docs/management-api.md) manage stored organizations, Members, and explicit factor bindings. See [the implementation plan](docs/implementation-plan.md) for the remaining identity and OIDC work.
+The executable can serve process health alone or the configured [OIDC provider](docs/oidc.md), with an optional native [SAML IdP](docs/saml.md) sharing its browser authentication flow; operator commands and the separate [management process](docs/management-api.md) manage stored organizations, Members, and explicit factor bindings. See [the implementation plan](docs/implementation-plan.md) for the remaining identity and OIDC work.
 
 For routine demo changes, select focused checks for the affected behavior and preserve the required PR CI checks. Fresh-installation acceptance does not require an upgrade rehearsal. Actual-browser inspection is targeted to UI or browser-specific uncertainty; automated real-client interoperability and interactive browser results must be reported separately.
 

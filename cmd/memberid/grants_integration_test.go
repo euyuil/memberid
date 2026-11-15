@@ -37,7 +37,7 @@ func TestGrantOperatorCommands(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.Database().Exec(t.Context(), "INSERT INTO oidc_sessions(id,secret_hash,verification,expires_at,absolute_expires_at) VALUES($1,$2,'{}',$3,$4)", session, config.SecretHash(config.RandomSecret()), now.Add(24*time.Hour), now.Add(365*24*time.Hour)); err != nil {
+	if _, err := store.Database().Exec(t.Context(), "INSERT INTO authentication_sessions(id,secret_hash,verification,expires_at,absolute_expires_at) VALUES($1,$2,'{}',$3,$4)", session, config.SecretHash(config.RandomSecret()), now.Add(24*time.Hour), now.Add(365*24*time.Hour)); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.Database().Exec(t.Context(), "INSERT INTO oidc_grants(id,client_id,session_id,data,expires_at,absolute_expires_at) VALUES($1,'example-web',$2,$3,$4,$5)", id, session, data, now.Add(24*time.Hour), now.Add(365*24*time.Hour)); err != nil {

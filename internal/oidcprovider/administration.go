@@ -85,7 +85,7 @@ func InspectGrant(ctx context.Context, store *identity.Store, id string) (GrantI
 	if !validTokenID(id) {
 		return GrantInfo{}, identity.ErrInvalid
 	}
-	return readGrantInfo(store.Database().QueryRow(ctx, "SELECT "+grantInfoColumns+" FROM oidc_grants g JOIN oidc_sessions s ON s.id=g.session_id WHERE g.id=$1", id))
+	return readGrantInfo(store.Database().QueryRow(ctx, "SELECT "+grantInfoColumns+" FROM oidc_grants g JOIN authentication_sessions s ON s.id=g.session_id WHERE g.id=$1", id))
 }
 
 func ListGrants(ctx context.Context, store *identity.Store, filter GrantFilter) (identity.Page[GrantInfo], error) {
@@ -93,7 +93,7 @@ func ListGrants(ctx context.Context, store *identity.Store, filter GrantFilter) 
 	if filter.Limit < 1 || filter.Limit > 100 || filter.After != "" && !validTokenID(filter.After) || filter.Subject != "" && !identity.ValidID(filter.Subject, identity.MemberKind) && !identity.ValidID(filter.Subject, identity.FactorKind) {
 		return result, identity.ErrInvalid
 	}
-	rows, err := store.Database().Query(ctx, "SELECT "+grantInfoColumns+` FROM oidc_grants g JOIN oidc_sessions s ON s.id=g.session_id
+	rows, err := store.Database().Query(ctx, "SELECT "+grantInfoColumns+` FROM oidc_grants g JOIN authentication_sessions s ON s.id=g.session_id
         WHERE ($1='' OR g.client_id=$1) AND ($2='' OR COALESCE(NULLIF(g.data->>'memberId',''),g.data->>'factorId')=$2)
         AND g.id>$3 ORDER BY g.id LIMIT $4`, filter.ClientID, filter.Subject, filter.After, filter.Limit+1)
 	if err != nil {
@@ -125,7 +125,7 @@ func RevokeGrant(ctx context.Context, store *identity.Store, id string, events *
 	event := authevent.Event{RequestID: authevent.FromContext(ctx).RequestID}
 	err := pgx.BeginFunc(ctx, store.Database(), func(tx pgx.Tx) error {
 		var err error
-		result, err = readGrantInfo(tx.QueryRow(ctx, "SELECT "+grantInfoColumns+" FROM oidc_grants g JOIN oidc_sessions s ON s.id=g.session_id WHERE g.id=$1 FOR UPDATE OF g", id))
+		result, err = readGrantInfo(tx.QueryRow(ctx, "SELECT "+grantInfoColumns+" FROM oidc_grants g JOIN authentication_sessions s ON s.id=g.session_id WHERE g.id=$1 FOR UPDATE OF g", id))
 		if err != nil || result.RevokedAt != nil {
 			return err
 		}

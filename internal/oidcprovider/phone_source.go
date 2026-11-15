@@ -68,6 +68,10 @@ func (service *Service) loginEvent(request *authorizationRequest) authevent.Even
 	// Only an operator-registered organization restriction owns this shared phone
 	// workflow. A phone number or an arbitrary organization hint establishes none.
 	event := authevent.Event{InteractionID: request.InteractionID, ClientID: request.ClientID, Purpose: "login"}
+	if request.SAML != nil {
+		event.OrganizationID = request.SAML.OrganizationID
+		return event
+	}
 	if registered, err := service.storage.client(request.ClientID); err == nil {
 		event.OrganizationID = registered.registration.OrganizationID
 	}

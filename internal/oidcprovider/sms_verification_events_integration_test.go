@@ -32,10 +32,10 @@ func TestSMSVerificationEventBoundaries(t *testing.T) {
 			case "expired code":
 				sql = "UPDATE phone_challenges SET expires_at=now()-interval '1 second'"
 			case "rollback":
-				sql = "ALTER TABLE oidc_authorization_requests ADD CONSTRAINT event_request_failure CHECK(false) NOT VALID"
+				sql = "ALTER TABLE authentication_requests ADD CONSTRAINT event_request_failure CHECK(false) NOT VALID"
 			case "commit failed":
 				sql = `CREATE FUNCTION event_commit_failure() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'synthetic commit failure'; END $$;
-    CREATE CONSTRAINT TRIGGER event_commit_failure AFTER INSERT ON oidc_sessions DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION event_commit_failure()`
+    CREATE CONSTRAINT TRIGGER event_commit_failure AFTER INSERT ON authentication_sessions DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION event_commit_failure()`
 			case "audit failed":
 				sql = "ALTER TABLE authentication_events ADD CONSTRAINT event_audit_failure CHECK(false) NOT VALID"
 			}
@@ -77,7 +77,7 @@ func TestSMSVerificationEventBoundaries(t *testing.T) {
 				}
 				if success {
 					var factorID string
-					if err := f.store.Database().QueryRow(t.Context(), "SELECT verification->'factor'->>'id' FROM oidc_sessions WHERE id=$1", event.SessionID).Scan(&factorID); err != nil || factorID != event.FactorID || event.Actor.Kind != "factor" || event.Actor.ID != factorID {
+					if err := f.store.Database().QueryRow(t.Context(), "SELECT verification->'factor'->>'id' FROM authentication_sessions WHERE id=$1", event.SessionID).Scan(&factorID); err != nil || factorID != event.FactorID || event.Actor.Kind != "factor" || event.Actor.ID != factorID {
 						t.Fatal("invented successful identity", err, event)
 					}
 				} else if event.FactorID != "" || event.SessionID != "" || event.Actor.Kind != "" {
@@ -85,7 +85,7 @@ func TestSMSVerificationEventBoundaries(t *testing.T) {
 				}
 			}
 			var sessions, factors, consumed int
-			if err := f.store.Database().QueryRow(t.Context(), "SELECT (SELECT count(*) FROM oidc_sessions),(SELECT count(*) FROM authentication_factors WHERE subject='+8619900000003'),(SELECT count(*) FROM phone_challenges WHERE consumed_at IS NOT NULL)").Scan(&sessions, &factors, &consumed); err != nil {
+			if err := f.store.Database().QueryRow(t.Context(), "SELECT (SELECT count(*) FROM authentication_sessions),(SELECT count(*) FROM authentication_factors WHERE subject='+8619900000003'),(SELECT count(*) FROM phone_challenges WHERE consumed_at IS NOT NULL)").Scan(&sessions, &factors, &consumed); err != nil {
 				t.Fatal(err)
 			}
 			want := 0
