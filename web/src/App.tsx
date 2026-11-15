@@ -60,7 +60,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import {
-  DirectoryToolbar,
   DirectoryFooter,
   DirectoryResults,
   DirectoryState,
@@ -933,82 +932,64 @@ export default function App() {
         ) : (
           <>
             {data.organizations && (
-              <section className="directory" aria-label="组织列表">
-                {providers && <DirectoryToolbar title="选择组织" />}
-                <DirectoryResults
-                  count={data.organizations.items.length}
-                  empty={
-                    after ? undefined : (
-                      <DirectoryState
-                        kind="empty"
-                        title="暂无组织"
-                        action={
-                          showCreateOrganization && (
-                            <Button onClick={() => create(true)}>
-                              <Plus data-icon="inline-start" />
-                              新建组织
-                            </Button>
-                          )
-                        }
-                      />
-                    )
-                  }
-                >
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>组织</TableHead>
-                        <TableHead>状态</TableHead>
-                        <TableHead>
-                          <span className="sr-only">操作</span>
-                        </TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {data.organizations.items.map((o) => (
-                        <TableRow key={o.id}>
-                          <TableCell>
-                            <RecordIdentity
-                              name={o.name}
-                              icon={<Building2 />}
-                              href={routeURL({ view: activeView, org: o.id })}
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <div className="cell-status">
-                              <Status active={o.status === "enabled"} />
-                              {o.id === "org_system" && (
-                                <Badge variant="outline">系统</Badge>
-                              )}
-                            </div>
-                          </TableCell>
-                          <TableCell className="row-actions">
-                            <Button
-                              variant="ghost"
-                              aria-label={
-                                providers
-                                  ? `管理 ${o.name} 的身份提供商`
-                                  : `管理 ${o.name}`
-                              }
-                              render={
+              <section aria-label="组织列表">
+                <div className="overflow-hidden rounded-md border">
+                  <DirectoryResults
+                    count={data.organizations.items.length}
+                    empty={
+                      after ? undefined : (
+                        <DirectoryState
+                          kind="empty"
+                          title="暂无组织"
+                          action={
+                            showCreateOrganization && (
+                              <Button onClick={() => create(true)}>
+                                <Plus data-icon="inline-start" />
+                                新建组织
+                              </Button>
+                            )
+                          }
+                        />
+                      )
+                    }
+                  >
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>组织</TableHead>
+                          <TableHead>状态</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {data.organizations.items.map((o) => (
+                          <TableRow key={o.id}>
+                            <TableCell>
+                              <div className="flex items-center gap-2">
                                 <Link
+                                  className="block max-w-64 truncate font-medium hover:underline"
+                                  title={o.name}
                                   href={routeURL({
                                     view: activeView,
                                     org: o.id,
                                   })}
-                                />
-                              }
-                              nativeButton={false}
-                            >
-                              <ChevronRight />
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </DirectoryResults>
-                <Pager
+                                >
+                                  {o.name}
+                                </Link>
+                                {o.id === "org_system" && (
+                                  <Badge variant="outline">系统</Badge>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              {o.status === "enabled" ? "已启用" : "已停用"}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </DirectoryResults>
+                </div>
+                <OrganizationPagination
                   count={data.organizations.items.length}
                   after={after}
                   next={data.organizations.nextAfter}
@@ -1851,7 +1832,7 @@ function MemberPagination({
   )
 }
 
-function Pager({
+function OrganizationPagination({
   count,
   after,
   next,
@@ -1863,18 +1844,14 @@ function Pager({
   route: Route
 }) {
   if (!count && !after) return null
-  if (!count)
-    return (
-      <DirectoryFooter count={0} message="没有更多记录">
-        <Button variant="outline" onClick={() => navigate(route)}>
-          返回第一页
-        </Button>
-      </DirectoryFooter>
-    )
   return (
-    <DirectoryFooter count={count}>
+    <div className="flex items-center justify-end gap-2 py-4">
+      <div className="flex-1 text-sm text-muted-foreground">
+        {count ? `本页 ${count} 个组织` : "没有更多组织"}
+      </div>
       <Button
         variant="outline"
+        size="sm"
         disabled={!after}
         onClick={() => navigate(route)}
       >
@@ -1882,13 +1859,13 @@ function Pager({
       </Button>
       <Button
         variant="outline"
+        size="sm"
         disabled={!next}
         onClick={() => next && navigate({ ...route, after: next })}
       >
         下一页
-        <ChevronRight data-icon="inline-end" />
       </Button>
-    </DirectoryFooter>
+    </div>
   )
 }
 function ActionDialog({
