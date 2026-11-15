@@ -28,13 +28,14 @@ type Service struct {
 	protocol      *op.Provider
 	storage       *storage
 	now           func() time.Time
+	passwordWork  chan struct{}
 }
 
 type browserKey struct{}
 
 func New(configuration *config.Loaded, store *identity.Store, phone *identity.PhoneVerifier, dingtalk *identity.DingTalkVerifier, directory *identity.DingTalkDirectory, feishu *identity.FeishuApplications) (*Service, error) {
-	if configuration == nil || store == nil || dingtalk != nil && directory == nil || phone == nil && dingtalk == nil && feishu == nil || configuration.SigningKey == nil || len(configuration.PublicKeys) == 0 {
-		return nil, errors.New("OIDC requires a configured store, signing key, and enabled authentication provider")
+	if configuration == nil || store == nil || dingtalk != nil && directory == nil || configuration.SigningKey == nil || len(configuration.PublicKeys) == 0 {
+		return nil, errors.New("OIDC requires a configured store and signing keys")
 	}
 	if err := configuration.Installation.Validate(); err != nil {
 		return nil, err
@@ -45,7 +46,7 @@ func New(configuration *config.Loaded, store *identity.Store, phone *identity.Ph
 	if err := config.ValidateClients(configuration.Clients, configuration.AllowLoopbackHTTP); err != nil {
 		return nil, err
 	}
-	service := &Service{configuration: configuration, store: store, phone: phone, dingtalk: dingtalk, feishu: feishu, directory: directory, now: time.Now}
+	service := &Service{configuration: configuration, store: store, phone: phone, dingtalk: dingtalk, feishu: feishu, directory: directory, now: time.Now, passwordWork: make(chan struct{}, 4)}
 	service.storage = &storage{service: service}
 	var key [32]byte
 	decoded, _ := base64.StdEncoding.DecodeString(configuration.Secrets.ProtocolKey)
@@ -269,7 +270,7 @@ func (service *Service) rejectAuthorization(w http.ResponseWriter, r *http.Reque
 }
 
 func (service *Service) Cleanup(ctx context.Context) error {
-	for _, table := range []string{"account_link_requests", "oidc_access_tokens", "oidc_authorization_requests", "oidc_grants"} {
+	for _, table := range []string{"account_link_requests", "oidc_access_tokens", "oidc_authorization_requests", "oidc_grants", "password_attempt_windows"} {
 		if _, err := service.store.Database().Exec(ctx, "DELETE FROM "+table+" WHERE expires_at<$1", service.now()); err != nil {
 			return err
 		}

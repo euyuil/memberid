@@ -158,6 +158,9 @@ func (service *Service) login(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		switch r.PostForm.Get("action") {
+		case "password":
+			service.passwordLogin(w, r, request, registered)
+			return
 		case "choose-organization":
 			if request.Verification != nil || request.phonePending() || request.externalPending() ||
 				registered.registration.SubjectKind != "member" || registered.registration.OrganizationID != "" {

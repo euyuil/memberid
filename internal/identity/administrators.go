@@ -114,6 +114,9 @@ func (store *Store) setAdministrator(ctx context.Context, principal Principal, o
 				return ErrIneligible
 			}
 			_, err = tx.Exec(ctx, "INSERT INTO administrators(organization_id,member_id) VALUES($1,$2) ON CONFLICT DO NOTHING", organizationID, memberID)
+			if err == nil && organizationID == SystemOrganizationID {
+				err = closeSetup(ctx, tx, nil)
+			}
 		} else {
 			_, err = tx.Exec(ctx, "DELETE FROM administrators WHERE member_id=$1 AND organization_id=$2", memberID, organizationID)
 		}

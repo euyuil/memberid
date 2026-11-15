@@ -26,7 +26,9 @@ func (service *Service) recordVerification(r *http.Request, event authevent.Even
 			event.ReasonCode = "providerUnavailable"
 		case errors.Is(err, errCallbackCanceled):
 			event.Outcome, event.ReasonCode = "rejected", "canceled"
-		case errors.Is(err, identity.ErrPhoneChallenge), errors.Is(err, errCallbackRejected), errors.Is(err, pgx.ErrNoRows):
+		case errors.Is(err, identity.ErrRateLimited):
+			event.Outcome, event.ReasonCode = "rejected", "rateLimited"
+		case errors.Is(err, identity.ErrPhoneChallenge), errors.Is(err, identity.ErrPasswordCredential), errors.Is(err, errCallbackRejected), errors.Is(err, pgx.ErrNoRows):
 			event.Outcome, event.ReasonCode = "rejected", "invalidCredential"
 		case errors.Is(err, identity.ErrIneligible), errors.Is(err, identity.ErrForbidden), errors.Is(err, identity.ErrConflict):
 			event.Outcome, event.ReasonCode = "rejected", "ineligible"

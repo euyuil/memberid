@@ -7,13 +7,25 @@
 :root{font-family:system-ui,sans-serif;color:#172a34;background:#f3f6f7;color-scheme:light}
 *{box-sizing:border-box}body{margin:0;padding:2rem 1rem}main{max-width:30rem;margin:auto;background:white;border:1px solid #d8e2e6;border-radius:1rem;padding:1.5rem}
 h1{margin:0 0 .5rem;font-size:1.6rem}p{line-height:1.5}label{display:block;margin:.7rem 0 .3rem}input,select,button{font:inherit;min-height:2.75rem;border:1px solid #9aadb7;border-radius:.4rem;padding:.5rem .7rem;width:100%}button{background:#17566b;color:white;border-color:#17566b;cursor:pointer;margin:.6rem 0}button:disabled{background:#dce5e9;border-color:#dce5e9;color:#586b75;cursor:default}input:disabled,select:disabled{background:#f1f4f5}input[readonly]{background:#f1f4f5}.secondary{background:white;color:#17566b}.feedback{min-height:6rem;overflow-wrap:anywhere;color:#304d5c;font-size:.95rem;margin:.6rem 0}.consent{min-height:3.5rem;display:flex;gap:.5rem;align-items:flex-start;line-height:1.5}.consent input{width:1.1rem;min-height:1.1rem;margin:.2rem 0}small{color:#4c626d;overflow-wrap:anywhere}.section{border-top:1px solid #e1e7ea;padding-top:.6rem;margin-top:.6rem}a{color:#17566b}
+.password-login .feedback{min-height:2.5rem;margin:.5rem 0}
 </style>
 </head>
-<body><main>
+<body><main{{if .PasswordEnabled}} class="password-login"{{end}}>
 <h1>MemberID</h1>
 <p>Sign in to <strong>{{.ClientID}}</strong>.</p>
-<small>Requested identity information: {{.Scopes}}</small>
+{{if .ConsentRequired}}<small>Requested identity information: {{.Scopes}}</small>{{end}}
 <div class="feedback" role="status" aria-live="polite">{{.Message}}</div>
+{{if and .PasswordEnabled (not .Verified)}}
+<form method="post" action="/login" {{if or .PhoneEnabled .ProviderEnabled}}class="section"{{end}}>
+<input type="hidden" name="request" value="{{.Request.ID}}"><input type="hidden" name="csrf" value="{{.Request.CSRF}}">
+{{if not .OrganizationRestricted}}
+<label for="password_organization">Organization ID</label><input id="password_organization" name="password_organization" autocomplete="off" pattern="org_([0-9bcdfghjkmnpqrstvwxz]{27}|system)" maxlength="31" value="{{.PasswordOrganization}}" required {{if .Pending}}readonly{{end}}>
+{{end}}
+<label for="username">Username</label><input id="username" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" pattern="[a-z0-9][a-z0-9._\-]{0,63}" maxlength="64" value="{{.PasswordUsername}}" required {{if .Pending}}readonly{{end}}>
+<label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" maxlength="1024" required {{if .Pending}}disabled{{else if .PasswordUsername}}autofocus{{end}}>
+<button name="action" value="password" {{if .Pending}}disabled{{end}}>Sign in with password</button>
+</form>
+{{end}}
 {{if .PhoneEnabled}}
 <form method="post" action="/login">
 <input type="hidden" name="request" value="{{.Request.ID}}"><input type="hidden" name="csrf" value="{{.Request.CSRF}}">
@@ -46,6 +58,7 @@ h1{margin:0 0 .5rem;font-size:1.6rem}p{line-height:1.5}label{display:block;margi
 {{end}}
 </div>
 {{end}}
+{{if or .PhoneEnabled .ProviderEnabled .Verified .FactorClient}}
 <form method="post" action="/login">
 <input type="hidden" name="request" value="{{.Request.ID}}"><input type="hidden" name="csrf" value="{{.Request.CSRF}}">
 <button class="secondary" name="action" value="cancel" {{if and (not .Pending) (not .Verified)}}disabled{{end}}>Cancel verification</button>
@@ -58,5 +71,6 @@ h1{margin:0 0 .5rem;font-size:1.6rem}p{line-height:1.5}label{display:block;margi
 <label class="consent"><input name="consent" type="checkbox" value="yes" {{if not .Verified}}disabled{{end}} {{if .ConsentRequired}}required{{else}}checked{{end}}>Allow this application to receive the requested identity information.</label>
 <button name="action" value="continue" {{if not .Verified}}disabled{{end}}>Continue to application</button>
 </form>
+{{end}}
 <small>Each organization has an independent Member identity.</small>
 </main></body></html>

@@ -1,7 +1,7 @@
 CREATE TABLE memberid_schema (
-    version integer PRIMARY KEY CHECK (version = 18)
+    version integer PRIMARY KEY CHECK (version = 19)
 );
-INSERT INTO memberid_schema(version) VALUES (18);
+INSERT INTO memberid_schema(version) VALUES (19);
 
 CREATE TABLE organizations (
     id text COLLATE "C" PRIMARY KEY CHECK (id = 'org_system' OR id ~ '^org_[0-9bcdfghjkmnpqrstvwxz]{27}$'),
@@ -29,7 +29,7 @@ CREATE INDEX member_directory ON members (organization_id, created_at, id);
 
 CREATE TABLE authentication_factors (
     id text COLLATE "C" PRIMARY KEY CHECK (id ~ '^af_[0-9bcdfghjkmnpqrstvwxz]{27}$'),
-    type text NOT NULL CHECK (type IN ('phone', 'dingtalk', 'feishu')),
+    type text NOT NULL CHECK (type IN ('phone', 'dingtalk', 'feishu', 'password')),
     namespace text NOT NULL CHECK (char_length(namespace) BETWEEN 1 AND 512),
     subject text NOT NULL CHECK (char_length(subject) BETWEEN 1 AND 512),
     status text NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'disabled')),
@@ -59,6 +59,32 @@ CREATE TABLE member_auth_factor_bindings (
 );
 CREATE UNIQUE INDEX member_single_factor_type ON member_auth_factor_bindings (member_id, factor_type) WHERE factor_type <> 'feishu';
 CREATE UNIQUE INDEX member_feishu_source ON member_auth_factor_bindings (member_id, provider_namespace) WHERE factor_type = 'feishu';
+
+CREATE TABLE password_credentials (
+    authentication_factor_id text COLLATE "C" PRIMARY KEY REFERENCES authentication_factors(id),
+    salt bytea NOT NULL CHECK (octet_length(salt) = 16),
+    digest bytea NOT NULL CHECK (octet_length(digest) = 32),
+    iterations integer NOT NULL CHECK (iterations BETWEEN 600000 AND 2000000)
+);
+
+CREATE TABLE password_attempt_windows (
+    account_hash bytea PRIMARY KEY CHECK (octet_length(account_hash) = 32),
+    attempts smallint NOT NULL CHECK (attempts BETWEEN 1 AND 10),
+    expires_at timestamptz NOT NULL
+);
+CREATE INDEX password_attempt_expiry ON password_attempt_windows(expires_at);
+
+CREATE TABLE installation_setup (
+    singleton boolean PRIMARY KEY CHECK (singleton),
+    closed boolean NOT NULL DEFAULT false,
+    root_member_id text COLLATE "C" REFERENCES members(id),
+    code_hash text,
+    expires_at timestamptz,
+    confirmation_hash text,
+    salt bytea CHECK (octet_length(salt) = 16),
+    digest bytea CHECK (octet_length(digest) = 32)
+);
+INSERT INTO installation_setup(singleton) VALUES (true);
 
 CREATE TABLE phone_challenges (
     id text COLLATE "C" PRIMARY KEY,

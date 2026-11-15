@@ -55,8 +55,8 @@ func (event Event) valid() bool {
 	default:
 		return false
 	}
-	if !oneOf(event.ReasonCode, "", "invalidCredential", "expiredCredential", "invalidRequest", "sendRateLimited", "providerUnavailable", "backendUnavailable", "commitUnconfirmed", "ineligible", "canceled") ||
-		!oneOf(event.Method, "", "sms", "dingtalk", "feishu") ||
+	if !oneOf(event.ReasonCode, "", "invalidCredential", "expiredCredential", "invalidRequest", "sendRateLimited", "rateLimited", "providerUnavailable", "backendUnavailable", "commitUnconfirmed", "ineligible", "canceled") ||
+		!oneOf(event.Method, "", "sms", "dingtalk", "feishu", "pwd") ||
 		!oneOf(event.Purpose, "", "login", "accountLinking") ||
 		!oneOf(event.Trigger, "", "browserLogout", "clientRevocation", "operatorRequest", "replayDetection") ||
 		!oneOf(event.Actor.Kind, "", "factor", "member", "client", "operator", "manager", "system") {

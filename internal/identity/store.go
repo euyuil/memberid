@@ -154,7 +154,7 @@ type queryer interface {
 }
 
 func ensureFactor(ctx context.Context, database queryer, kind, namespace, subject string) (Factor, error) {
-	if !validFactorType(kind) || !validText(namespace, 512) || !validText(subject, 512) {
+	if !validFactorType(kind) || kind == "password" || !validText(namespace, 512) || !validText(subject, 512) {
 		return Factor{}, ErrInvalid
 	}
 	id, err := NewID(FactorKind)
@@ -198,6 +198,8 @@ func (store *Store) BindFactor(ctx context.Context, principal Principal, organiz
 		}
 		var namespace *string
 		switch factor.Type {
+		case "password":
+			return ErrInvalid
 		case "dingtalk":
 			var configured bool
 			if err := transaction.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM dingtalk_applications WHERE organization_id=$1 AND namespace=$2)", organizationID, factor.Namespace).Scan(&configured); err != nil {

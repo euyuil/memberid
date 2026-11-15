@@ -30,7 +30,7 @@ Authorization requests using `request_uri` receive `request_uri_not_supported`, 
 
 ## Login and independent subjects
 
-The browser follows the application's authorization redirect to MemberID. MemberID binds the login transaction to an HttpOnly browser cookie and verifies login form submissions with an exact Origin and transaction-specific CSRF value. Phone verification or an enabled DingTalk or Feishu login then establishes a server-side SSO session. The user selects an explicitly bound, currently eligible Member in the organization's context. A client may be restricted to one organization.
+The browser follows the application's authorization redirect to MemberID. MemberID binds the login transaction to an HttpOnly browser cookie and verifies login form submissions with an exact Origin and transaction-specific CSRF value. Password, phone, DingTalk, or Feishu verification then establishes a server-side SSO session. A password identifies one bound Member in the supplied or client-restricted organization. Other methods may require the user to select from multiple eligible Members.
 
 The stable account key is `(iss, sub)`, where ordinary clients receive the independent Member identifier as `sub`. Two Members using the same verified phone remain two subjects. Display names and contact attributes must not be used for account matching. Missing verified email is omitted, not manufactured from a phone number or Member identifier.
 
@@ -111,7 +111,9 @@ Follow [operator setup](operations.md) to initialize a new dedicated database an
 memberid serve --directory .local/memberid --listen 127.0.0.1:8080
 ```
 
-Phone, DingTalk, and Feishu can be enabled independently. An installation using only external providers requires no SMS credentials. Omitting `--directory` starts health-only mode. File configuration and client-policy changes take effect after a restart; organization provider credentials are loaded with explicit revision checks. This initial schema is version 18; startup refuses older schemas, and no existing database is reset or migrated automatically.
+Member clients can authenticate with an [organization-scoped password](administration.md#organization-scoped-passwords) and receive `amr=["pwd"]`. The username belongs to the password credential; subject and profile claims retain their existing Member semantics. The password form is part of the browser authorization flow. Token requests continue to use the documented Authorization Code and Refresh Token grants.
+
+Phone, DingTalk, and Feishu can be enabled independently of password login. Omitting `--directory` starts health-only mode. File configuration and client-policy changes take effect after a restart; organization provider credentials are loaded with explicit revision checks. This initial schema is version 19. Startup refuses older schemas and preserves existing database contents.
 
 For the first Member, create its organization and Member through the operator CLI, then let the person verify their phone in an application login. Verification creates only the factor. An authorized operator can inspect that existing factor and explicitly bind it:
 

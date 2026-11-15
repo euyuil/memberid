@@ -75,7 +75,7 @@ printf 'MEMBERID_LOCAL_AUTH_HOST=%s\nMEMBERID_LOCAL_ADMIN_HOST=%s\nMEMBERID_LOCA
 password=$(openssl rand -hex 24)
 printf 'POSTGRES_USER=memberid\nPOSTGRES_DB=memberid\nPOSTGRES_PASSWORD=%s\n' "$password" > "$state/postgres.env"
 printf 'MEMBERID_DATABASE_URL=postgres://memberid:%s@postgres:5432/memberid?sslmode=disable\n' "$password" > "$state/memberid.env"
-printf 'MEMBERID_DINGTALK_ENABLED=true\n' > "$state/auth.env"
+: > "$state/auth.env"
 
 python3 dev/tls.py issue
 

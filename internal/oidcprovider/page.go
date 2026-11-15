@@ -23,6 +23,8 @@ type pageData struct {
 	Members                                                        []memberChoice
 	Verified, Pending, PhonePending, FactorClient, ConsentRequired bool
 	PhoneEnabled, ProviderEnabled, OrganizationRestricted          bool
+	PasswordEnabled                                                bool
+	PasswordOrganization, PasswordUsername                         string
 	ProviderOrganizationID, ProviderOrganizationName               string
 	Providers                                                      []identity.Provider
 }
@@ -67,6 +69,22 @@ func (service *Service) renderLogin(w http.ResponseWriter, r *http.Request, requ
 	}
 	if !data.OrganizationRestricted {
 		data.ProviderOrganizationID = request.ProviderOrganizationID
+	}
+	if client.registration.SubjectKind == "member" {
+		data.PasswordEnabled, err = service.store.HasPasswordCredentials(r.Context(), client.registration.OrganizationID)
+		if err != nil {
+			http.Error(w, "Login temporarily unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		if request.Input.LoginHint == identity.RootUsername+"@"+identity.SystemOrganizationID && !data.OrganizationRestricted {
+			data.PasswordOrganization, data.PasswordUsername = identity.SystemOrganizationID, identity.RootUsername
+		}
+		if r.PostForm.Get("action") == "password" {
+			data.PasswordOrganization, data.PasswordUsername = r.PostForm.Get("password_organization"), r.PostForm.Get("username")
+		}
+	}
+	if !verified && !data.PhoneEnabled && !data.ProviderEnabled && !data.PasswordEnabled && data.Message == "" {
+		data.Message = "No sign-in methods have been configured."
 	}
 	if data.ProviderEnabled && data.ProviderOrganizationID != "" {
 		ctx := r.Context()

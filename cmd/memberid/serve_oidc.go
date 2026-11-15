@@ -38,9 +38,6 @@ func authenticationHandler(ctx context.Context, directory string) (http.Handler,
 	if feishuEnabled != "" && feishuEnabled != "false" && feishuEnabled != "true" {
 		return nil, nil, errors.New("MEMBERID_FEISHU_ENABLED must be true or false")
 	}
-	if sender == nil && dingTalkEnabled != "true" && feishuEnabled != "true" {
-		return nil, nil, errors.New("enable and configure at least one authentication provider before starting OIDC")
-	}
 	store, err := identity.Open(ctx, os.Getenv("MEMBERID_DATABASE_URL"))
 	if err != nil {
 		return nil, nil, err

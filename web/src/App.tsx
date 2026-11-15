@@ -122,6 +122,7 @@ const factorLabels: Partial<Record<string, string>> = {
   phone: "手机号",
   dingtalk: "钉钉",
   feishu: "飞书",
+  password: "密码",
 }
 type Page<T> = { items: T[]; nextAfter?: string }
 type Detail = {
