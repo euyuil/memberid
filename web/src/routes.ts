@@ -9,6 +9,7 @@ export type Route = {
   administrator?: string
   after?: string
   before?: string
+  provider?: string
   target?: string
 }
 
@@ -24,6 +25,8 @@ export function routeURL(route: Route): string {
   if (view === "members" && !member) {
     for (const key of ["q", "status", "administrator", "after"] as const)
       if (route[key]) query.set(key, route[key])
+  } else if (view === "providers" && org) {
+    if (route.provider) query.set("providerId", route.provider)
   } else if (view === "events") {
     if (route.target) query.set("memberId", route.target)
     if (route.before) query.set("before", route.before)

@@ -4,7 +4,9 @@ package identity
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/euyuil/memberid/internal/feishu"
@@ -77,6 +79,26 @@ func TestProviderSaveAuthorizationAfterVerification(t *testing.T) {
 			for _, event := range events {
 				if event.Action == "provider.configure" {
 					configurations++
+					var changes, previous map[string]any
+					if err := json.Unmarshal(event.Changes, &changes); err != nil {
+						t.Fatal(err)
+					}
+					if err := json.Unmarshal(event.Previous, &previous); err != nil {
+						t.Fatal(err)
+					}
+					if event.Snapshot.ActorName != local.DisplayName || event.Snapshot.OrganizationName != org.Name || event.Snapshot.TargetName != changes["displayName"] {
+						t.Fatal("provider snapshot", event)
+					}
+					if changes["created"] == false && (previous["displayName"] != created.DisplayName || previous["enabled"] != true || changes["enabled"] != false) {
+						t.Fatal("provider previous values", previous, changes)
+					}
+					if changes["created"] == true && (len(previous) != 0 || event.Snapshot.TargetName != created.DisplayName) {
+						t.Fatal("provider creation history changed", event)
+					}
+					encoded, err := json.Marshal(event)
+					if err != nil || strings.Contains(string(encoded), "synthetic-") {
+						t.Fatal("credential entered audit", err)
+					}
 				}
 			}
 			if configurations != 2 {

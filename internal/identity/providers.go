@@ -128,14 +128,20 @@ func lockProviderManagement(ctx context.Context, tx pgx.Tx, principal Principal,
 	return 0, nil
 }
 
-func finishProviderManagement(ctx context.Context, tx pgx.Tx, principal Principal, kind, organizationID, namespace, name string, enabled bool, before int) error {
+func finishProviderManagement(ctx context.Context, tx pgx.Tx, principal Principal, organizationID string, current, result Provider, credentialsUpdated bool, before int) error {
 	if principal.kind != memberPrincipal {
 		return nil
 	}
 	if err := preserveAdministrators(ctx, tx, organizationID, before); err != nil {
 		return err
 	}
+	previous := map[string]any{}
+	if current.Revision > 0 {
+		previous = map[string]any{"displayName": current.DisplayName, "enabled": current.Enabled, "authorizationStatus": current.AuthorizationStatus}
+	}
 	return managementEvent(ctx, tx, principal, organizationID, "", "provider.configure", map[string]any{
-		"providerId": namespace, "type": kind, "displayName": name, "enabled": enabled,
-	})
+		"providerId": result.ID, "type": result.Type, "displayName": result.DisplayName, "enabled": result.Enabled,
+		"created": current.Revision == 0, "credentialsUpdated": credentialsUpdated,
+		"authorizationStatus": result.AuthorizationStatus,
+	}, previous)
 }

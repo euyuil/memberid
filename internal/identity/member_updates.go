@@ -81,12 +81,16 @@ func (store *Store) UpdateMemberOnce(ctx context.Context, principal Principal, o
 		if err := authorizeAll(ctx, tx, principal, requirements...); err != nil {
 			return err
 		}
+		previous, err := managementPrevious(ctx, tx, organizationID, memberID, "member.update")
+		if err != nil {
+			return err
+		}
 		member, err := updateMember(ctx, tx, organizationID, memberID, change)
 		if err != nil {
 			return err
 		}
 		receipt = MemberUpdateReceipt{ID: updateID, OrganizationID: organizationID, MemberID: memberID, Member: member, CreatedAt: member.UpdatedAt}
-		if err := managementEvent(ctx, tx, principal, organizationID, memberID, "member.update", change); err != nil {
+		if err := managementEvent(ctx, tx, principal, organizationID, memberID, "member.update", change, previous); err != nil {
 			return err
 		}
 		response, err = json.Marshal(receipt)

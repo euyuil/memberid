@@ -275,7 +275,7 @@ func (applications *DingTalkApplications) configure(ctx context.Context, princip
 		if err != nil {
 			return err
 		}
-		return finishProviderManagement(ctx, tx, principal, "dingtalk", result.OrganizationID, result.Namespace, result.DisplayName, result.Enabled, before)
+		return finishProviderManagement(ctx, tx, principal, result.OrganizationID, current.Provider(), result.Provider(), exists && secretChanged, before)
 	})
 	return result, err
 }
