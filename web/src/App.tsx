@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState, type FormEvent } from "react"
 import {
   Building2,
   ChevronsUpDown,
@@ -21,6 +21,16 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
@@ -1888,6 +1898,71 @@ function ActionDialog({
   const [value, setValue] = useState(action.value ?? "")
   const [pending, setPending] = useState(false)
   const [error, setError] = useState("")
+  const cancelRef = useRef<HTMLButtonElement>(null)
+  async function submit(e?: FormEvent<HTMLFormElement>) {
+    e?.preventDefault()
+    if (pending) return
+    setError("")
+    if (action.field && (!value.trim() || [...value].length > 128)) {
+      setError("请检查填写内容。名称不能为空，最多 128 个字符。")
+      return
+    }
+    const submittedFrom = currentLocation()
+    setPending(true)
+    try {
+      const result = await request<{ id?: string }>(action.path, {
+        method: action.method,
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": csrf,
+        },
+        body: JSON.stringify(
+          action.field ? { [action.field]: value } : action.body
+        ),
+      })
+      onComplete(result.id, submittedFrom)
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setPending(false)
+    }
+  }
+  if (!action.field) {
+    return (
+      <AlertDialog
+        open
+        onOpenChange={(open) => {
+          if (!open && !pending) onClose()
+        }}
+      >
+        <AlertDialogContent initialFocus={cancelRef}>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{action.title}</AlertDialogTitle>
+            {action.description && (
+              <AlertDialogDescription>
+                {action.description}
+              </AlertDialogDescription>
+            )}
+          </AlertDialogHeader>
+          <div className="form-feedback" role="alert">
+            {error}
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel ref={cancelRef} disabled={pending}>
+              取消
+            </AlertDialogCancel>
+            <AlertDialogAction
+              variant={action.destructive ? "destructive" : "default"}
+              disabled={pending}
+              onClick={() => void submit()}
+            >
+              {pending ? "正在保存…" : action.title}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    )
+  }
   return (
     <Dialog
       open
@@ -1902,35 +1977,7 @@ function ActionDialog({
             <DialogDescription>{action.description}</DialogDescription>
           )}
         </DialogHeader>
-        <form
-          onSubmit={async (e) => {
-            e.preventDefault()
-            setError("")
-            if (action.field && (!value.trim() || [...value].length > 128)) {
-              setError("请检查填写内容。名称不能为空，最多 128 个字符。")
-              return
-            }
-            const submittedFrom = currentLocation()
-            setPending(true)
-            try {
-              const result = await request<{ id?: string }>(action.path, {
-                method: action.method,
-                headers: {
-                  "Content-Type": "application/json",
-                  "X-CSRF-Token": csrf,
-                },
-                body: JSON.stringify(
-                  action.field ? { [action.field]: value } : action.body
-                ),
-              })
-              onComplete(result.id, submittedFrom)
-            } catch (err) {
-              setError((err as Error).message)
-            } finally {
-              setPending(false)
-            }
-          }}
-        >
+        <form onSubmit={submit}>
           <FieldGroup>
             {action.field && (
               <Field data-invalid={!!error}>
