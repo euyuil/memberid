@@ -19,7 +19,7 @@ func TestConsolePageRequests(t *testing.T) {
 	registerPages(routes, fstest.MapFS{
 		"index.html":    {Data: []byte("<html>Console</html>")},
 		"assets/app.js": {Data: []byte("console.log('asset')")},
-	}, nil)
+	})
 	for _, path := range []string{
 		"/", "/organizations", "/members?q=Alice&status=active", "/providers", "/events?before=42",
 		"/organizations/org_example", "/organizations/org_example/members?after=mbr_cursor",

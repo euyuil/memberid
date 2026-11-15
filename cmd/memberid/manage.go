@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 
+	"github.com/euyuil/memberid/internal/config"
 	"github.com/euyuil/memberid/internal/identity"
 )
 
@@ -26,7 +27,7 @@ func manage(ctx context.Context, args []string, stdout, stderr io.Writer) error 
 		return errors.New("MEMBERID_DATABASE_URL is required")
 	}
 	if args[0] == "database" {
-		if (args[1] != "init" && args[1] != "check") || len(args) != 2 {
+		if args[1] != "init" && args[1] != "check" || args[1] == "check" && len(args) != 2 {
 			return errors.New("usage: memberid database <init|check>")
 		}
 		if args[1] == "check" {
@@ -37,7 +38,29 @@ func manage(ctx context.Context, args []string, stdout, stderr io.Writer) error 
 			defer store.Close()
 			return json.NewEncoder(stdout).Encode(map[string]bool{"compatible": true})
 		}
-		if err := identity.Initialize(ctx, databaseURL); err != nil {
+		initialization := flag.NewFlagSet("database init", flag.ContinueOnError)
+		initialization.SetOutput(stderr)
+		passwordFile := initialization.String("initial-root-password-file", "", "new password file inside a protected directory")
+		if err := initialization.Parse(args[2:]); err != nil {
+			return err
+		}
+		if initialization.NArg() != 0 || initialization.NFlag() != 0 && *passwordFile == "" {
+			return errors.New("usage: memberid database init [--initial-root-password-file FILE]")
+		}
+		var err error
+		if *passwordFile == "" {
+			err = identity.Initialize(ctx, databaseURL)
+		} else {
+			if _, err := os.Lstat(*passwordFile); err == nil {
+				return &os.PathError{Op: "create", Path: *passwordFile, Err: os.ErrExist}
+			} else if !errors.Is(err, os.ErrNotExist) {
+				return err
+			}
+			err = identity.InitializeWithRoot(ctx, databaseURL, func(password string) error {
+				return config.WriteExclusive(*passwordFile, []byte(password+"\n"))
+			})
+		}
+		if err != nil {
 			return err
 		}
 		return json.NewEncoder(stdout).Encode(map[string]bool{"initialized": true})

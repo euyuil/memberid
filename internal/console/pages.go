@@ -12,14 +12,11 @@ var pagePath = regexp.MustCompile(`^/(organizations(/[A-Za-z0-9_-]+(/(members(/[
 
 // Only page routes receive the application entry point. API, authentication,
 // missing assets, and unknown paths retain their own HTTP responses.
-func registerPages(routes *http.ServeMux, static fs.FS, redirect func(http.ResponseWriter, *http.Request) bool) {
+func registerPages(routes *http.ServeMux, static fs.FS) {
 	routes.Handle("GET /assets/", http.FileServer(http.FS(static)))
 	routes.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.RawPath != "" || !pagePath.MatchString(r.URL.Path) {
 			http.NotFound(w, r)
-			return
-		}
-		if redirect != nil && redirect(w, r) {
 			return
 		}
 		index, err := fs.ReadFile(static, "index.html")

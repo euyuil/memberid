@@ -76,9 +76,6 @@ func (service *Service) renderLogin(w http.ResponseWriter, r *http.Request, requ
 			http.Error(w, "Login temporarily unavailable", http.StatusServiceUnavailable)
 			return
 		}
-		if request.Input.LoginHint == identity.RootUsername+"@"+identity.SystemOrganizationID && !data.OrganizationRestricted {
-			data.PasswordOrganization, data.PasswordUsername = identity.SystemOrganizationID, identity.RootUsername
-		}
 		if r.PostForm.Get("action") == "password" {
 			data.PasswordOrganization, data.PasswordUsername = r.PostForm.Get("password_organization"), r.PostForm.Get("username")
 		}

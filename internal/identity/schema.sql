@@ -1,7 +1,7 @@
 CREATE TABLE memberid_schema (
-    version integer PRIMARY KEY CHECK (version = 20)
+    version integer PRIMARY KEY CHECK (version = 21)
 );
-INSERT INTO memberid_schema(version) VALUES (20);
+INSERT INTO memberid_schema(version) VALUES (21);
 
 CREATE TABLE organizations (
     id text COLLATE "C" PRIMARY KEY CHECK (id = 'org_system' OR id ~ '^org_[0-9bcdfghjkmnpqrstvwxz]{27}$'),
@@ -73,18 +73,6 @@ CREATE TABLE password_attempt_windows (
     expires_at timestamptz NOT NULL
 );
 CREATE INDEX password_attempt_expiry ON password_attempt_windows(expires_at);
-
-CREATE TABLE installation_setup (
-    singleton boolean PRIMARY KEY CHECK (singleton),
-    closed boolean NOT NULL DEFAULT false,
-    root_member_id text COLLATE "C" REFERENCES members(id),
-    code_hash text,
-    expires_at timestamptz,
-    confirmation_hash text,
-    salt bytea CHECK (octet_length(salt) = 16),
-    digest bytea CHECK (octet_length(digest) = 32)
-);
-INSERT INTO installation_setup(singleton) VALUES (true);
 
 CREATE TABLE phone_challenges (
     id text COLLATE "C" PRIMARY KEY,

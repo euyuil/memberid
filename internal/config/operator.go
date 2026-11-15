@@ -48,7 +48,7 @@ func Initialize(directory, issuer string, allowLoopback bool) error {
 		if err != nil {
 			return err
 		}
-		if err := writeExclusive(filepath.Join(directory, name), append(data, '\n')); err != nil {
+		if err := WriteExclusive(filepath.Join(directory, name), append(data, '\n')); err != nil {
 			return err
 		}
 	}
@@ -57,14 +57,16 @@ func Initialize(directory, issuer string, allowLoopback bool) error {
 		"public-keys.pem":   pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: public}),
 		"management-secret": []byte(managementSecret + "\n"),
 	} {
-		if err := writeExclusive(filepath.Join(directory, name), data); err != nil {
+		if err := WriteExclusive(filepath.Join(directory, name), data); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func writeExclusive(file string, data []byte) error {
+// WriteExclusive creates and syncs an owner-only file in a protected directory.
+// The caller must arrange the directory's access controls, including Windows ACLs.
+func WriteExclusive(file string, data []byte) error {
 	handle, err := os.OpenFile(file, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
 	if err != nil {
 		return err

@@ -69,8 +69,12 @@ func browserClient() *http.Client {
 func newFixture(t *testing.T) *fixture { t.Helper(); return newConfiguredFixture(t, false) }
 func newConfiguredFixture(t *testing.T, refreshEnabled bool) *fixture {
 	t.Helper()
+	return newFixtureWithInitializer(t, refreshEnabled, identity.Initialize)
+}
+func newFixtureWithInitializer(t *testing.T, refreshEnabled bool, initialize func(context.Context, string) error) *fixture {
+	t.Helper()
 	database := testdb.Create(t)
-	if err := identity.Initialize(t.Context(), database); err != nil {
+	if err := initialize(t.Context(), database); err != nil {
 		t.Fatal(err)
 	}
 	store, err := identity.Open(t.Context(), database)
