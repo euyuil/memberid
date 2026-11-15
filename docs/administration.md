@@ -48,6 +48,11 @@ Successful administrator changes, admission preparation, and selected organizati
 
 These events are a limited management change history, not a complete authentication/security log. Historical actions, failed attempts, and provider reconciliation are not reconstructed. Administrators can read events within their scope through the console. Configure database access, backups, and retention for private identity data; automatic retention is not implemented.
 
+The [authentication event design](authentication-events.md) separately defines
+planned authentication/lifecycle events, organization visibility, retention, and
+best-effort delivery. It is not implemented and does not change these existing
+transactional management events.
+
 ## Validation boundaries
 
 Database integration tests cover reserved-ID handling, system admission, administrator eligibility, concurrent removal, rollback, external-departure precedence, actor scope, and provider/audit lock ordering. Provider evidence is synthetic. Real SMS delivery, live DingTalk login, and deployed acceptance are separate checks.
