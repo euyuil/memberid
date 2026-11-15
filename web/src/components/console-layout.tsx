@@ -3,7 +3,6 @@ import { Menu as AccountMenu } from "@base-ui/react/menu"
 import {
   ChevronRight,
   ChevronsUpDown,
-  Fingerprint,
   LogOut,
   UserRound,
   type LucideIcon,
@@ -150,25 +149,7 @@ function ConsoleContents({
         跳到主要内容
       </a>
       <Sidebar id="console-sidebar" collapsible="icon" aria-label="管理导航">
-        <SidebarHeader>
-          <SidebarMenu>
-            <SidebarMenuItem>
-              <SidebarMenuButton
-                size="lg"
-                render={<Link href="/" />}
-                aria-label="MemberID 管理控制台"
-                onClick={() => setOpenMobile(false)}
-              >
-                <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-                  <Fingerprint aria-hidden="true" className="size-5!" />
-                </span>
-                <span className="truncate font-semibold group-data-[collapsible=icon]:hidden">
-                  MemberID
-                </span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          </SidebarMenu>
-        </SidebarHeader>
+        <SidebarHeader>{scope}</SidebarHeader>
         <SidebarContent>
           <Navigation items={navigation} />
         </SidebarContent>
@@ -268,7 +249,6 @@ function ConsoleContents({
               ))}
             </ol>
           </nav>
-          <div className="scope-control">{scope}</div>
         </header>
         <div id="console-content" className="page-content w-full" tabIndex={-1}>
           {children}
