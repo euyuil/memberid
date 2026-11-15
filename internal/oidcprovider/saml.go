@@ -88,6 +88,7 @@ func (service *Service) finishSAML(w http.ResponseWriter, r *http.Request, reque
 	var body []byte
 	var acs string
 	replayed := false
+	commitReady := false
 	err := pgx.BeginFunc(r.Context(), service.store.Database(), func(tx pgx.Tx) error {
 		// Session-before-request is also used by OIDC issuance and logout.
 		now := service.now()
@@ -96,7 +97,7 @@ func (service *Service) finishSAML(w http.ResponseWriter, r *http.Request, reque
 			var verifiedData []byte
 			var absoluteExpiry time.Time
 			if err := tx.QueryRow(r.Context(), "SELECT verification,expires_at,absolute_expires_at FROM authentication_sessions WHERE id=$1 AND revoked_at IS NULL AND expires_at>$2 AND absolute_expires_at>$2 FOR UPDATE", request.SessionID, now).Scan(&verifiedData, &auth.ExpiresAt, &absoluteExpiry); err != nil {
-				return identity.ErrIneligible
+				return accountVerificationError(err)
 			}
 			var verification identity.Verification
 			if json.Unmarshal(verifiedData, &verification) != nil || verification.Factor.ID != request.FactorID || !verification.AuthenticatedAt.Equal(request.AuthTime) {
@@ -109,7 +110,7 @@ func (service *Service) finishSAML(w http.ResponseWriter, r *http.Request, reque
 		var consumed *time.Time
 		var requestExpiry time.Time
 		if err := tx.QueryRow(r.Context(), "SELECT revision,consumed_at,expires_at FROM authentication_requests WHERE id=$1 AND protocol='saml' AND expires_at>$2 FOR UPDATE", request.ID, now).Scan(&revision, &consumed, &requestExpiry); err != nil {
-			return identity.ErrIneligible
+			return accountVerificationError(err)
 		}
 		if consumed != nil {
 			replayed = true
@@ -130,8 +131,13 @@ func (service *Service) finishSAML(w http.ResponseWriter, r *http.Request, reque
 			if request.OrganizationID != sp.OrganizationID || request.MemberID == "" {
 				return identity.ErrIneligible
 			}
-			if err := service.storage.validateDirectory(r.Context(), tx, observation, observationErr); err != nil {
-				return err
+			if observationErr != nil {
+				return observationErr
+			}
+			if observation != nil {
+				if err := observation.Validate(r.Context(), tx); err != nil {
+					return err
+				}
 			}
 			binding, err := identity.LockSAMLMemberEvidence(r.Context(), tx, sp, request.MemberID, request.FactorID)
 			if err != nil {
@@ -162,13 +168,24 @@ func (service *Service) finishSAML(w http.ResponseWriter, r *http.Request, reque
 			return err
 		}
 		_, err = tx.Exec(r.Context(), "UPDATE authentication_requests SET consumed_at=$2,revision=revision+1,data=jsonb_set(data,'{complete}','true'::jsonb) WHERE id=$1", request.ID, now)
+		commitReady = err == nil
 		return err
 	})
 	if err != nil {
 		if replayed {
 			service.samlEvent(r, request, "saml.request.reuse", "detected", "")
 		} else {
-			service.samlEvent(r, request, "saml.assertion.issue", "rejected", "ineligible")
+			event := samlEventContext(r, request)
+			event.Type = "saml.assertion.issue"
+			// Keep identity denials distinct from provider/backend failures. Use
+			// the shared commit classifier without translating through OIDC errors.
+			event = operationResult(event, err, commitReady)
+			if errors.Is(err, identity.ErrConflict) {
+				event.Outcome, event.ReasonCode = "rejected", "ineligible"
+			} else if errors.Is(err, identity.ErrProviderUnavailable) {
+				event.ReasonCode = "providerUnavailable"
+			}
+			service.events.Offer(event)
 		}
 		return err
 	}
@@ -183,7 +200,16 @@ func (service *Service) finishSAML(w http.ResponseWriter, r *http.Request, reque
 }
 
 func (service *Service) samlEvent(r *http.Request, request *authorizationRequest, kind, outcome, reason string) {
-	event := authevent.Event{Type: kind, Outcome: outcome, ReasonCode: reason, Purpose: "login", RequestID: authevent.FromContext(r.Context()).RequestID}
+	event := samlEventContext(r, request)
+	event.Type, event.Outcome, event.ReasonCode = kind, outcome, reason
+	if kind == "saml.assertion.issue" && outcome == "succeeded" && event.MemberID != "" {
+		event.Actor = authevent.Actor{Kind: "member", ID: event.MemberID}
+	}
+	service.events.Offer(event)
+}
+
+func samlEventContext(r *http.Request, request *authorizationRequest) authevent.Event {
+	event := authevent.Event{Purpose: "login", RequestID: authevent.FromContext(r.Context()).RequestID}
 	if request != nil {
 		event.InteractionID = request.InteractionID
 		event.ClientID = request.ClientID
@@ -195,6 +221,10 @@ func (service *Service) samlEvent(r *http.Request, request *authorizationRequest
 		event.FactorID = request.FactorID
 		event.BindingID = request.BindingID
 		event.SessionID = request.SessionID
+		event.Method = request.Method
+		if request.Verification != nil && (request.FactorType == "dingtalk" || request.FactorType == "feishu") {
+			event.ProviderID = request.Verification.Factor.Namespace
+		}
 	}
-	service.events.Offer(event)
+	return event
 }

@@ -20,6 +20,7 @@ import (
 type testFeishu struct {
 	revoked, wrongTenant atomic.Bool
 	calls                atomic.Int64
+	before               func()
 }
 
 func (provider *testFeishu) CheckAuthorization(_ context.Context, clientID, _ string) error {
@@ -36,6 +37,9 @@ func (provider *testFeishu) Login(_ context.Context, clientID, secret, callback,
 	}
 	if code != "synthetic-code" || len(verifier) != 43 || !strings.HasSuffix(callback, feishuCallbackPath) || len(secret) < 16 {
 		return feishu.Profile{}, feishu.ErrUnavailable
+	}
+	if provider.before != nil {
+		provider.before()
 	}
 	tenant := "example-tenant"
 	if provider.wrongTenant.Load() {

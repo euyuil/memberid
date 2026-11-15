@@ -249,7 +249,10 @@ func LockSAMLMemberEvidence(ctx context.Context, tx pgx.Tx, sp SAMLServiceProvid
 			table = "feishu_applications"
 		}
 		var enabled bool
-		if err := tx.QueryRow(ctx, "SELECT enabled AND authorization_status='active' FROM "+table+" WHERE organization_id=$1 AND namespace=$2 FOR SHARE", sp.OrganizationID, namespace).Scan(&enabled); err != nil || !enabled {
+		if err := tx.QueryRow(ctx, "SELECT enabled AND authorization_status='active' FROM "+table+" WHERE organization_id=$1 AND namespace=$2 FOR SHARE", sp.OrganizationID, namespace).Scan(&enabled); err != nil {
+			return "", storageError(err)
+		}
+		if !enabled {
 			return "", ErrIneligible
 		}
 	}
