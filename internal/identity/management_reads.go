@@ -101,7 +101,7 @@ func (store *Store) ManagementMember(ctx context.Context, principal Principal, o
 	if err != nil {
 		return ManagementMemberDetail{}, err
 	}
-	bindings, err := store.Bindings(ctx, organizationID, memberID)
+	bindings, err := store.bindings(ctx, member.OrganizationID, member.ID)
 	if err != nil {
 		return ManagementMemberDetail{}, err
 	}

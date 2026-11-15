@@ -150,14 +150,17 @@ Ordinary organization administrators can then be assigned in the console once th
 
 Login state and nonce are browser-bound and single-use, with a five-minute callback lifetime. ID Token issuer, audience, signature, expiry, nonce, and access-token hash are checked using the maintained OIDC relying-party implementation. The verified response is tied to its exact stored grant. The browser receives an opaque HttpOnly SameSite=Lax cookie, Secure with a `__Host-` name on HTTPS; it never receives OIDC bearer credentials or the client secret.
 
-Console sessions expire after 30 minutes of inactivity or eight hours after original authentication, whichever comes first. Every API request rechecks administrator assignment, Member/organization/factor/binding eligibility, and grant/SSO revocation and expiry. Mutations recheck authorization inside their transaction and require the exact configured Origin and a session-bound CSRF header. Revocation takes effect on subsequent requests; a completed earlier response is not recalled. Provider directory changes apply once verified and recorded by the existing reconciliation/stream machinery.
+Console sessions expire after 30 minutes of inactivity or eight hours after original authentication, whichever comes first. The API entry point resolves and renews the opaque console session and passes only its Member and grant references to the operation service. The service checks current administrator assignment, Member/organization/factor/binding eligibility, and grant/SSO revocation and expiry once at its authorization boundary. Reads check before response queries; mutations check inside their transaction. Provider configuration also checks before upstream verification to reject unauthorized external calls, then checks again in the save transaction. The session view and logout resolve their current administrator directly.
+
+Mutations require the exact configured Origin and a session-bound CSRF header. A lost administrator assignment or invalid source identity/grant/session returns `401 sign_in_required`; an eligible administrator without the requested permission receives `403 forbidden`. Request-shape, CSRF, and route validation can reject a request before service authorization. No authority is cached across requests. Revocation takes effect at subsequent authorization checks; a completed earlier response is not recalled. Provider directory changes apply once verified and recorded by the existing reconciliation/stream machinery.
 
 The [authorization timing and revocation design](authorization-boundaries.md)
 defines the agreed operation boundary: an already authorized short operation
 may finish after a concurrent revocation, while subsequent independent operations
 need a fresh server-side decision. It does not require permission checks before
 every internal step. The transaction checks described above are current console
-behavior; the design document introduces no runtime changes.
+behavior. See [query validation](console-query-validation.md) for the measured
+query reductions and the opt-in profiling fixture.
 
 “Sign out of console” deletes only this console session; it does not log out of MemberID SSO or downstream applications. A subsequent login can reuse eligible SSO within the original authentication limit. Existing business application sessions remain owned by those applications.
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/euyuil/memberid/internal/authorization"
@@ -13,6 +14,10 @@ import (
 var (
 	ErrForbidden         = errors.New("management access denied")
 	ErrLastAdministrator = errors.New("the last available administrator must be retained")
+	// ErrManagementSession distinguishes a lost console identity from a valid
+	// administrator lacking permission. It remains an ErrForbidden for callers
+	// that only need to know whether management access was denied.
+	ErrManagementSession = fmt.Errorf("%w: administrator session is no longer eligible", ErrForbidden)
 )
 
 // ManagementActor is the console presentation of a currently eligible administrator.
@@ -40,7 +45,7 @@ func managementActor(ctx context.Context, db queryer, memberID, grantID string) 
  AND g.data->>'memberId'=m.id AND g.data->>'factorId'=f.id
  AND g.data->>'bindingId'=b.id::text)`, memberID, grantID).Scan(&actor.MemberID, &actor.OrganizationID, &actor.DisplayName)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return actor, ErrForbidden
+		return actor, ErrManagementSession
 	}
 	actor.Platform = actor.OrganizationID == SystemOrganizationID
 	actor.GrantID = grantID

@@ -211,6 +211,12 @@ func (store *Store) Bindings(ctx context.Context, organizationID, memberID strin
 	if _, err := store.Member(ctx, organizationID, memberID); err != nil {
 		return nil, err
 	}
+	return store.bindings(ctx, organizationID, memberID)
+}
+
+// bindings reads an already resolved Member's binding collection. Callers keep
+// the distinction between a missing Member and an existing empty collection.
+func (store *Store) bindings(ctx context.Context, organizationID, memberID string) ([]Binding, error) {
 	rows, err := store.pool.Query(ctx, "SELECT "+bindingColumns+" FROM member_auth_factor_bindings WHERE organization_id=$1 AND member_id=$2 ORDER BY factor_type", organizationID, memberID)
 	if err != nil {
 		return nil, err

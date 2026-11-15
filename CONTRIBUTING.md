@@ -63,6 +63,14 @@ Run `sh scripts/test-integration.sh` with Docker and the pinned Go toolchain ava
 
 To use an already disposable test server, set `MEMBERID_TEST_DATABASE_URL` and run `go test -race -tags=integration -timeout=5m ./...`. The configured database role must be able to create and drop test databases. Each test creates a unique database and removes only that database. Do not use a production or personal working server.
 
+To measure console SQL calls and local HTTP latency, run
+`MEMBERID_TEST_QUERY_PROFILE=1 sh scripts/test-integration.sh`. This optional mode
+preloads the bundled `pg_stat_statements` extension in its disposable PostgreSQL
+container and runs only the console query profile, without the race detector.
+It does not replace the normal integration suite. See
+[console query validation](docs/console-query-validation.md) for the fixture,
+query budgets, and interpretation of the results.
+
 ## GitLab interoperability
 
 See [the GitLab guide](docs/gitlab.md) for the pinned unmodified client, packaged-provider fixture, local prerequisites, synthetic SMS boundary, and separate browser inspection. CI compiles `go test -tags=interop ./internal/interop`; an actual GitLab deployment requires the explicit package environment variable and is not part of that compile check.

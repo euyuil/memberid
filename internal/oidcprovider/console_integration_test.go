@@ -387,7 +387,7 @@ func TestConsoleRejectsOrdinaryMember(t *testing.T) {
 }
 
 func TestConsoleInvalidatesExistingSession(t *testing.T) {
-	for _, change := range []string{"administrator", "member", "organization", "grant", "sso", "console idle", "console absolute"} {
+	for _, change := range []string{"administrator", "member", "organization", "binding", "factor", "grant", "grant expiry", "sso", "sso expiry", "console idle", "console absolute"} {
 		t.Run(change, func(t *testing.T) {
 			f := newFixture(t)
 			if err := f.store.SetAdministrator(t.Context(), identity.OperatorPrincipal(), f.member.OrganizationID, f.member.ID, true); err != nil {
@@ -397,21 +397,91 @@ func TestConsoleInvalidatesExistingSession(t *testing.T) {
 			if r := consoleLogin(t, f, server, f.member.ID); r.header.Get("Location") != "/" {
 				t.Fatal(r.header)
 			}
-			consoleJSON(t, f, server, "GET", "/api/session", "", "", 200)
+			csrf := consoleJSON(t, f, server, "GET", "/api/session", "", "", 200)["csrf"].(string)
 			// Simulate an authoritative concurrent change outside this browser.
 			queries := map[string]string{
 				"administrator":    "DELETE FROM administrators",
 				"member":           "UPDATE members SET manual_block=true",
 				"organization":     "UPDATE organizations SET status='disabled' WHERE id<>'org_system'",
+				"binding":          "UPDATE member_auth_factor_bindings SET status='revoked',revoked_at=clock_timestamp()",
+				"factor":           "UPDATE authentication_factors SET status='disabled'",
 				"grant":            "UPDATE oidc_grants SET revoked_at=clock_timestamp()",
+				"grant expiry":     "UPDATE oidc_grants SET expires_at=clock_timestamp()-interval '1 second'",
 				"sso":              "UPDATE oidc_sessions SET revoked_at=clock_timestamp()",
+				"sso expiry":       "UPDATE oidc_sessions SET expires_at=clock_timestamp()-interval '1 second'",
 				"console idle":     "UPDATE console_sessions SET expires_at=clock_timestamp()-interval '1 second'",
 				"console absolute": "UPDATE console_sessions SET absolute_expires_at=clock_timestamp()-interval '1 second'",
 			}
 			if _, err := f.store.Database().Exec(t.Context(), queries[change]); err != nil {
 				t.Fatal(err)
 			}
+			base := "/api/organizations/" + f.member.OrganizationID
+			for _, path := range []string{"/api/organizations", base, base + "/members", base + "/members/" + f.member.ID, base + "/providers", "/api/members", "/api/events"} {
+				value := consoleJSON(t, f, server, "GET", path, "", "", 401)
+				if value["error"] != "sign_in_required" || len(value) != 1 {
+					t.Fatal("invalid session returned data or lost the login response", value)
+				}
+			}
+			consoleJSON(t, f, server, "PATCH", base, csrf, `{"name":"Must not change"}`, 401)
+			consoleJSON(t, f, server, "POST", base+"/members", csrf, `{"displayName":"Must not exist"}`, 401)
+			consoleJSON(t, f, server, "PUT", base+"/members/"+f.member.ID+"/administrator", csrf, `{"enabled":false}`, 401)
+			consoleJSON(t, f, server, "POST", base+"/providers/feishu", csrf, `{"displayName":"Must not exist","tenantId":"example-tenant","clientId":"cli_example","clientSecret":"synthetic-provider-secret","enabled":true}`, 401)
+			consoleJSON(t, f, server, "POST", "/api/logout", csrf, `{}`, 401)
 			consoleJSON(t, f, server, "GET", "/api/session", "", "", 401)
+			organization, err := f.store.Organization(t.Context(), f.member.OrganizationID)
+			if err != nil || organization.Name != "Example Team" {
+				t.Fatal("invalid session changed the organization", organization, err)
+			}
+			events, err := f.store.ManagementEvents(t.Context(), f.member.OrganizationID, "", 0)
+			if err != nil || len(events) != 1 || events[0].Action != "administrator.update" {
+				t.Fatal("invalid session produced a successful mutation", events, err)
+			}
 		})
+	}
+}
+
+type consoleRequestReader func([]byte) (int, error)
+
+func (read consoleRequestReader) Read(p []byte) (int, error) { return read(p) }
+
+func TestConsoleChecksAuthorityAfterSessionResolution(t *testing.T) {
+	f := newFixture(t)
+	if err := f.store.SetAdministrator(t.Context(), identity.OperatorPrincipal(), f.member.OrganizationID, f.member.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	server := consoleFixture(t, f)
+	consoleLogin(t, f, server, f.member.ID)
+	csrf := consoleJSON(t, f, server, "GET", "/api/session", "", "", 200)["csrf"].(string)
+	payload := strings.NewReader(`{"name":"Must not change"}`)
+	revoked := false
+	request := httptest.NewRequest("PATCH", server.URL+"/api/organizations/"+f.member.OrganizationID, consoleRequestReader(func(p []byte) (int, error) {
+		if !revoked {
+			// Body decoding follows cookie resolution and precedes the service
+			// transaction. Simulate a concurrent authoritative revocation here.
+			if _, err := f.store.Database().Exec(t.Context(), "DELETE FROM administrators WHERE member_id=$1", f.member.ID); err != nil {
+				t.Fatal(err)
+			}
+			revoked = true
+		}
+		return payload.Read(p)
+	}))
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Origin", server.URL)
+	request.Header.Set("X-CSRF-Token", csrf)
+	for _, cookie := range f.browser.Jar.Cookies(request.URL) {
+		request.AddCookie(cookie)
+	}
+	response := httptest.NewRecorder()
+	server.Config.Handler.ServeHTTP(response, request)
+	if !revoked || response.Code != 401 || !strings.Contains(response.Body.String(), "sign_in_required") {
+		t.Fatal("operation reused earlier authority", revoked, response.Code, response.Body.String())
+	}
+	organization, err := f.store.Organization(t.Context(), f.member.OrganizationID)
+	if err != nil || organization.Name != "Example Team" {
+		t.Fatal(organization, err)
+	}
+	events, err := f.store.ManagementEvents(t.Context(), f.member.OrganizationID, "", 0)
+	if err != nil || len(events) != 1 {
+		t.Fatal("denied mutation created an audit event", events, err)
 	}
 }

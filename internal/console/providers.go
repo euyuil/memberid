@@ -24,7 +24,7 @@ func (s *Service) registerProviderRoutes(installation *config.Loaded, dingTalkPr
 	}
 	const path = "/api/organizations/{organizationId}/providers"
 	s.routes.HandleFunc("GET "+path, func(w http.ResponseWriter, r *http.Request) {
-		items, err := s.store.ManagementProviders(r.Context(), r.Context().Value(sessionKey{}).(session).actor.Principal(), r.PathValue("organizationId"))
+		items, err := s.store.ManagementProviders(r.Context(), r.Context().Value(sessionKey{}).(session).principal(), r.PathValue("organizationId"))
 		respond(w, map[string]any{
 			"items":            items,
 			"feishuCallback":   installation.Issuer + "/login/feishu/callback",
@@ -36,8 +36,8 @@ func (s *Service) registerProviderRoutes(installation *config.Loaded, dingTalkPr
 		if !management.DecodeRequest(w, r, &input) {
 			return
 		}
-		actor := r.Context().Value(sessionKey{}).(session).actor
-		item, err := identity.ConfigureProvider(r.Context(), actor.Principal(), r.PathValue("organizationId"), r.PathValue("kind"), r.PathValue("providerId"), input, dingTalk, feishuApps)
+		v := r.Context().Value(sessionKey{}).(session)
+		item, err := identity.ConfigureProvider(r.Context(), v.principal(), r.PathValue("organizationId"), r.PathValue("kind"), r.PathValue("providerId"), input, dingTalk, feishuApps)
 		respond(w, item, err)
 	}
 	s.routes.HandleFunc("POST "+path+"/{kind}", configure)

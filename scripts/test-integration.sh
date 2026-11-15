@@ -15,9 +15,13 @@ cleanup() {
   fi
 }
 trap cleanup EXIT HUP INT TERM
+set --
+if [ "${MEMBERID_TEST_QUERY_PROFILE:-}" = 1 ]; then
+  set -- -c shared_preload_libraries=pg_stat_statements
+fi
 docker run --detach --name "$owner" --label "memberid.integration=$owner" \
   --tmpfs /var/lib/postgresql --publish 127.0.0.1::5432 \
-  --env POSTGRES_HOST_AUTH_METHOD=trust "$image" >/dev/null
+  --env POSTGRES_HOST_AUTH_METHOD=trust "$image" "$@" >/dev/null
 created=1
 attempt=0
 until docker exec "$owner" pg_isready --username postgres >/dev/null 2>&1; do
@@ -28,4 +32,8 @@ done
 binding=$(docker port "$owner" 5432/tcp)
 port=${binding##*:}
 export MEMBERID_TEST_DATABASE_URL="postgres://postgres@127.0.0.1:$port/postgres?sslmode=disable"
-go test -race -tags=integration -timeout=5m ./...
+if [ "${MEMBERID_TEST_QUERY_PROFILE:-}" = 1 ]; then
+  go test -tags=integration -timeout=5m -run '^TestConsoleQueryProfile$' -count=1 -v ./internal/oidcprovider
+else
+  go test -race -tags=integration -timeout=5m ./...
+fi

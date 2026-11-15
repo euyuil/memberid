@@ -23,8 +23,9 @@ func TestUntrustedPrincipalsCannotUseInstallationMutations(t *testing.T) {
 	}
 	principals := map[string]Principal{
 		"empty": {}, "HTTP fields": decoded,
-		"Account Member": AccountPrincipal("synthetic-session", memberID, factorID, "00000000-0000-4000-8000-000000000001"),
-		"Member":         (ManagementActor{MemberID: memberID, GrantID: "synthetic-grant", Platform: true}).Principal(),
+		"Account Member":     AccountPrincipal("synthetic-session", memberID, factorID, "00000000-0000-4000-8000-000000000001"),
+		"Member":             (ManagementActor{MemberID: memberID, GrantID: "synthetic-grant", Platform: true}).Principal(),
+		"Console references": ManagementPrincipal(memberID, "synthetic-grant"),
 	}
 	// No database is needed: installation-only entry points must reject these
 	// identities before performing any persistence or provider work.

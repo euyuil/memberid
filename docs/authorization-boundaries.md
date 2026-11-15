@@ -160,10 +160,13 @@ invariants.
   Refresh Tokens remain opaque credentials. No claim, issuer, subject,
   audience, or token-lifetime change is introduced here.
 - The console authenticates through OIDC and gives the browser an opaque
-  server-side session cookie. It currently rechecks administrator assignments,
-  identity eligibility, and grant/session validity on API requests, and checks
-  mutation authorization inside database transactions. This is an existing
-  implementation choice, not a new requirement to check every internal step.
+  server-side session cookie. Request entry resolves the cookie to Member/grant
+  references. Resource services read current administrator assignments, identity
+  eligibility, and grant/session validity at the operation boundary, before read
+  response queries or inside mutation transactions. They do not repeat that read
+  at request entry or cache it across requests. Provider configuration retains
+  both its early admission check and its authoritative save check after upstream
+  verification. The session view and logout also check current authority.
 - The private management API retains its installation-wide credential and
   `installation-manager` principal. Trusted operator entry points retain their
   separate access contract; they do not acquire Member roles or begin accepting

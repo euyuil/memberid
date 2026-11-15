@@ -20,10 +20,17 @@ type Principal struct {
 // Principal retains the authenticated identity reference. Authorization resolves
 // current membership, grant, session, and assignments from server-side state.
 func (actor ManagementActor) Principal() Principal {
-	if !ValidID(actor.MemberID, MemberKind) || actor.GrantID == "" {
+	return ManagementPrincipal(actor.MemberID, actor.GrantID)
+}
+
+// ManagementPrincipal retains references from an authenticated console session.
+// Construction grants no authority: operation services resolve current identity,
+// grant/session validity, and administrator assignments at their check point.
+func ManagementPrincipal(memberID, grantID string) Principal {
+	if !ValidID(memberID, MemberKind) || grantID == "" {
 		return Principal{}
 	}
-	return Principal{kind: memberPrincipal, memberID: actor.MemberID, grantID: actor.GrantID}
+	return Principal{kind: memberPrincipal, memberID: memberID, grantID: grantID}
 }
 
 // AccountPrincipal retains references from an authenticated SSO session and its

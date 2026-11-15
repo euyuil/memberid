@@ -35,6 +35,21 @@ func TestManagementReadServicesEnforceScope(t *testing.T) {
 	if err != nil || detail.Member.ID != local.ID || len(detail.Bindings) != 1 || len(detail.AdministratorIDs) != 1 {
 		t.Fatal(detail, err)
 	}
+	empty, err := s.ManagementMember(t.Context(), principal, org.ID, target.ID)
+	if err != nil || empty.Member.ID != target.ID || len(empty.Bindings) != 0 {
+		t.Fatal("Member without bindings was not readable", empty, err)
+	}
+	missingID, err := NewID(MemberKind)
+	if err != nil {
+		t.Fatal(err)
+	}
+	missing, err := s.ManagementMember(t.Context(), principal, org.ID, missingID)
+	if !errors.Is(err, ErrNotFound) || missing.Member.ID != "" {
+		t.Fatal("missing Member became an empty binding collection", missing, err)
+	}
+	if _, err := s.Bindings(t.Context(), org.ID, missingID); !errors.Is(err, ErrNotFound) {
+		t.Fatal("raw bindings lost its existence check", err)
+	}
 	rejected, err := s.ManagementMember(t.Context(), principal, org.ID, otherTarget.ID)
 	if !errors.Is(err, ErrNotFound) || rejected.Member.ID != "" || len(rejected.AdministratorIDs) != 0 {
 		t.Fatal("forged member ownership", rejected, err)
