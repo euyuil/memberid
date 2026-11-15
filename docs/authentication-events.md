@@ -4,7 +4,7 @@ This document records the agreed design for MemberID authentication events:
 event meaning, correlation, organization visibility, retention, and delivery
 failure behavior. **The store, bounded writer, retention cleanup, `sms.send`,
 supported-method `authentication.verify`, initial grant issuance, confirmed OIDC
-reuse, explicit session/grant revocation producers, authorized queries, and console views are
+reuse, SAML request/issuance events, explicit session/grant revocation producers, authorized queries, and console views are
 implemented.**
 Authentication policy and token claims are unchanged.
 
@@ -18,7 +18,7 @@ and [account linking](account-linking.md) describe current business behavior.
 
 Events explain what happened, which verified identity or target was involved,
 why an operation reached its result, and what subsequent action was taken.
-They cover MemberID authentication and its OIDC session/grant lifecycle.
+They cover shared MemberID authentication, SAML assertion issuance, and the OIDC session/grant lifecycle.
 Consuming applications retain their own business authorization and audit logs.
 
 Business state is authoritative. Authentication events are best-effort evidence:
@@ -40,6 +40,9 @@ authorization actions and need not use CRUD verbs.
 | `oidc.grant.issue` | `succeeded`, `rejected`, `failed` | Initial application grant establishment completed or was refused/failed at its issuance boundary. Success follows the committed grant and token records at code redemption, not merely code issuance or successful factor verification. |
 | `oidc.authorizationCode.reuse` | `detected` | Protocol validation recognized reuse of a legitimate authorization code. Arbitrary invalid codes and wrong-client/PKCE attempts are not automatically classified as confirmed reuse. |
 | `oidc.refreshToken.reuse` | `detected` | Protocol validation recognized reuse of a consumed Refresh Token. This does not identify which presenter is legitimate or prove malicious intent. |
+| `saml.request` | `succeeded`, `rejected`, `failed` | A validated SP request was reserved, rejected during parsing, or could not be reserved. Success does not establish Member authentication or issue an assertion. |
+| `saml.request.reuse` | `detected` | Durable request reservation or completion recognized a previously reserved/consumed SAML request. This does not identify the presenter as its Member. |
+| `saml.assertion.issue` | `succeeded`, `rejected`, `failed` | A signed assertion and request consumption committed, a protocol/eligibility rule refused issuance, or an operational failure prevented confirmation. A committed signed error response has outcome `rejected` and contains no assertion. Success does not prove receipt or creation of an SP session. |
 | `session.revoke` | `succeeded`, `rejected`, `failed` | A session revocation committed, was denied, or could not be confirmed. Include the trigger, such as browser logout, without claiming that downstream applications erased their own sessions. |
 | `grant.revoke` | `succeeded`, `rejected`, `failed` | A grant revocation committed, was denied, or could not be confirmed. Distinguish an operator request, client revocation, session logout, and replay handling. |
 
@@ -60,6 +63,13 @@ Reasons use stable codes such as `invalidCredential`, `expiredCredential`,
 `commitUnconfirmed`. Do not copy database errors, provider payloads, or submitted
 credentials into `reasonCode`. The server classifies the result; the caller
 cannot supply the event type, actor, or outcome.
+
+SAML issuance uses `ineligible` for current identity/session/SP denials,
+`providerUnavailable` for an upstream availability failure, and
+`backendUnavailable` for database or other issuance failures. A transport failure
+while committing uses `commitUnconfirmed`; it does not claim rollback or emit a
+success response. Authentication event delivery remains independent of the
+business transaction, so an audit-write failure cannot undo successful issuance.
 
 Normal refresh success, every UserInfo/introspection call, arbitrary HTTP traffic,
 new provider-directory events, and new account-management features are outside
@@ -93,6 +103,14 @@ Capture this bounded envelope at the business boundary. A later writer must not
 reconstruct the actor or organization by looking up whatever bindings exist at
 delivery time. Unknown references remain absent. Stored events are immutable;
 they are not enriched later to assert identities that were unknown at the time.
+
+For SAML, `clientId` identifies the registered SP, and `grantId` remains absent:
+no OIDC grant is created. Issuance carries the established method, internal
+DingTalk/Feishu provider ID where applicable, and available Member, factor,
+binding, session, and interaction references. Only successful assertion issuance
+attributes the actor to the selected, revalidated Member. Session reuse does not
+invent a fresh authentication event. NameIDs, request XML, assertions, RelayState,
+credentials, and raw provider/database diagnostics are never event content.
 
 One phone login might produce the following sequence. The identifiers here are
 symbolic labels, not literal MemberID identifiers:

@@ -620,6 +620,60 @@ test(
       assert.match(lastFailure, /signature/i);
       assert.equal((await browser(`${spOrigin}/session`)).status, 401);
     });
+    await t.test(
+      "Member blocking stops pending issuance but preserves an existing SP session",
+      async () => {
+        const accepted = await responseForm();
+        assert.equal((await browser(acs, accepted)).status, 303);
+        const existing = await browser(`${spOrigin}/session`);
+        assert.equal(existing.status, 200);
+
+        // Start another IdP transaction using the authenticated browser, without
+        // replacing its existing downstream application session.
+        const start = await browser(
+          await consumer.saml.getAuthorizeUrlAsync(
+            "https://opaque.example.test/return",
+          ),
+        );
+        assert.equal(start.status, 303);
+        const page = await browser(new URL(start.headers.location, issuer));
+        assert.equal(page.status, 200);
+        assert.ok(
+          page.body.includes(`value="${member.id}"`),
+          "shared SSO offers the established Member",
+        );
+        cli(
+          "member",
+          "block",
+          "--organization",
+          organization.id,
+          "--member",
+          member.id,
+        );
+        const denied = await browser(`${issuer}/login`, {
+          request: hidden(page.body, "request"),
+          csrf: hidden(page.body, "csrf"),
+          action: "continue",
+          member: member.id,
+          consent: "yes",
+        });
+        assert.equal(denied.status, 200);
+        assert.ok(
+          denied.body.includes("No eligible Member identity is available"),
+          "the pending login must report the Member's ineligibility",
+        );
+        assert.ok(
+          !denied.body.includes('name="SAMLResponse"'),
+          "blocked Member must not receive an assertion",
+        );
+        const retained = await browser(`${spOrigin}/session`);
+        assert.equal(retained.status, 200);
+        assert.equal(
+          JSON.parse(retained.body).nameID,
+          JSON.parse(existing.body).nameID,
+        );
+      },
+    );
     t.diagnostic(
       `Node-SAML 5.2.0; ${build.split("\n")[0]}; packaged binary SHA-256 ${digest}; HTTPS port ${new URL(issuer).port}`,
     );
