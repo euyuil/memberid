@@ -1629,7 +1629,7 @@ function MemberSearch({
           setStatus(value === "all" ? "" : (value ?? ""))
         }
       >
-        <SelectTrigger aria-label="身份状态" className="min-w-28">
+        <SelectTrigger aria-label="身份状态" className="min-w-24">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -1649,7 +1649,7 @@ function MemberSearch({
           setAdministrator(value === "all" ? "" : (value ?? ""))
         }
       >
-        <SelectTrigger aria-label="管理权限" className="min-w-28">
+        <SelectTrigger aria-label="管理权限" className="min-w-24">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
