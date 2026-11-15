@@ -1,6 +1,19 @@
 import { useState, type ReactNode } from "react"
-import { Copy } from "lucide-react"
+import {
+  CircleAlert,
+  Copy,
+  FolderOpen,
+  LockKeyhole,
+  SearchX,
+} from "lucide-react"
 import { Badge } from "@/components/ui/badge"
+import {
+  Empty,
+  EmptyContent,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty"
 import { Link, type NavigationState } from "@/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -22,17 +35,63 @@ export function DirectoryToolbar({
 
 export function DirectoryFooter({
   count,
+  message,
   children,
 }: {
   count: number
+  message?: string
   children?: ReactNode
 }) {
   return (
     <div className="directory-footer">
-      <span className="directory-count">本页 {count} 条记录</span>
+      <span className="directory-count" role={message ? "status" : undefined}>
+        {message ?? `本页 ${count} 条记录`}
+      </span>
       <div className="pagination">{children}</div>
     </div>
   )
+}
+
+const directoryStateIcons = {
+  empty: FolderOpen,
+  filtered: SearchX,
+  forbidden: LockKeyhole,
+  error: CircleAlert,
+}
+
+export function DirectoryState({
+  kind,
+  title,
+  action,
+}: {
+  kind: keyof typeof directoryStateIcons
+  title: string
+  action?: ReactNode
+}) {
+  const Icon = directoryStateIcons[kind]
+  return (
+    <Empty className="min-h-56 py-10">
+      <EmptyHeader role={kind === "error" ? "alert" : "status"}>
+        <EmptyMedia variant="icon" aria-hidden="true">
+          <Icon />
+        </EmptyMedia>
+        <EmptyTitle>{title}</EmptyTitle>
+      </EmptyHeader>
+      {action && <EmptyContent>{action}</EmptyContent>}
+    </Empty>
+  )
+}
+
+export function DirectoryResults({
+  count,
+  empty,
+  children,
+}: {
+  count: number
+  empty?: ReactNode
+  children: ReactNode
+}) {
+  return count > 0 ? children : empty
 }
 
 export function RecordIdentity({

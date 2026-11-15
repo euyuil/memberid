@@ -222,7 +222,6 @@ a.record-name:hover, button.record-name:hover { color: var(--primary); text-deco
 .directory-count { color: var(--muted-foreground); font-size: 12px; }
 .pagination { display: flex; gap: 8px; }
 .directory-loading { display: grid; gap: 16px; padding: 20px; }
-.directory-empty { text-align: center; color: var(--muted-foreground); padding-block: 48px !important; }
 .event-directory { container-type: inline-size; }
 .event-directory .record-text { min-width: 0; max-width: 100%; }
 .event-directory .event-time { width: 8rem; }

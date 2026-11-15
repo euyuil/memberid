@@ -25,7 +25,6 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Empty, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import {
@@ -42,6 +41,8 @@ import { ConsoleLayout, type BreadcrumbItem } from "@/components/console-layout"
 import {
   DirectoryToolbar,
   DirectoryFooter,
+  DirectoryResults,
+  DirectoryState,
   RecordIdentity,
   RecordIdentifier,
   RecordTime,
@@ -116,14 +117,31 @@ const messages: Record<string, string> = {
   not_administrator: "当前成员没有管理权限，请使用已授权的管理员身份登录。",
   login_failed: "登录未完成，请重新发起登录。",
 }
+class RequestError extends Error {
+  readonly status: number
+
+  constructor(status: number, message: string) {
+    super(message)
+    this.status = status
+  }
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, { credentials: "same-origin", ...init })
-  const body = await response.json()
-  if (response.status === 401)
-    window.dispatchEvent(new Event("memberid-sign-in-required"))
-  if (!response.ok)
-    throw new Error(messages[body.error] ?? "请求未完成，请稍后重试。")
-  return body as T
+  if (!response.ok) {
+    if (
+      response.status === 401 &&
+      path !== "/api/session" &&
+      !init?.signal?.aborted
+    )
+      window.dispatchEvent(new Event("memberid-sign-in-required"))
+    const body = await response.json().catch(() => null)
+    throw new RequestError(
+      response.status,
+      messages[body?.error] ?? "请求未完成，请稍后重试。"
+    )
+  }
+  return response.json() as Promise<T>
 }
 function Status({ active, text }: { active: boolean; text?: string }) {
   return (
@@ -249,22 +267,18 @@ function EventDetails({
   )
 }
 
-function NoRecords({ text }: { text: string }) {
-  return (
-    <Empty>
-      <EmptyHeader>
-        <EmptyTitle>{text}</EmptyTitle>
-      </EmptyHeader>
-    </Empty>
-  )
-}
-
 export default function App() {
   const [session, setSession] = useState<Session | null>()
+  const [sessionCheckFailed, setSessionCheckFailed] = useState(false)
+  const [sessionCheckRevision, setSessionCheckRevision] = useState(0)
+  const [sessionExpired, setSessionExpired] = useState(false)
   const [location, setLocation] = useState(currentLocation)
   const [revision, setRevision] = useState(0)
   const [data, setData] = useState<Data>({})
   const [loading, setLoading] = useState(true)
+  const [loadFailure, setLoadFailure] = useState<
+    "forbidden" | "missing" | "unavailable"
+  >()
   const [error, setError] = useState("")
   const [action, setAction] = useState<Action | null>(null)
   const route = parseRoute(location)
@@ -278,6 +292,7 @@ export default function App() {
   const member = route?.member ?? ""
   const historyTarget = events ? (params.get("memberId") ?? "") : ""
   const after = params.get("after") ?? ""
+  const before = params.get("before") ?? ""
   const memberFilters = {
     q: params.get("q") ?? "",
     status: params.get("status") ?? "",
@@ -304,24 +319,44 @@ export default function App() {
     const change = () => {
       const next = currentLocation()
       if (next === previousLocation) return
+      const sameOrganization =
+        parseRoute(next)?.org === parseRoute(previousLocation)?.org
       previousLocation = next
       setAction(null)
-      setData({})
+      setData((current) =>
+        sameOrganization ? { organization: current.organization } : {}
+      )
       setLoading(true)
+      setLoadFailure(undefined)
       setError("")
       setLocation(next)
     }
-    const expired = () => setSession(null)
+    const expired = () => {
+      setSessionExpired(true)
+      setSession(null)
+    }
     window.addEventListener("memberid-sign-in-required", expired)
     window.addEventListener("popstate", change)
-    request<Session>("/api/session")
-      .then(setSession)
-      .catch(() => setSession(null))
     return () => {
       window.removeEventListener("popstate", change)
       window.removeEventListener("memberid-sign-in-required", expired)
     }
   }, [])
+
+  useEffect(() => {
+    const abort = new AbortController()
+    request<Session>("/api/session", { signal: abort.signal })
+      .then((value) => {
+        if (!abort.signal.aborted) setSession(value)
+      })
+      .catch((error: unknown) => {
+        if (abort.signal.aborted) return
+        if (error instanceof RequestError && error.status === 401)
+          setSession(null)
+        else setSessionCheckFailed(true)
+      })
+    return () => abort.abort()
+  }, [sessionCheckRevision])
 
   useEffect(() => {
     if (session && parseRoute(location)?.root) {
@@ -339,15 +374,24 @@ export default function App() {
     const abort = new AbortController()
     async function load() {
       setLoading(true)
+      setLoadFailure(undefined)
       setError("")
-      setData({})
+      setData((current) => ({ organization: current.organization }))
       const options = { signal: abort.signal }
+      let organization: Organization | undefined
+      const fetchOrganization = async () => {
+        organization = await request<Organization>(
+          `/api/organizations/${encodeURIComponent(org)}`,
+          options
+        )
+        return organization
+      }
       try {
         let result: Data
         if (events) {
           const query = new URLSearchParams({
             organizationId: org,
-            before: params.get("before") ?? "",
+            before,
             memberId: historyTarget,
           })
           const [history, organization, memberDetail] = await Promise.all([
@@ -355,12 +399,7 @@ export default function App() {
               `/api/events?${query}`,
               options
             ),
-            org
-              ? request<Organization>(
-                  `/api/organizations/${encodeURIComponent(org)}`,
-                  options
-                )
-              : undefined,
+            org ? fetchOrganization() : undefined,
             org && historyTarget
               ? request<Detail>(
                   `/api/organizations/${encodeURIComponent(org)}/members/${encodeURIComponent(historyTarget)}`,
@@ -374,11 +413,7 @@ export default function App() {
             historyMember: memberDetail?.member,
           }
         } else if (org) {
-          const organization = await request<Organization>(
-            `/api/organizations/${encodeURIComponent(org)}`,
-            options
-          )
-          result = { organization }
+          result = { organization: await fetchOrganization() }
           if (providers) {
             result.providers = await request<ProviderDirectory>(
               `/api/organizations/${encodeURIComponent(org)}/providers`,
@@ -410,8 +445,24 @@ export default function App() {
             ),
           }
         if (!abort.signal.aborted) setData(result)
-      } catch (e) {
-        if (!abort.signal.aborted) setError((e as Error).message)
+      } catch (error) {
+        if (!abort.signal.aborted) {
+          const status =
+            error instanceof RequestError ? error.status : undefined
+          setData((current) => ({
+            organization:
+              status === 403 || status === 404
+                ? undefined
+                : (organization ?? current.organization),
+          }))
+          setLoadFailure(
+            status === 403
+              ? "forbidden"
+              : status === 404
+                ? "missing"
+                : "unavailable"
+          )
+        }
       } finally {
         if (!abort.signal.aborted) setLoading(false)
       }
@@ -422,17 +473,28 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session, location, revision])
 
-  if (!route || forbidden)
+  if (!route)
     return (
       <main className="login-page">
-        <h1>{forbidden ? "没有访问权限" : "页面不存在"}</h1>
-        <p>
-          {forbidden
-            ? "当前身份无权访问此管理范围。"
-            : "请检查链接，或返回管理首页。"}
-        </p>
+        <h1>页面不存在</h1>
+        <p>请检查链接，或返回管理首页。</p>
         <Button render={<Link href="/" />} nativeButton={false}>
           返回管理首页
+        </Button>
+      </main>
+    )
+
+  if (sessionCheckFailed)
+    return (
+      <main className="login-page">
+        <h1 role="alert">暂时无法检查登录状态</h1>
+        <Button
+          onClick={() => {
+            setSessionCheckFailed(false)
+            setSessionCheckRevision((value) => value + 1)
+          }}
+        >
+          重试
         </Button>
       </main>
     )
@@ -455,7 +517,7 @@ export default function App() {
         <div className="identity-mark">
           <Fingerprint />
         </div>
-        <h1>MemberID 管理控制台</h1>
+        <h1>{sessionExpired ? "登录已过期" : "MemberID 管理控制台"}</h1>
         <Button
           size="lg"
           render={
@@ -463,7 +525,7 @@ export default function App() {
           }
           nativeButton={false}
         >
-          使用 MemberID 登录
+          {sessionExpired ? "重新登录" : "使用 MemberID 登录"}
           <ChevronRight data-icon="inline-end" />
         </Button>
         <div className="feedback" role="status">
@@ -480,6 +542,15 @@ export default function App() {
   }
 
   const actor = session.actor
+  const accessDenied = forbidden || loadFailure === "forbidden"
+  const navigationScope = forbidden ? { org: actor.organizationId } : scopeRoute
+  const unavailableScope = accessDenied || loadFailure === "missing"
+  const emptyOrganizationPage = !after && data.organizations?.items.length === 0
+  const emptyMemberPage = !after && data.members?.items.length === 0
+  const noMemberMatches = emptyMemberPage && memberSearchActive
+  const showCreateOrganization =
+    actor.platform && activeView === "organization" && !org && !unavailableScope
+  const showCreateMember = membersView && !member && !!org && !unavailableScope
   const base = `/api/organizations/${encodeURIComponent(org)}`
   const scopeName = org ? (data.organization?.name ?? "当前组织") : "所有组织"
   const breadcrumbs: BreadcrumbItem[] = []
@@ -530,6 +601,7 @@ export default function App() {
       body: {},
     })
   const refresh = () => setRevision((v) => v + 1)
+  const clearMemberFilters = () => navigate(memberDirectoryRoute)
   const create = (isOrganization: boolean) =>
     setAction({
       title: isOrganization ? "新建组织" : "新增成员",
@@ -553,28 +625,28 @@ export default function App() {
       navigation={[
         {
           label: "组织",
-          href: routeURL({ view: "organization", ...scopeRoute }),
+          href: routeURL({ view: "organization", ...navigationScope }),
           icon: Building2,
           active: activeView === "organization",
           group: "身份管理",
         },
         {
           label: "成员",
-          href: routeURL(memberDirectoryRoute),
+          href: routeURL({ view: "members", ...navigationScope }),
           icon: Users,
           active: membersView,
           group: "身份管理",
         },
         {
           label: "身份提供商",
-          href: routeURL({ view: "providers", ...scopeRoute }),
+          href: routeURL({ view: "providers", ...navigationScope }),
           icon: KeyRound,
           active: providers,
           group: "身份管理",
         },
         {
           label: "操作记录",
-          href: routeURL({ view: "events", ...scopeRoute }),
+          href: routeURL({ view: "events", ...navigationScope }),
           icon: History,
           active: events,
           group: "活动",
@@ -586,6 +658,7 @@ export default function App() {
             method: "POST",
             headers: { "X-CSRF-Token": session.csrf },
           })
+          setSessionExpired(false)
           setSession(null)
           navigate("/", { replace: true })
         } catch (e) {
@@ -629,16 +702,18 @@ export default function App() {
           </h1>
         </div>
         <div className="actions">
-          <Button
-            variant="outline"
-            size="icon"
-            aria-label="刷新页面"
-            title="刷新"
-            disabled={loading}
-            onClick={refresh}
-          >
-            <RefreshCw className={loading ? "animate-spin" : undefined} />
-          </Button>
+          {!unavailableScope && !loadFailure && (
+            <Button
+              variant="outline"
+              size="icon"
+              aria-label="刷新页面"
+              title="刷新"
+              disabled={loading}
+              onClick={refresh}
+            >
+              <RefreshCw className={loading ? "animate-spin" : undefined} />
+            </Button>
+          )}
           {events && org && historyTarget && (
             <>
               {data.historyMember && (
@@ -667,7 +742,7 @@ export default function App() {
               </Button>
             </>
           )}
-          {actor.platform && !events && !membersView && !providers && !org && (
+          {showCreateOrganization && !emptyOrganizationPage && (
             <Button onClick={() => create(true)}>
               <Plus data-icon="inline-start" />
               新建组织
@@ -682,8 +757,11 @@ export default function App() {
               {fromAllOrganizations ? "返回所有组织的成员" : "返回成员列表"}
             </Button>
           )}
-          {membersView && !member && org && (
-            <Button disabled={loading} onClick={() => create(false)}>
+          {showCreateMember && (!emptyMemberPage || memberSearchActive) && (
+            <Button
+              disabled={loading || !!loadFailure}
+              onClick={() => create(false)}
+            >
               <Plus data-icon="inline-start" />
               新增成员
             </Button>
@@ -728,22 +806,63 @@ export default function App() {
       </div>
       <div
         className={
-          membersView && !member ? "directory member-directory" : undefined
+          membersView && !member
+            ? "directory member-directory"
+            : unavailableScope || loadFailure
+              ? "directory"
+              : undefined
         }
       >
-        {membersView &&
-          !member &&
-          (actor.platform || org === actor.organizationId) && (
-            <MemberSearch
-              key={`${org}:${JSON.stringify(memberFilters)}`}
-              filters={memberFilters}
-              onSubmit={(filters) =>
-                navigate({ ...memberDirectoryRoute, ...filters })
-              }
-              onClear={() => navigate(memberDirectoryRoute)}
-            />
-          )}
-        {loading ? (
+        {membersView && !member && !unavailableScope && (
+          <MemberSearch
+            key={`${org}:${JSON.stringify(memberFilters)}`}
+            filters={memberFilters}
+            onSubmit={(filters) =>
+              navigate({ ...memberDirectoryRoute, ...filters })
+            }
+            onClear={clearMemberFilters}
+            showClear={!noMemberMatches}
+          />
+        )}
+        {unavailableScope ? (
+          <DirectoryState
+            kind={accessDenied ? "forbidden" : "error"}
+            title={
+              accessDenied ? "当前账号无权访问此管理范围" : "找不到此管理范围"
+            }
+            action={
+              <Button
+                variant="outline"
+                render={<Link href="/" />}
+                nativeButton={false}
+              >
+                返回管理首页
+              </Button>
+            }
+          />
+        ) : loadFailure ? (
+          <DirectoryState
+            kind="error"
+            title={
+              events
+                ? "暂时无法加载操作记录"
+                : providers
+                  ? "暂时无法加载身份提供商"
+                  : membersView
+                    ? member
+                      ? "暂时无法加载成员详情"
+                      : "暂时无法加载成员列表"
+                    : org
+                      ? "暂时无法加载组织详情"
+                      : "暂时无法加载组织列表"
+            }
+            action={
+              <Button variant="outline" onClick={refresh}>
+                重试
+              </Button>
+            }
+          />
+        ) : loading ? (
           <div
             className="directory-loading"
             role="status"
@@ -757,56 +876,79 @@ export default function App() {
             {data.organizations && (
               <section className="directory" aria-label="组织列表">
                 {providers && <DirectoryToolbar title="选择组织" />}
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>组织</TableHead>
-                      <TableHead>状态</TableHead>
-                      <TableHead>
-                        <span className="sr-only">操作</span>
-                      </TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {data.organizations.items.map((o) => (
-                      <TableRow key={o.id}>
-                        <TableCell>
-                          <RecordIdentity
-                            name={o.name}
-                            icon={<Building2 />}
-                            href={routeURL({ view: activeView, org: o.id })}
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <div className="cell-status">
-                            <Status active={o.status === "enabled"} />
-                            {o.id === "org_system" && (
-                              <Badge variant="outline">系统</Badge>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell className="row-actions">
-                          <Button
-                            variant="ghost"
-                            aria-label={
-                              providers
-                                ? `管理 ${o.name} 的身份提供商`
-                                : `管理 ${o.name}`
-                            }
-                            render={
-                              <Link
-                                href={routeURL({ view: activeView, org: o.id })}
-                              />
-                            }
-                            nativeButton={false}
-                          >
-                            <ChevronRight />
-                          </Button>
-                        </TableCell>
+                <DirectoryResults
+                  count={data.organizations.items.length}
+                  empty={
+                    after ? undefined : (
+                      <DirectoryState
+                        kind="empty"
+                        title="暂无组织"
+                        action={
+                          showCreateOrganization && (
+                            <Button onClick={() => create(true)}>
+                              <Plus data-icon="inline-start" />
+                              新建组织
+                            </Button>
+                          )
+                        }
+                      />
+                    )
+                  }
+                >
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>组织</TableHead>
+                        <TableHead>状态</TableHead>
+                        <TableHead>
+                          <span className="sr-only">操作</span>
+                        </TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {data.organizations.items.map((o) => (
+                        <TableRow key={o.id}>
+                          <TableCell>
+                            <RecordIdentity
+                              name={o.name}
+                              icon={<Building2 />}
+                              href={routeURL({ view: activeView, org: o.id })}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <div className="cell-status">
+                              <Status active={o.status === "enabled"} />
+                              {o.id === "org_system" && (
+                                <Badge variant="outline">系统</Badge>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell className="row-actions">
+                            <Button
+                              variant="ghost"
+                              aria-label={
+                                providers
+                                  ? `管理 ${o.name} 的身份提供商`
+                                  : `管理 ${o.name}`
+                              }
+                              render={
+                                <Link
+                                  href={routeURL({
+                                    view: activeView,
+                                    org: o.id,
+                                  })}
+                                />
+                              }
+                              nativeButton={false}
+                            >
+                              <ChevronRight />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </DirectoryResults>
                 <Pager
                   count={data.organizations.items.length}
                   after={after}
@@ -887,64 +1029,92 @@ export default function App() {
             )}
             {data.members && (
               <section aria-label="成员列表">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>成员</TableHead>
-                      {!org && <TableHead>所属组织</TableHead>}
-                      <TableHead>身份状态</TableHead>
-                      <TableHead>管理权限</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {data.members.items.map((m) => (
-                      <TableRow key={m.id}>
-                        <TableCell>
-                          <RecordIdentity
-                            name={m.displayName}
-                            icon={Array.from(m.displayName)[0] || <Users />}
-                            href={routeURL({
-                              view: "members",
-                              org: m.organizationId,
-                              member: m.id,
-                            })}
-                            state={{ memberList: location }}
-                          />
-                        </TableCell>
-                        {!org && (
+                <DirectoryResults
+                  count={data.members.items.length}
+                  empty={
+                    after ? undefined : (
+                      <DirectoryState
+                        kind={noMemberMatches ? "filtered" : "empty"}
+                        title={
+                          noMemberMatches
+                            ? "没有符合当前筛选条件的成员"
+                            : org
+                              ? "本组织还没有成员"
+                              : "还没有成员"
+                        }
+                        action={
+                          noMemberMatches ? (
+                            <Button
+                              variant="outline"
+                              onClick={clearMemberFilters}
+                            >
+                              清除筛选
+                            </Button>
+                          ) : (
+                            showCreateMember && (
+                              <Button onClick={() => create(false)}>
+                                <Plus data-icon="inline-start" />
+                                新增成员
+                              </Button>
+                            )
+                          )
+                        }
+                      />
+                    )
+                  }
+                >
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>成员</TableHead>
+                        {!org && <TableHead>所属组织</TableHead>}
+                        <TableHead>身份状态</TableHead>
+                        <TableHead>管理权限</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {data.members.items.map((m) => (
+                        <TableRow key={m.id}>
                           <TableCell>
                             <RecordIdentity
-                              name={m.organizationName ?? "所属组织"}
+                              name={m.displayName}
+                              icon={Array.from(m.displayName)[0] || <Users />}
+                              href={routeURL({
+                                view: "members",
+                                org: m.organizationId,
+                                member: m.id,
+                              })}
+                              state={{ memberList: location }}
                             />
                           </TableCell>
-                        )}
-                        <TableCell>
-                          <MemberStatus member={m} />
-                        </TableCell>
-                        <TableCell>
-                          {(m.administrator ??
-                          data.members?.administratorIds?.includes(m.id)) ? (
-                            <Badge variant="secondary" className="role-badge">
-                              <ShieldCheck aria-hidden="true" />
-                              {m.organizationId === "org_system"
-                                ? "平台管理员"
-                                : "组织管理员"}
-                            </Badge>
-                          ) : (
-                            <span className="muted">普通成员</span>
+                          {!org && (
+                            <TableCell>
+                              <RecordIdentity
+                                name={m.organizationName ?? "所属组织"}
+                              />
+                            </TableCell>
                           )}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-                {data.members.items.length === 0 && (
-                  <NoRecords
-                    text={
-                      memberSearchActive ? "没有符合条件的成员" : "还没有成员"
-                    }
-                  />
-                )}
+                          <TableCell>
+                            <MemberStatus member={m} />
+                          </TableCell>
+                          <TableCell>
+                            {(m.administrator ??
+                            data.members?.administratorIds?.includes(m.id)) ? (
+                              <Badge variant="secondary" className="role-badge">
+                                <ShieldCheck aria-hidden="true" />
+                                {m.organizationId === "org_system"
+                                  ? "平台管理员"
+                                  : "组织管理员"}
+                              </Badge>
+                            ) : (
+                              <span className="muted">普通成员</span>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </DirectoryResults>
                 <Pager
                   count={data.members.items.length}
                   after={after}
@@ -1091,109 +1261,132 @@ export default function App() {
                 className="directory event-directory"
                 aria-label="操作记录列表"
               >
-                <Table className="table-fixed">
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="event-time">时间</TableHead>
-                      <TableHead className="event-wide-column">操作者</TableHead>
-                      {!org && (
-                        <TableHead className="event-wide-column">组织</TableHead>
-                      )}
-                      <TableHead>操作</TableHead>
-                      <TableHead className="event-wide-column">对象</TableHead>
-                      <TableHead className="event-wide-column">变更</TableHead>
-                      <TableHead className="row-actions">
-                        <span className="sr-only">详情</span>
-                      </TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {data.events.map((event) => {
-                      const presentation = describeEvent(event)
-                      const description = presentation.changes.join("；") || "—"
-                      return (
-                        <TableRow key={event.id}>
-                          <TableCell>
-                            <RecordTime value={event.createdAt} compact />
-                          </TableCell>
-                          <TableCell className="event-wide-column">
-                            <RecordIdentity name={presentation.actorName} />
-                          </TableCell>
-                          {!org && (
+                <DirectoryResults
+                  count={data.events.length}
+                  empty={
+                    before ? undefined : (
+                      <DirectoryState kind="empty" title="暂无管理操作记录" />
+                    )
+                  }
+                >
+                  <Table className="table-fixed">
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="event-time">时间</TableHead>
+                        <TableHead className="event-wide-column">
+                          操作者
+                        </TableHead>
+                        {!org && (
+                          <TableHead className="event-wide-column">
+                            组织
+                          </TableHead>
+                        )}
+                        <TableHead>操作</TableHead>
+                        <TableHead className="event-wide-column">
+                          对象
+                        </TableHead>
+                        <TableHead className="event-wide-column">
+                          变更
+                        </TableHead>
+                        <TableHead className="row-actions">
+                          <span className="sr-only">详情</span>
+                        </TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {data.events.map((event) => {
+                        const presentation = describeEvent(event)
+                        const description =
+                          presentation.changes.join("；") || "—"
+                        return (
+                          <TableRow key={event.id}>
+                            <TableCell>
+                              <RecordTime value={event.createdAt} compact />
+                            </TableCell>
+                            <TableCell className="event-wide-column">
+                              <RecordIdentity name={presentation.actorName} />
+                            </TableCell>
+                            {!org && (
+                              <TableCell className="event-wide-column">
+                                <RecordIdentity
+                                  name={presentation.organizationName}
+                                  href={routeURL({ org: event.organizationId })}
+                                />
+                              </TableCell>
+                            )}
+                            <TableCell>
+                              {presentation.action}
+                              <span className="event-context">
+                                {presentation.targetName}
+                              </span>
+                            </TableCell>
                             <TableCell className="event-wide-column">
                               <RecordIdentity
-                                name={presentation.organizationName}
-                                href={routeURL({ org: event.organizationId })}
+                                name={presentation.targetName}
+                                href={presentation.targetURL}
                               />
                             </TableCell>
-                          )}
-                          <TableCell>
-                            {presentation.action}
-                            <span className="event-context">
-                              {presentation.targetName}
-                            </span>
-                          </TableCell>
-                          <TableCell className="event-wide-column">
-                            <RecordIdentity
-                              name={presentation.targetName}
-                              href={presentation.targetURL}
-                            />
-                          </TableCell>
-                          <TableCell className="event-wide-column">
-                            <span className="event-summary" title={description}>
-                              {description}
-                            </span>
-                          </TableCell>
-                          <TableCell className="row-actions">
-                            <EventDetails
-                              event={event}
-                              presentation={presentation}
-                              description={description}
-                            />
-                          </TableCell>
-                        </TableRow>
-                      )
-                    })}
-                  </TableBody>
-                </Table>
-                {data.events.length === 0 && (
-                  <NoRecords text="暂无管理操作记录" />
+                            <TableCell className="event-wide-column">
+                              <span
+                                className="event-summary"
+                                title={description}
+                              >
+                                {description}
+                              </span>
+                            </TableCell>
+                            <TableCell className="row-actions">
+                              <EventDetails
+                                event={event}
+                                presentation={presentation}
+                                description={description}
+                              />
+                            </TableCell>
+                          </TableRow>
+                        )
+                      })}
+                    </TableBody>
+                  </Table>
+                </DirectoryResults>
+                {(data.events.length > 0 || before) && (
+                  <DirectoryFooter
+                    count={data.events.length}
+                    message={
+                      data.events.length === 0 ? "没有更早的记录" : undefined
+                    }
+                  >
+                    <Button
+                      variant="outline"
+                      disabled={!before}
+                      onClick={() =>
+                        navigate(
+                          { org, view: "events", target: historyTarget },
+                          { state: memberNavigationState }
+                        )
+                      }
+                    >
+                      {data.events.length > 0 ? "最新记录" : "返回最新记录"}
+                    </Button>
+                    {data.events.length > 0 && (
+                      <Button
+                        variant="outline"
+                        disabled={data.events.length < 50}
+                        onClick={() =>
+                          navigate(
+                            {
+                              org,
+                              view: "events",
+                              target: historyTarget,
+                              before: String(data.events!.at(-1)!.id),
+                            },
+                            { state: memberNavigationState }
+                          )
+                        }
+                      >
+                        更早记录
+                      </Button>
+                    )}
+                  </DirectoryFooter>
                 )}
-                <DirectoryFooter count={data.events.length}>
-                  <Button
-                    variant="outline"
-                    disabled={!params.get("before")}
-                    onClick={() =>
-                      navigate(
-                        {
-                          org,
-                          view: "events",
-                          target: historyTarget,
-                        },
-                        { state: memberNavigationState }
-                      )
-                    }
-                  >
-                    最新记录
-                  </Button>
-                  <Button
-                    variant="outline"
-                    disabled={data.events.length < 50}
-                    onClick={() =>
-                      navigate(
-                        {
-                          org,
-                          view: "events",
-                          target: historyTarget,
-                          before: String(data.events!.at(-1)!.id),
-                        },
-                        { state: memberNavigationState }
-                      )
-                    }
-                  >
-                    更早记录
-                  </Button>
-                </DirectoryFooter>
               </section>
             )}
           </>
@@ -1380,10 +1573,12 @@ function MemberSearch({
   filters,
   onSubmit,
   onClear,
+  showClear,
 }: {
   filters: MemberFilters
   onSubmit: (filters: MemberFilters) => void
   onClear: () => void
+  showClear: boolean
 }) {
   const [query, setQuery] = useState(filters.q)
   const [status, setStatus] = useState(filters.status)
@@ -1436,26 +1631,28 @@ function MemberSearch({
         <Button type="submit" variant="outline">
           搜索
         </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          disabled={
-            !(
-              query ||
-              status ||
-              administrator ||
-              Object.values(filters).some(Boolean)
-            )
-          }
-          onClick={() => {
-            setQuery("")
-            setStatus("")
-            setAdministrator("")
-            onClear()
-          }}
-        >
-          清除筛选
-        </Button>
+        {showClear && (
+          <Button
+            type="button"
+            variant="ghost"
+            disabled={
+              !(
+                query ||
+                status ||
+                administrator ||
+                Object.values(filters).some(Boolean)
+              )
+            }
+            onClick={() => {
+              setQuery("")
+              setStatus("")
+              setAdministrator("")
+              onClear()
+            }}
+          >
+            清除筛选
+          </Button>
+        )}
       </div>
     </form>
   )
@@ -1472,6 +1669,15 @@ function Pager({
   next?: string
   route: Route
 }) {
+  if (!count && !after) return null
+  if (!count)
+    return (
+      <DirectoryFooter count={0} message="没有更多记录">
+        <Button variant="outline" onClick={() => navigate(route)}>
+          返回第一页
+        </Button>
+      </DirectoryFooter>
+    )
   return (
     <DirectoryFooter count={count}>
       <Button
