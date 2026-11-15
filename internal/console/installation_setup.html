@@ -24,16 +24,19 @@ button.secondary{background:white;color:#18181b;border-color:#a1a1aa}
 .error{color:#991b1b}.confirm{display:flex;align-items:center;gap:.5rem;min-height:2.25rem}
 .confirm input{accent-color:#18181b;width:1.125rem;height:1.125rem;margin:0}
 a{color:#3f3f46;font-size:.875rem;text-underline-offset:.2em}.alternate{display:block;margin-top:1rem;text-align:center}
+.login{display:flex;justify-content:center;align-items:center;min-height:2.75rem;background:#18181b;color:white;border-radius:.5rem;text-decoration:none;font-weight:600}
 </style>
 {{if .Password}}<script src="/setup/copy.js" defer></script>{{end}}
 </head>
 <body><main>
-<h1>初始化 MemberID</h1>
+<h1>{{if .Completed}}首次设置已完成{{else}}初始化 MemberID{{end}}</h1>
 <dl>
 <div><dt>组织 ID</dt><dd>{{.OrganizationID}}</dd></div>
 <div><dt>平台管理员用户名</dt><dd>{{.Username}}</dd></div>
 </dl>
-{{if .Password}}
+{{if .Completed}}
+<a class="login" href="/auth/login?setup=1">登录管理台</a>
+{{else if .Password}}
 <form method="post" action="/setup">
 <label for="generated-password">初始密码</label>
 <div class="secret">

@@ -90,6 +90,11 @@ func TestConsoleFirstSetupAndPasswordRecovery(t *testing.T) {
 		t.Fatal("unbound browser could confirm setup")
 	}
 	r = f.call(f.browser, "POST", setup, complete, origin)
+	f.status(r, 200)
+	if !strings.Contains(r.body, `href="/auth/login?setup=1"`) || strings.Contains(r.body, password) {
+		t.Fatal("completed setup did not provide a separate sign-in link")
+	}
+	r = f.call(f.browser, "GET", server.URL+"/auth/login?setup=1", nil, nil)
 	f.status(r, 303)
 	login := f.call(f.browser, "GET", r.header.Get("Location"), nil, nil)
 	f.status(login, 302)

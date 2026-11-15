@@ -24,6 +24,7 @@ type setupPageData struct {
 	OrganizationID, Username string
 	Password, Confirmation   string
 	Error                    string
+	Completed                bool
 }
 
 func setupScript(w http.ResponseWriter, _ *http.Request) {
@@ -91,8 +92,9 @@ func (s *Service) installationSetup(w http.ResponseWriter, r *http.Request) {
 			}
 			if err == nil {
 				s.cookie(w, "setup", "", -1)
-				s.beginLogin(w, r, "/", true)
-				return
+				// The setup form is same-origin. A link on the resulting document
+				// starts the separate navigation to the OIDC issuer.
+				data.Completed = true
 			}
 		default:
 			http.Error(w, "Invalid setup action", http.StatusBadRequest)
