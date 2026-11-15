@@ -236,6 +236,8 @@ CREATE TABLE management_events (
     member_id text COLLATE "C",
     action text NOT NULL,
     changes jsonb NOT NULL,
+    snapshot jsonb NOT NULL DEFAULT '{}',
+    previous jsonb NOT NULL DEFAULT '{}',
     created_at timestamptz NOT NULL DEFAULT clock_timestamp()
 );
 CREATE INDEX management_event_directory ON management_events(organization_id,id);

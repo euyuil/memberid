@@ -71,10 +71,10 @@ func TestConsoleQueryProfile(t *testing.T) {
 		{"member detail", "GET", base + "/members/" + f.member.ID, "", 5},
 		{"providers", "GET", base + "/providers", "", 4},
 		{"events", "GET", "/api/events", "", 3},
-		{"create organization", "POST", "/api/organizations", `{"name":"Profile organization"}`, 5},
-		{"create member", "POST", base + "/members", `{"displayName":"Profile member"}`, 5},
-		{"update organization", "PATCH", base, `{"name":"Profile organization"}`, 5},
-		{"update member", "PATCH", base + "/members/" + f.member.ID, `{"displayName":"Profile member"}`, 8},
+		{"create organization", "POST", "/api/organizations", `{"name":"Profile organization"}`, 6},
+		{"create member", "POST", base + "/members", `{"displayName":"Profile member"}`, 6},
+		{"update organization", "PATCH", base, `{"name":"Profile organization"}`, 8},
+		{"update member", "PATCH", base + "/members/" + f.member.ID, `{"displayName":"Profile member"}`, 11},
 	}
 	count := func() int64 {
 		t.Helper()
@@ -109,9 +109,9 @@ func TestConsoleQueryProfile(t *testing.T) {
 	}
 	// These mutations are measured once to preserve their meaningful state changes.
 	for _, op := range []operation{
-		{"grant administrator", "PUT", "/api/organizations/" + f.otherMember.OrganizationID + "/members/" + f.otherMember.ID + "/administrator", `{"enabled":true}`, 9},
-		{"revoke administrator", "PUT", base + "/members/" + f.member.ID + "/administrator", `{"enabled":false}`, 8},
-		{"create feishu", "POST", base + "/providers/feishu", `{"displayName":"Profile provider","tenantId":"example-tenant","clientId":"cli_profile","clientSecret":"synthetic-provider-secret","enabled":true}`, 8},
+		{"grant administrator", "PUT", "/api/organizations/" + f.otherMember.OrganizationID + "/members/" + f.otherMember.ID + "/administrator", `{"enabled":true}`, 11},
+		{"revoke administrator", "PUT", base + "/members/" + f.member.ID + "/administrator", `{"enabled":false}`, 10},
+		{"create feishu", "POST", base + "/providers/feishu", `{"displayName":"Profile provider","tenantId":"example-tenant","clientId":"cli_profile","clientSecret":"synthetic-provider-secret","enabled":true}`, 9},
 	} {
 		before := count()
 		consoleJSON(t, f, server, op.method, op.path, csrf, op.body, 200)

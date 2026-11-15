@@ -266,6 +266,6 @@ func (store *Store) RevokeBinding(ctx context.Context, principal Principal, orga
 		if err = preserveAdministrators(ctx, tx, organizationID, before); err != nil {
 			return err
 		}
-		return managementEvent(ctx, tx, principal, organizationID, memberID, "binding.revoke", map[string]string{"authenticationFactorId": factorID})
+		return managementEvent(ctx, tx, principal, organizationID, memberID, "binding.revoke", map[string]string{"authenticationFactorId": factorID}, nil)
 	})
 }

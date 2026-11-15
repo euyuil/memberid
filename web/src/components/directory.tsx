@@ -140,11 +140,27 @@ export function StatusBadge({
   )
 }
 
-export function RecordTime({ value }: { value: string }) {
+export function RecordTime({
+  value,
+  compact = false,
+}: {
+  value: string
+  compact?: boolean
+}) {
   const date = new Date(value)
+  const full = date.toLocaleString("zh-CN", { hour12: false })
   return (
-    <time className="record-time" dateTime={value}>
-      {date.toLocaleString("zh-CN", { hour12: false })}
+    <time className="record-time" dateTime={value} title={full}>
+      {compact
+        ? date.toLocaleString("zh-CN", {
+            month: "2-digit",
+            day: "2-digit",
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+            hour12: false,
+          })
+        : full}
     </time>
   )
 }

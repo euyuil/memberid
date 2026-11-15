@@ -49,6 +49,7 @@ import {
 } from "@/components/directory"
 import { Providers, type ProviderDirectory } from "@/Providers"
 import { memberListLocation, parseRoute, routeURL, type Route } from "@/routes"
+import { describeEvent, type ManagementEvent } from "@/operation-history"
 import { currentLocation, Link, navigate } from "@/navigation"
 
 type Actor = {
@@ -77,15 +78,6 @@ const factorLabels: Partial<Record<string, string>> = {
   dingtalk: "钉钉",
   feishu: "飞书",
 }
-type Event = {
-  id: number
-  actor: string
-  organizationId: string
-  memberId: string
-  action: string
-  changes: Record<string, unknown>
-  createdAt: string
-}
 type Page<T> = { items: T[]; nextAfter?: string }
 type Detail = {
   member: Member
@@ -97,7 +89,7 @@ type Data = {
   organization?: Organization
   members?: MemberPage
   detail?: Detail
-  events?: Event[]
+  events?: ManagementEvent[]
   historyMember?: Member
   providers?: ProviderDirectory
 }
@@ -166,69 +158,15 @@ function signInBlockers(
   ]
 }
 
-const eventLabels: Record<string, string> = {
-  "organization.create": "创建组织",
-  "organization.update": "修改组织",
-  "member.create": "创建成员",
-  "member.update": "修改成员",
-  "administrator.update": "管理员任免",
-  "binding.revoke": "撤销绑定",
-  "dingtalk.admission": "设置钉钉准入",
-  "provider.configure": "配置身份提供商",
-}
-
-function operationSummary({ action, changes }: Event) {
-  const details: string[] = []
-  if (
-    (action === "organization.create" || action === "organization.update") &&
-    typeof changes.name === "string"
-  ) {
-    details.push(`组织名称设为「${changes.name}」`)
-  }
-  if (action === "organization.update") {
-    if (changes.status === "enabled") details.push("恢复组织")
-    if (changes.status === "disabled") details.push("停用组织")
-  }
-  if (
-    (action === "member.create" || action === "member.update") &&
-    typeof changes.displayName === "string"
-  ) {
-    details.push(`成员名称设为「${changes.displayName}」`)
-  }
-  if (
-    action === "member.update" &&
-    typeof changes.manualBlocked === "boolean"
-  ) {
-    details.push(changes.manualBlocked ? "人工封禁" : "解除人工封禁")
-  }
-  if (
-    action === "administrator.update" &&
-    typeof changes.enabled === "boolean"
-  ) {
-    details.push(changes.enabled ? "授予管理员权限" : "撤销管理员权限")
-  }
-  if (action === "dingtalk.admission" && typeof changes.enabled === "boolean") {
-    details.push(changes.enabled ? "设置钉钉准入" : "取消钉钉准入")
-  }
-  if (
-    action === "provider.configure" &&
-    typeof changes.displayName === "string"
-  ) {
-    details.push(
-      `「${changes.displayName}」${changes.enabled ? "已启用" : "已停用"}`
-    )
-  }
-  return details
-}
-
-function EventDetails({ event, summary }: { event: Event; summary: string[] }) {
-  const description = summary.join("；") || "查看变更详情"
+function EventDetails({ event }: { event: ManagementEvent }) {
+  const presentation = describeEvent(event)
+  const description = presentation.changes.join("；") || "—"
   return (
     <Dialog>
       <DialogTrigger
         className="event-summary"
         title={description}
-        aria-label={`查看操作记录详情：${description}`}
+        aria-label={`查看操作记录详情：${presentation.action} ${presentation.targetName}`}
       >
         {description}
       </DialogTrigger>
@@ -236,13 +174,18 @@ function EventDetails({ event, summary }: { event: Event; summary: string[] }) {
         <DialogHeader>
           <DialogTitle>操作记录详情</DialogTitle>
           <DialogDescription>
-            {eventLabels[event.action] ?? event.action} ·{" "}
-            <RecordTime value={event.createdAt} />
+            {presentation.action} · <RecordTime value={event.createdAt} />
           </DialogDescription>
         </DialogHeader>
         <p className="wrap-anywhere">{description}</p>
         <dl>
           <dt>操作者</dt>
+          <dd className="wrap-anywhere">{presentation.actorName}</dd>
+          <dt>组织</dt>
+          <dd className="wrap-anywhere">{presentation.organizationName}</dd>
+          <dt>对象</dt>
+          <dd className="wrap-anywhere">{presentation.targetName}</dd>
+          <dt>操作者标识</dt>
           <dd>
             <RecordIdentifier value={event.actor} label="操作者标识" />
           </dd>
@@ -258,9 +201,26 @@ function EventDetails({ event, summary }: { event: Event; summary: string[] }) {
               </dd>
             </>
           )}
+          {presentation.providerId && (
+            <>
+              <dt>提供商 ID</dt>
+              <dd>
+                <RecordIdentifier
+                  value={presentation.providerId}
+                  label="提供商 ID"
+                />
+              </dd>
+            </>
+          )}
         </dl>
         <h3>原始变更</h3>
-        <pre>{JSON.stringify(event.changes, null, 2)}</pre>
+        <pre>
+          {JSON.stringify(
+            { previous: event.previous ?? {}, changes: event.changes },
+            null,
+            2
+          )}
+        </pre>
       </DialogContent>
     </Dialog>
   )
@@ -368,7 +328,10 @@ export default function App() {
             memberId: historyTarget,
           })
           const [history, organization, memberDetail] = await Promise.all([
-            request<{ items: Event[] }>(`/api/events?${query}`, options),
+            request<{ items: ManagementEvent[] }>(
+              `/api/events?${query}`,
+              options
+            ),
             org
               ? request<Organization>(
                   `/api/organizations/${encodeURIComponent(org)}`,
@@ -801,7 +764,8 @@ export default function App() {
             )}
             {data.providers && data.organization && (
               <Providers
-                key={org}
+                key={`${org}:${params.get("providerId") ?? ""}`}
+                selectedId={params.get("providerId") ?? undefined}
                 directory={data.providers}
                 enabled={data.organization.status === "enabled"}
                 system={org === "org_system"}
@@ -1077,6 +1041,7 @@ export default function App() {
                     <TableRow>
                       <TableHead>时间</TableHead>
                       <TableHead>操作者</TableHead>
+                      {!org && <TableHead>组织</TableHead>}
                       <TableHead>操作</TableHead>
                       <TableHead>对象</TableHead>
                       <TableHead>变更</TableHead>
@@ -1084,53 +1049,32 @@ export default function App() {
                   </TableHeader>
                   <TableBody>
                     {data.events.map((event) => {
-                      const summary = operationSummary(event)
-                      const targetName = event.memberId
-                        ? event.memberId === data.historyMember?.id
-                          ? data.historyMember.displayName
-                          : undefined
-                        : event.organizationId === data.organization?.id
-                          ? data.organization.name
-                          : undefined
-                      const installationActor =
-                        event.actor === "installation-operator"
-                          ? "安装运维"
-                          : event.actor === "installation-manager"
-                            ? "集成管理服务"
-                            : undefined
-                      const currentActor = event.actor === actor.memberId
+                      const presentation = describeEvent(event)
                       return (
                         <TableRow key={event.id}>
                           <TableCell>
-                            <RecordTime value={event.createdAt} />
+                            <RecordTime value={event.createdAt} compact />
                           </TableCell>
                           <TableCell>
-                            {installationActor ? (
-                              installationActor
-                            ) : (
-                              <>
-                                <RecordIdentity
-                                  name={
-                                    currentActor
-                                      ? `${actor.displayName}（我）`
-                                      : "成员"
-                                  }
-                                />
-                              </>
-                            )}
+                            <RecordIdentity name={presentation.actorName} />
                           </TableCell>
-                          <TableCell>
-                            {eventLabels[event.action] ?? event.action}
-                          </TableCell>
+                          {!org && (
+                            <TableCell>
+                              <RecordIdentity
+                                name={presentation.organizationName}
+                                href={routeURL({ org: event.organizationId })}
+                              />
+                            </TableCell>
+                          )}
+                          <TableCell>{presentation.action}</TableCell>
                           <TableCell>
                             <RecordIdentity
-                              name={
-                                targetName ?? (event.memberId ? "成员" : "组织")
-                              }
+                              name={presentation.targetName}
+                              href={presentation.targetURL}
                             />
                           </TableCell>
                           <TableCell>
-                            <EventDetails event={event} summary={summary} />
+                            <EventDetails event={event} />
                           </TableCell>
                         </TableRow>
                       )

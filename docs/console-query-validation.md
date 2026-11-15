@@ -43,7 +43,7 @@ sh scripts/test-integration.sh
 
 ## Observed query counts
 
-The same profiling fixture was run against baseline `f0b5826` and the optimization
+The same profiling fixture was run against baseline `b9f92d6` and the optimization
 on 2026-11-15. Successful paths produced the following SQL calls per request:
 
 | Operation | Before | After |
@@ -55,12 +55,16 @@ on 2026-11-15. Successful paths produced the following SQL calls per request:
 | Member detail, including bindings and administrator IDs | 7 | 5 |
 | Provider directory | 5 | 4 |
 | Management history | 4 | 3 |
-| Create organization or Member | 6 | 5 |
-| Update organization | 6 | 5 |
-| Update Member | 9 | 8 |
-| Grant administrator | 10 | 9 |
-| Revoke administrator | 9 | 8 |
-| Create Feishu Provider with credential verification | 9 | 8 |
+| Create organization or Member | 7 | 6 |
+| Update organization | 9 | 8 |
+| Update Member | 12 | 11 |
+| Grant administrator | 12 | 11 |
+| Revoke administrator | 11 | 10 |
+| Create Feishu Provider with credential verification | 10 | 9 |
+
+These totals include the recorded audit names and previous-value reads introduced
+in the baseline. They preserve that behavior while removing the duplicate
+administrator lookup.
 
 The profile also emits HTTP p50 and p95 durations. These small local samples are
 not a production capacity benchmark. The initial measurements showed substantial

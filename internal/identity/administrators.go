@@ -2,10 +2,8 @@ package identity
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/euyuil/memberid/internal/authorization"
 	"github.com/jackc/pgx/v5"
@@ -79,19 +77,6 @@ func preserveAdministrators(ctx context.Context, tx pgx.Tx, organizationID strin
 	return nil
 }
 
-func managementEvent(ctx context.Context, tx pgx.Tx, principal Principal, organizationID, memberID, action string, changes any) error {
-	actorID, err := principal.auditID()
-	if err != nil {
-		return err
-	}
-	data, err := json.Marshal(changes)
-	if err != nil {
-		return err
-	}
-	_, err = tx.Exec(ctx, "INSERT INTO management_events(actor,organization_id,member_id,action,changes) VALUES($1,$2,NULLIF($3,''),$4,$5)", actorID, organizationID, memberID, action, data)
-	return err
-}
-
 func (store *Store) SetAdministrator(ctx context.Context, principal Principal, organizationID, memberID string, enabled bool) error {
 	if principal.kind != memberPrincipal && principal.kind != operatorPrincipal {
 		return ErrForbidden
@@ -118,6 +103,10 @@ func (store *Store) SetAdministrator(ctx context.Context, principal Principal, o
 		if err != nil {
 			return err
 		}
+		var previouslyEnabled bool
+		if err := tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM administrators WHERE member_id=$1 AND organization_id=$2)", memberID, organizationID).Scan(&previouslyEnabled); err != nil {
+			return err
+		}
 		if enabled {
 			var eligible bool
 			if err = tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1"+eligibleBindings+" AND m.id=$1 AND m.organization_id=$2)", memberID, organizationID).Scan(&eligible); err != nil {
@@ -136,7 +125,7 @@ func (store *Store) SetAdministrator(ctx context.Context, principal Principal, o
 		if err = preserveAdministrators(ctx, tx, organizationID, before); err != nil {
 			return err
 		}
-		return managementEvent(ctx, tx, principal, organizationID, memberID, "administrator.update", map[string]bool{"enabled": enabled})
+		return managementEvent(ctx, tx, principal, organizationID, memberID, "administrator.update", map[string]bool{"enabled": enabled}, map[string]any{"enabled": previouslyEnabled})
 	})
 }
 
@@ -157,34 +146,6 @@ func (store *Store) AdministratorIDs(ctx context.Context, organizationID string)
 	return ids, rows.Err()
 }
 
-type ManagementEvent struct {
-	ID             int64           `json:"id"`
-	Actor          string          `json:"actor"`
-	OrganizationID string          `json:"organizationId"`
-	MemberID       string          `json:"memberId"`
-	Action         string          `json:"action"`
-	Changes        json.RawMessage `json:"changes"`
-	CreatedAt      time.Time       `json:"createdAt"`
-}
-
-func (store *Store) ManagementEvents(ctx context.Context, organizationID, memberID string, before int64) ([]ManagementEvent, error) {
-	rows, err := store.pool.Query(ctx, `SELECT id,actor,organization_id,COALESCE(member_id,''),action,changes,created_at FROM management_events
- WHERE ($1='' OR organization_id=$1) AND ($2='' OR member_id=$2) AND ($3::bigint=0 OR id<$3) ORDER BY id DESC LIMIT 50`, organizationID, memberID, before)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []ManagementEvent{}
-	for rows.Next() {
-		var v ManagementEvent
-		if err := rows.Scan(&v.ID, &v.Actor, &v.OrganizationID, &v.MemberID, &v.Action, &v.Changes, &v.CreatedAt); err != nil {
-			return nil, err
-		}
-		items = append(items, v)
-	}
-	return items, rows.Err()
-}
-
 // Manage performs a bounded console mutation with authorization and audit in
 // the same transaction. Only this fixed action set is available to browsers.
 func (store *Store) Manage(ctx context.Context, principal Principal, action, organizationID, memberID string, change ManagementChange) (any, error) {
@@ -201,6 +162,10 @@ func (store *Store) Manage(ctx context.Context, principal Principal, action, org
 			return err
 		}
 		if err := authorizeAll(ctx, tx, principal, requirements...); err != nil {
+			return err
+		}
+		previous, err := managementPrevious(ctx, tx, organizationID, memberID, action)
+		if err != nil {
 			return err
 		}
 		switch action {
@@ -232,7 +197,7 @@ func (store *Store) Manage(ctx context.Context, principal Principal, action, org
 		if err != nil {
 			return storageError(err)
 		}
-		return managementEvent(ctx, tx, principal, organizationID, memberID, action, change)
+		return managementEvent(ctx, tx, principal, organizationID, memberID, action, change, previous)
 	})
 	return result, err
 }
