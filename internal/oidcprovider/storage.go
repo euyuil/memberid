@@ -68,7 +68,10 @@ func (s *storage) loadRequest(ctx context.Context, column string, value any) (*a
 	var data []byte
 	var revision int64
 	if err := s.service.store.Database().QueryRow(ctx, "SELECT data,revision FROM oidc_authorization_requests WHERE "+column+"=$1 AND expires_at>$2", value, s.service.now()).Scan(&data, &revision); err != nil {
-		return nil, oidc.ErrInvalidGrant()
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oidc.ErrInvalidGrant()
+		}
+		return nil, oidc.ErrServerError()
 	}
 	result := &authorizationRequest{Revision: revision}
 	if err := json.Unmarshal(data, result); err != nil {

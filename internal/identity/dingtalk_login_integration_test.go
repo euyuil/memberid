@@ -49,9 +49,9 @@ func verifiedLogin(t *testing.T, verifier *DingTalkVerifier, app DingTalkApplica
 	return proof
 }
 func admitLogin(ctx context.Context, verifier *DingTalkVerifier, proof DingTalkLoginProof) (Verification, error) {
-	var result Verification
+	var result MemberAdmission
 	err := pgx.BeginFunc(ctx, verifier.applications.store.pool, func(tx pgx.Tx) error { var err error; result, err = verifier.Admit(ctx, tx, proof); return err })
-	return result, err
+	return result.Verification, err
 }
 
 func TestDingTalkAdmissionPreservesIdentityAndIndependentBlocks(t *testing.T) {

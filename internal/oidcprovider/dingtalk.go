@@ -3,10 +3,13 @@ package oidcprovider
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
+	"github.com/euyuil/memberid/internal/authevent"
 	"github.com/euyuil/memberid/internal/config"
 	"github.com/euyuil/memberid/internal/identity"
 	"github.com/jackc/pgx/v5"
@@ -70,6 +73,14 @@ func (service *Service) dingTalkCallback(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	event := authevent.Event{Purpose: "login"}
+	failure := errCallbackRejected
+	completed := false
+	defer func() {
+		if !completed {
+			service.recordVerification(r, event, "dingtalk", failure)
+		}
+	}()
 	code, valid := dingTalkCallbackCode(r)
 	state := r.Form.Get("state")
 	if !valid || len(state) != 43 {
@@ -78,16 +89,23 @@ func (service *Service) dingTalkCallback(w http.ResponseWriter, r *http.Request)
 	}
 	found, err := service.storage.loadRequest(r.Context(), "data->'dingtalk'->>'stateHash'", config.SecretHash(state))
 	if err != nil {
+		failure = err
 		http.Error(w, "Invalid or expired DingTalk login", http.StatusBadRequest)
 		return
 	}
 	input, err := service.storage.AuthRequestByID(r.Context(), found.ID)
 	if err != nil {
+		failure = err
 		http.Error(w, "Invalid or expired DingTalk login", http.StatusBadRequest)
 		return
 	}
 	request := input.(*authorizationRequest)
 	attempt := request.DingTalk
+	event = service.loginEvent(request)
+	if attempt != nil {
+		event.OrganizationID = attempt.OrganizationID
+		event.ProviderID = attempt.Namespace
+	}
 	registered, err := service.storage.client(request.ClientID)
 	if err != nil || request.Complete || request.Verification != nil || attempt == nil || attempt.Consumed || !attempt.ExpiresAt.After(service.now()) || !sameSecret(attempt.StateHash, config.SecretHash(state)) || registered.registration.SubjectKind != "member" || registered.registration.OrganizationID != "" && registered.registration.OrganizationID != attempt.OrganizationID {
 		http.Error(w, "Invalid or expired DingTalk login", http.StatusBadRequest)
@@ -96,35 +114,51 @@ func (service *Service) dingTalkCallback(w http.ResponseWriter, r *http.Request)
 	// Consume state before contacting the provider; a lost response requires a fresh authorization.
 	attempt.Consumed = true
 	if err := service.storage.saveRequest(r.Context(), request); err != nil {
+		failure = err
 		http.Error(w, "Invalid or expired DingTalk login", http.StatusBadRequest)
 		return
 	}
 	if r.Form.Get("error") != "" || code == "" {
+		if r.Form.Get("error") != "" {
+			failure = callbackFailure(r.Form.Get("error"))
+		}
 		service.renderLogin(w, r, request, registered, "DingTalk login did not complete. Cancel verification to try again.")
 		return
 	}
 	proof, err := service.dingtalk.Verify(r.Context(), attempt.DingTalkLoginContext, code)
 	if err != nil {
+		failure = err
 		service.renderLogin(w, r, request, registered, "Unable to verify DingTalk membership. Cancel verification to try again.")
 		return
 	}
-	service.completeExternalLogin(w, r, request, attempt.ExpiresAt, "DingTalk", func(ctx context.Context, tx pgx.Tx) (identity.Verification, error) {
+	completed = true
+	service.completeExternalLogin(w, r, request, attempt.ExpiresAt, "DingTalk", event, func(ctx context.Context, tx pgx.Tx) (identity.MemberAdmission, error) {
 		return service.dingtalk.Admit(ctx, tx, proof)
 	})
 }
 
-func (service *Service) completeExternalLogin(w http.ResponseWriter, r *http.Request, request *authorizationRequest, deadline time.Time, name string, admit func(context.Context, pgx.Tx) (identity.Verification, error)) {
+func (service *Service) completeExternalLogin(w http.ResponseWriter, r *http.Request, request *authorizationRequest, deadline time.Time, name string, event authevent.Event, admit func(context.Context, pgx.Tx) (identity.MemberAdmission, error)) {
 	id, secret := newID(), config.RandomSecret()
 	var expires time.Time
+	var admitted identity.MemberAdmission
+	completed := *request
 	err := pgx.BeginFunc(r.Context(), service.store.Database(), func(tx pgx.Tx) error {
 		var revision int64
-		if err := tx.QueryRow(r.Context(), "SELECT revision FROM oidc_authorization_requests WHERE id=$1 AND code_hash IS NULL AND consumed_at IS NULL AND expires_at>$2 FOR UPDATE", request.ID, service.now()).Scan(&revision); err != nil || revision != request.Revision {
+		if err := tx.QueryRow(r.Context(), "SELECT revision FROM oidc_authorization_requests WHERE id=$1 AND code_hash IS NULL AND consumed_at IS NULL AND expires_at>$2 FOR UPDATE", request.ID, service.now()).Scan(&revision); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return oidc.ErrInvalidRequest()
+			}
+			return err
+		}
+		if revision != request.Revision {
 			return oidc.ErrInvalidRequest()
 		}
 		if !deadline.After(service.now()) {
 			return oidc.ErrInvalidRequest()
 		}
-		verified, err := admit(r.Context(), tx)
+		var err error
+		admitted, err = admit(r.Context(), tx)
+		verified := admitted.Verification
 		if err != nil {
 			return err
 		}
@@ -137,20 +171,28 @@ func (service *Service) completeExternalLogin(w http.ResponseWriter, r *http.Req
 		if _, err := tx.Exec(r.Context(), "INSERT INTO oidc_sessions(id,secret_hash,verification,expires_at,absolute_expires_at) VALUES($1,$2,$3,$4,$5)", id, config.SecretHash(secret), session, expires, absolute); err != nil {
 			return err
 		}
-		request.DingTalk, request.Feishu = nil, nil
-		request.SessionID = id
-		setVerification(request, verified)
-		data, err := json.Marshal(request)
+		completed.DingTalk, completed.Feishu = nil, nil
+		completed.SessionID = id
+		setVerification(&completed, verified)
+		data, err := json.Marshal(&completed)
 		if err != nil {
 			return err
 		}
 		_, err = tx.Exec(r.Context(), "UPDATE oidc_authorization_requests SET data=$2,revision=revision+1 WHERE id=$1", request.ID, data)
 		return err
 	})
+	if err == nil {
+		event.OrganizationID, event.MemberID, event.BindingID = admitted.OrganizationID, admitted.MemberID, admitted.BindingID
+		event.FactorID, event.SessionID = admitted.Factor.ID, id
+		event.Actor = authevent.Actor{Kind: "member", ID: admitted.MemberID}
+	}
+	service.recordVerification(r, event, strings.ToLower(name), err)
 	if err != nil {
 		http.Error(w, name+" login expired or the identity is no longer eligible. Start a new login.", http.StatusForbidden)
 		return
 	}
+	completed.Revision++
+	*request = completed
 	service.cookie(w, "session", secret, expires.Sub(service.now()))
 	http.Redirect(w, r, "/login?request="+url.QueryEscape(request.ID), http.StatusSeeOther)
 }
