@@ -213,6 +213,8 @@ a.record-name:hover, button.record-name:hover { color: var(--primary); text-deco
 .detail-section:nth-last-child(-n+2) { border-bottom: 0; }
 dl { display: grid; grid-template-columns: 80px minmax(0, 1fr); gap: 16px; width: 100%; }
 dt { color: var(--muted-foreground); }
+.authentication-event-detail { display: block; }
+.authentication-event-detail dt { margin-bottom: 4px; }
 .binding-row { display: flex; justify-content: space-between; width: 100%; max-width: 320px; align-items: center; }
 .form-feedback { min-height: 64px; padding-block: 12px; color: var(--destructive); font-size: 13px; line-height: 1.5; }
 .login-page { min-height: 100dvh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; padding: 32px 20px; text-align: center; }

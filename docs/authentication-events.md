@@ -4,8 +4,8 @@ This document records the agreed design for MemberID authentication events:
 event meaning, correlation, organization visibility, retention, and delivery
 failure behavior. **The store, bounded writer, retention cleanup, `sms.send`,
 supported-method `authentication.verify`, initial grant issuance, confirmed OIDC
-reuse, explicit session/grant revocation producers, and authorized queries are
-implemented.** Console views remain planned.
+reuse, explicit session/grant revocation producers, authorized queries, and console views are
+implemented.**
 Authentication policy and token claims are unchanged.
 
 The existing [management history](administration.md#availability-and-audit)
@@ -210,7 +210,7 @@ same organization. The API never returns raw stored JSON as an unfiltered payloa
 A separate PostgreSQL `authentication_events` store is implemented. Existing
 management records require an organization and actor and describe different operations;
 do not force unidentified/global authentication events into that shape. The
-logical fields above do not prescribe a completed schema or JSON API.
+query API returns only the typed event envelope, with the projection described above.
 
 Default retention is **90 days from `occurredAt`**, with a positive,
 operator-configurable duration. This is a product default, not a legal retention
