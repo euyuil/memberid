@@ -8,6 +8,7 @@ import {
   RecordTime,
 } from "@/components/directory"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   Dialog,
   DialogContent,
@@ -372,15 +373,19 @@ function ProviderDialog({
                 </FieldLabel>
                 <Input id="provider-callback" value={callback} readOnly />
               </Field>
-              <label className="flex items-center gap-2 text-sm">
-                <input
+              <Field orientation="horizontal" data-disabled={pending}>
+                <Checkbox
+                  id="provider-enabled"
                   name="enabled"
-                  type="checkbox"
+                  nativeButton
+                  render={<button type="button" />}
                   defaultChecked={item?.enabled ?? true}
                   disabled={pending}
                 />
-                允许使用此应用登录
-              </label>
+                <FieldLabel htmlFor="provider-enabled">
+                  允许使用此应用登录
+                </FieldLabel>
+              </Field>
             </FieldGroup>
             <div className="form-feedback" role="status" aria-live="polite">
               {error && (

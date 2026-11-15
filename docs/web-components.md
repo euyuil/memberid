@@ -20,6 +20,8 @@ The console header uses the official Base Nova Breadcrumb from the same pinned C
 
 Detail identifiers use the official Base Nova Input Group, including its Textarea source dependency, added through the same pinned CLI. The copy button sits in an inline-end addon; selectable read-only values, asynchronous clipboard handling, and reserved feedback space remain application behavior. Existing Button and Input sources are retained, with no package graph changes. The same retained MIT notice covers the added source.
 
+The provider form uses the official Base Nova Checkbox with Field and FieldLabel. Its native button rendering supports the sibling label; the hidden form input retains checked/unchecked submission semantics. The pinned CLI adds only source using the existing Base UI and Lucide dependencies, covered by the retained MIT notice.
+
 Registry response SHA-256 values, before import/icon transformation:
 
 | Component | SHA-256 |
