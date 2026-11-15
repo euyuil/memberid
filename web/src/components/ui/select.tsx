@@ -1,6 +1,7 @@
 import { Select as SelectPrimitive } from "@base-ui/react/select"
 import { Check, ChevronDown, ChevronUp } from "lucide-react"
 import { cn } from "cn"
+import { buttonVariants } from "@/components/ui/button"
 
 const Select = SelectPrimitive.Root
 
@@ -33,7 +34,8 @@ function SelectTrigger({
     <SelectPrimitive.Trigger
       data-slot="select-trigger"
       className={cn(
-        "flex h-8 w-fit items-center justify-between gap-3 rounded-lg border border-input bg-background px-3 text-sm whitespace-nowrap transition-colors outline-none select-none hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 data-placeholder:text-muted-foreground",
+        buttonVariants({ variant: "outline" }),
+        "w-fit justify-between disabled:cursor-not-allowed data-placeholder:text-muted-foreground",
         className
       )}
       {...props}
@@ -41,7 +43,10 @@ function SelectTrigger({
       {children}
       <SelectPrimitive.Icon
         render={
-          <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
+          <ChevronDown
+            data-icon="inline-end"
+            className="text-muted-foreground"
+          />
         }
       />
     </SelectPrimitive.Trigger>
