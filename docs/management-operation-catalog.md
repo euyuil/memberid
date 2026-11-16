@@ -187,7 +187,6 @@ and `M`. Source and test references are indexed by row ID below.
 | M7 | `POST /api/M/password` with `username` | `M/password` | `create` | Platform | Console write; unique username within the organization and one password credential per Member. |
 | M8 | `POST /api/M/password/reset` with an empty JSON object | `M/password` | `update` | Platform | Console write; retain the username and revoke the Member's grants and password-authenticated SSO sessions. |
 | M9 | `PATCH /api/M/password` with `expectedUsername` and `username` | `M/password` | `update` | Platform | Console write; reject a stale or occupied name. Preserve the credential, binding and active sessions. Returns the current username on success. |
-
 | M10 | `PUT /api/M/email`; `GET`/`PUT /v1/M/email`; `memberid member email inspect/set` | `M/email` | `get` on read; `update` on write | Console: Platform or own organization admin; private: Manager; CLI: operator | Console write or installation checkpoint; expected revision, address uniqueness within the organization and atomic audit. Self-service is denied. |
 
 Both password operations return the username and generated password in a
