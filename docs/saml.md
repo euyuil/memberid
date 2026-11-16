@@ -86,6 +86,22 @@ Organization disablement, Member blocking or confirmed departure, factor disable
 
 Upstream callbacks recheck current organization, Member, binding, factor, and provider configuration after external I/O, before committing authentication evidence. Changing provider credentials during login invalidates that callback. Assertion issuance rechecks current eligibility and SP registration in its own transaction, including revision-bound directory observations. These controls stop new issuance; they do not terminate sessions that an SP has already established. The SP owns its application-session lifetime and revocation policy.
 
+## Initial profile acceptance
+
+The initial profile in [issue #99](https://github.com/euyuil/memberid/issues/99) is supported by the following implementation and acceptance evidence. The [independent consumer guide](saml-interop.md#observed-acceptance-and-limits) records the tested package versions, executable hashes, environment, and observed results.
+
+| Acceptance criterion | Evidence |
+| --- | --- |
+| Metadata and complete SP-initiated login through the ordinary package | [Packaged HTTPS acceptance](../internal/interop/saml/acceptance.test.mjs) starts the normal executable, reads metadata, sends a signed Redirect request, posts the response to the independent SP, and confirms its authenticated application session. Linux build CI runs this fixture after packaging. |
+| Issuer, subject, authentication statement, correlation, and validity | [Protocol tests](../internal/samlprovider/provider_test.go) verify response/assertion signatures and contents; [shared identity tests](../internal/oidcprovider/saml_eligibility_integration_test.go) check stable NameID and original authentication time. The independent consumer rejects correctly signed responses with invalid issuer, audience, recipient, destination, correlation, or validity constraints. |
+| Explicit failure without unsafe redirects or successful assertions | [HTTP admission and transaction tests](../internal/oidcprovider/saml_integration_test.go) cover invalid destinations, unknown SPs, expiry, browser binding, unsupported requests, replay, and concurrent completion. Protocol tests require error responses to contain no assertion. Packaged acceptance returns URL-shaped RelayState unchanged while posting only to the registered ACS. |
+| Configuration, bindings, sessions, and limitations documented | This guide defines the protocol contract; [registration management](management-api.md#saml-service-provider-registration) and [signing operations](saml-signing.md) document administrative authority and lifecycle procedures. |
+| Focused success/error tests with explicit validation limits | Protocol/configuration tests, disposable PostgreSQL integration tests with the race detector, and independent packaged consumer acceptance cover the initial profile. The consumer guide distinguishes automated HTTP acceptance from browser inspection, real-provider validation, GitLab SAML compatibility, and certification. |
+
+The [dependency inventory](third-party-components.md#saml-idp-and-xml-signatures) records the pinned upstream SAML implementation, XML dependencies, reviewed licenses, retained notices, and advisory reachability limits. [Startup tests](../cmd/memberid/saml_integration_test.go) and HTTP admission tests cover configuration gating. Shared SAML/OIDC tests retain separate protocol transactions and the existing OIDC identity/session contract.
+
+Legacy identifier administration and additional NameID formats ([#103](https://github.com/euyuil/memberid/issues/103)), trusted email attributes ([#104](https://github.com/euyuil/memberid/issues/104)), and production database upgrades ([#106](https://github.com/euyuil/memberid/issues/106)) remain separate work. Persistent pairwise NameID allocation is part of this initial profile; those additional features are not prerequisites for its acceptance.
+
 ## Boundaries and validation
 
 This profile does not implement IdP-initiated SSO, Artifact/SOAP bindings, encrypted assertions, SLO, SCIM, trusted email release, legacy subject mapping, or automatic signing-key rotation. These remain separate work. Shared authentication tables are protocol-neutral; OIDC grants, codes, and token endpoints remain OIDC-only.
