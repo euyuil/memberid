@@ -63,16 +63,26 @@ export function createConsumer({
       // Node-SAML 5.2 only warns about these two constraints. Enforce them
       // using verified XML, before creating an application session.
       const raw = Buffer.from(form.SAMLResponse, "base64").toString("utf8");
-      const signature = new SignedXml({
-        publicCert: idpCert,
-        getCertFromKeyInfo: () => null,
-      });
-      signature.loadSignature(
-        select("/p:Response/ds:Signature", parse(raw))[0],
-      );
-      if (!signature.checkSignature(raw))
-        throw new Error("Invalid response signature");
-      const references = signature.getSignedReferences();
+      let references;
+      for (const certificate of Array.isArray(idpCert) ? idpCert : [idpCert]) {
+        const signature = new SignedXml({
+          publicCert: certificate,
+          getCertFromKeyInfo: () => null,
+        });
+        signature.loadSignature(
+          select("/p:Response/ds:Signature", parse(raw))[0],
+        );
+        try {
+          if (signature.checkSignature(raw)) {
+            references = signature.getSignedReferences();
+            break;
+          }
+        } catch {
+          // A mismatched key throws in xml-crypto. Try only the remaining
+          // explicitly trusted certificates; never trust embedded KeyInfo.
+        }
+      }
+      if (!references) throw new Error("Invalid response signature");
       if (references.length !== 1) throw new Error("Ambiguous signed response");
       const response = parse(references[0]);
       if (

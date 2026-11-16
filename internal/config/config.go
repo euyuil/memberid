@@ -89,6 +89,12 @@ func ReadJSON(file string, target any) error {
 }
 
 func Load(directory string) (*Loaded, error) {
+	return load(directory, nil, false)
+}
+
+// Signing inspection can read an expired certificate without making it usable
+// by a running server. An override validates candidate files before activation.
+func load(directory string, samlOverride *SAML, inspectSigning bool) (*Loaded, error) {
 	result := new(Loaded)
 	if err := ReadJSON(filepath.Join(directory, "memberid.json"), &result.Installation); err != nil {
 		return nil, err
@@ -96,10 +102,18 @@ func Load(directory string) (*Loaded, error) {
 	if err := result.Installation.Validate(); err != nil {
 		return nil, err
 	}
+	if samlOverride != nil {
+		result.SAML = samlOverride
+	}
 	var signingErr error
-	result.SAMLSigning, signingErr = LoadSAMLSigning(directory, result.SAML)
+	result.SAMLSigning, signingErr = readSAMLSigning(directory, result.SAML)
 	if signingErr != nil {
 		return nil, signingErr
+	}
+	if result.SAMLSigning != nil && !inspectSigning {
+		if err := result.SAMLSigning.Validate(time.Now()); err != nil {
+			return nil, err
+		}
 	}
 	if err := ReadJSON(filepath.Join(directory, result.SecretsFile), &result.Secrets); err != nil {
 		return nil, err

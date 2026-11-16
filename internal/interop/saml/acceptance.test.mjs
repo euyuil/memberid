@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, X509Certificate } from "node:crypto";
 import { once } from "node:events";
 import {
+  cpSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -144,7 +145,11 @@ test(
     let logs = "";
     t.after(async () => {
       if (edge?.listening) await new Promise((resolve) => edge.close(resolve));
-      if (processHandle && processHandle.exitCode === null) {
+      if (
+        processHandle &&
+        processHandle.exitCode === null &&
+        processHandle.signalCode === null
+      ) {
         const exited = once(processHandle, "exit");
         processHandle.kill();
         await exited;
@@ -291,14 +296,15 @@ test(
     }
     assert.ok(issuer, "a free HTTPS port from 19001 through 19009 is required");
     acs = `${spOrigin}/acs`;
-    consumer = createConsumer({
+    const consumerOptions = {
       issuer: `${spOrigin}/metadata`,
       callbackUrl: acs,
       entryPoint: `${issuer}/saml/sso`,
       idpCert: idpKeys.cert,
       idpIssuer: `${issuer}/saml/metadata`,
       privateKey: spKeys.key,
-    });
+    };
+    consumer = createConsumer(consumerOptions);
     command("docker", [
       "run",
       "--detach",
@@ -322,6 +328,10 @@ test(
           "exec",
           database,
           "pg_isready",
+          // The image's temporary initialization server listens only on a
+          // Unix socket. Wait for the final TCP listener used by MemberID.
+          "--host",
+          "127.0.0.1",
           "--username",
           "postgres",
         ]);
@@ -340,7 +350,7 @@ test(
       MEMBERID_DATABASE_URL: `postgres://postgres@127.0.0.1:${databasePort}/postgres?sslmode=disable`,
     };
     const cli = (...args) => command(executable, args, env);
-    const installation = path.join(directory, "installation");
+    let installation = path.join(directory, "installation");
     cli("config", "init", "--directory", installation, "--issuer", issuer);
     const configFile = path.join(installation, "memberid.json");
     const configuration = JSON.parse(readFileSync(configFile, "utf8"));
@@ -397,33 +407,40 @@ test(
     await new Promise((resolve) => probe.listen(0, "127.0.0.1", resolve));
     upstreamPort = probe.address().port;
     await new Promise((resolve) => probe.close(resolve));
-    processHandle = spawn(
-      executable,
-      [
-        "serve",
-        "--directory",
-        installation,
-        "--listen",
-        `127.0.0.1:${upstreamPort}`,
-      ],
-      { env, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] },
-    );
-    processHandle.stdout.on("data", (chunk) => {
-      logs += chunk;
-    });
-    processHandle.stderr.on("data", (chunk) => {
-      logs += chunk;
-    });
     const browser = client(tls.cert);
-    ready = false;
-    for (let i = 0; i < 60; i++) {
-      if ((await browser(`${issuer}/saml/metadata`)).status === 200) {
-        ready = true;
-        break;
+    async function startProvider() {
+      processHandle = spawn(
+        executable,
+        [
+          "serve",
+          "--directory",
+          installation,
+          "--listen",
+          `127.0.0.1:${upstreamPort}`,
+        ],
+        { env, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] },
+      );
+      processHandle.stdout.on("data", (chunk) => {
+        logs += chunk;
+      });
+      processHandle.stderr.on("data", (chunk) => {
+        logs += chunk;
+      });
+      for (let i = 0; i < 60; i++) {
+        if ((await browser(`${issuer}/saml/metadata`)).status === 200) return;
+        if (processHandle.exitCode !== null) break;
+        await sleep(200);
       }
-      await sleep(200);
+      assert.fail("packaged MemberID startup");
     }
-    assert.ok(ready, "packaged MemberID startup");
+    async function stopProvider() {
+      const exited = once(processHandle, "exit");
+      processHandle.kill();
+      await exited;
+      processHandle = undefined;
+      assert.equal((await browser(`${issuer}/saml/metadata`)).status, 503);
+    }
+    await startProvider();
 
     async function responseForm() {
       const start = await browser(`${spOrigin}/login`);
@@ -620,6 +637,258 @@ test(
       assert.match(lastFailure, /signature/i);
       assert.equal((await browser(`${spOrigin}/session`)).status, 401);
     });
+    await t.test(
+      "signing rollover, rollback and consistent backup restore preserve the SP account",
+      async () => {
+        const old = JSON.parse(
+          cli("saml", "signing", "inspect", "--directory", installation),
+        );
+        assert.equal(old.status, "expiring");
+        const jwks = JSON.parse(
+          (await browser(`${issuer}/.well-known/jwks.json`)).body,
+        );
+        const login = async () => {
+          assert.equal((await browser(acs, await responseForm())).status, 303);
+          const session = await browser(`${spOrigin}/session`);
+          assert.equal(session.status, 200);
+          return JSON.parse(session.body).nameID;
+        };
+        const nameID = await login();
+
+        // Quiesce the IdP and back up its database and protected files together.
+        await stopProvider();
+        const backup = path.join(directory, "protected-backup");
+        cpSync(installation, backup, {
+          recursive: true,
+          errorOnExist: true,
+          force: false,
+        });
+        command("docker", [
+          "exec",
+          database,
+          "pg_dump",
+          "--username",
+          "postgres",
+          "--format=custom",
+          "--file=/tmp/saml-backup.dump",
+          "postgres",
+        ]);
+        await startProvider();
+
+        const next = certificate("next-idp");
+        writeFileSync(path.join(installation, "next-key.pem"), next.key, {
+          mode: 0o600,
+        });
+        writeFileSync(path.join(installation, "next.pem"), next.cert, {
+          mode: 0o600,
+        });
+        const signing = (operation, ...args) =>
+          cli(
+            "saml",
+            "signing",
+            operation,
+            "--directory",
+            installation,
+            ...args,
+          );
+        const candidateFlags = [
+          "--key-file",
+          "next-key.pem",
+          "--certificate-file",
+          "next.pem",
+        ];
+        const candidate = JSON.parse(signing("inspect", ...candidateFlags));
+        const publicCertificate = signing(
+          "export-certificate",
+          ...candidateFlags,
+        );
+        assert.equal(
+          new X509Certificate(publicCertificate).fingerprint256
+            .replaceAll(":", "")
+            .toLowerCase(),
+          candidate.sha256,
+        );
+        assert.ok(!publicCertificate.includes("PRIVATE"));
+        const fingerprint = async () => {
+          const response = await browser(`${issuer}/saml/metadata`);
+          assert.equal(response.status, 200);
+          const certs = parse(response.body).getElementsByTagNameNS(
+            "http://www.w3.org/2000/09/xmldsig#",
+            "X509Certificate",
+          );
+          assert.equal(
+            certs.length,
+            1,
+            "metadata publishes only the running signer",
+          );
+          return createHash("sha256")
+            .update(Buffer.from(certs[0].textContent, "base64"))
+            .digest("hex");
+        };
+        assert.equal(await fingerprint(), old.sha256);
+        const originalConfiguration = readFileSync(configFile);
+        assert.throws(() =>
+          signing(
+            "activate",
+            "--key-file",
+            "saml-key.pem",
+            "--certificate-file",
+            "next.pem",
+            "--expected-sha256",
+            old.sha256,
+            "--backup-file",
+            "rejected.json",
+          ),
+        );
+        assert.ok(
+          readFileSync(configFile).equals(originalConfiguration),
+          "invalid candidate preserves configuration",
+        );
+
+        // Trust both public certificates before changing the configured signer.
+        consumer = createConsumer({
+          ...consumerOptions,
+          idpCert: [idpKeys.cert, publicCertificate],
+        });
+        const pendingOld = await responseForm();
+        const activated = JSON.parse(
+          signing(
+            "activate",
+            ...candidateFlags,
+            "--expected-sha256",
+            old.sha256,
+            "--backup-file",
+            "before-rotation.json",
+          ),
+        );
+        assert.equal(activated.restartRequired, true);
+        assert.equal(activated.sha256, candidate.sha256);
+        assert.equal(
+          await fingerprint(),
+          old.sha256,
+          "file activation does not silently reload the running process",
+        );
+        const restart = async () => {
+          const started = performance.now();
+          await stopProvider();
+          await startProvider();
+          const elapsed = Math.ceil(performance.now() - started);
+          assert.ok(
+            elapsed < 30_000,
+            "restart outage exceeds the fixture bound",
+          );
+          t.diagnostic(`signing restart outage: ${elapsed} ms`);
+        };
+        await restart();
+        assert.equal(await fingerprint(), candidate.sha256);
+        assert.equal(
+          (await browser(acs, pendingOld)).status,
+          303,
+          "overlap accepts the old in-flight response after restart",
+        );
+        assert.equal(await login(), nameID);
+        assert.deepEqual(
+          JSON.parse((await browser(`${issuer}/.well-known/jwks.json`)).body),
+          jwks,
+        );
+
+        // Rehearse a missed SP trust update and recover using the retained signer.
+        consumer = createConsumer(consumerOptions);
+        assert.equal((await browser(acs, await responseForm())).status, 400);
+        assert.match(lastFailure, /signature/i);
+        assert.equal((await browser(`${spOrigin}/session`)).status, 401);
+        signing(
+          "activate",
+          "--key-file",
+          "saml-key.pem",
+          "--certificate-file",
+          "saml.pem",
+          "--expected-sha256",
+          candidate.sha256,
+          "--backup-file",
+          "before-rollback.json",
+        );
+        await restart();
+        assert.equal(await fingerprint(), old.sha256);
+        assert.equal(await login(), nameID);
+
+        signing(
+          "activate",
+          ...candidateFlags,
+          "--expected-sha256",
+          old.sha256,
+          "--backup-file",
+          "before-second-rotation.json",
+        );
+        consumer = createConsumer({
+          ...consumerOptions,
+          idpCert: publicCertificate,
+        });
+        await restart();
+        assert.equal(await login(), nameID);
+        const retired = await responseForm();
+        retired.SAMLResponse = alterAndSign(
+          retired.SAMLResponse,
+          () => {},
+          idpKeys.key,
+          idpKeys.cert,
+        );
+        assert.equal(
+          (await browser(acs, retired)).status,
+          400,
+          "retired signing key is no longer trusted",
+        );
+        assert.match(lastFailure, /signature/i);
+
+        // Restore into a new owned database and directory; never overwrite the
+        // current database or discard the installation being recovered from.
+        await stopProvider();
+        command("docker", [
+          "exec",
+          database,
+          "createdb",
+          "--username",
+          "postgres",
+          "restored",
+        ]);
+        command("docker", [
+          "exec",
+          database,
+          "pg_restore",
+          "--username",
+          "postgres",
+          "--exit-on-error",
+          "--dbname",
+          "restored",
+          "/tmp/saml-backup.dump",
+        ]);
+        installation = path.join(directory, "restored-installation");
+        cpSync(backup, installation, {
+          recursive: true,
+          errorOnExist: true,
+          force: false,
+        });
+        env.MEMBERID_DATABASE_URL = `postgres://postgres@127.0.0.1:${databasePort}/restored?sslmode=disable`;
+        consumer = createConsumer(consumerOptions);
+        await startProvider();
+        assert.equal(await fingerprint(), old.sha256);
+        assert.equal(
+          await login(),
+          nameID,
+          "consistent restore preserves the established SP account",
+        );
+        assert.deepEqual(
+          JSON.parse((await browser(`${issuer}/.well-known/jwks.json`)).body),
+          jwks,
+        );
+        assert.ok(
+          !logs.includes("PRIVATE KEY") &&
+            !logs.includes(next.key.trim()) &&
+            !logs.includes(idpKeys.key.trim()),
+          "signing private material absent from logs",
+        );
+      },
+    );
     await t.test(
       "Member blocking stops pending issuance but preserves an existing SP session",
       async () => {
