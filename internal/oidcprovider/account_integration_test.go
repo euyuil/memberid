@@ -17,6 +17,16 @@ import (
 
 const accountReturn = "http://127.0.0.1:8484/settings"
 
+func assertAccountFormAction(t *testing.T, page reply, providerOrigin string) {
+	t.Helper()
+	// Form submissions include the cross-origin authorization redirect. Keep the
+	// allowlist specific to this provider, including on callback result pages.
+	policy := page.header.Get("Content-Security-Policy")
+	if !strings.Contains(policy, "; form-action 'self' "+providerOrigin+";") {
+		t.Fatalf("account form must allow only self and %s: %s", providerOrigin, policy)
+	}
+}
+
 func accountFixture(t *testing.T) (*fixture, *testDingTalk, *identity.DingTalkApplications, reply) {
 	t.Helper()
 	f := newConfiguredFixture(t, true)
@@ -62,6 +72,7 @@ func assertUnlinked(t *testing.T, f *fixture) {
 
 func TestAccountLinkPreservesMemberSessionAndOIDCSubject(t *testing.T) {
 	f, provider, _, page := accountFixture(t)
+	assertAccountFormAction(t, page, "https://login.dingtalk.com")
 	login, verifier := f.loginPage("example-web", "openid offline_access")
 	tokens := f.exchange("example-web", f.complete(login, f.member.ID), verifier)
 	f.status(tokens, 200)
@@ -77,7 +88,8 @@ func TestAccountLinkPreservesMemberSessionAndOIDCSubject(t *testing.T) {
 	callbackPath := startAccount(f, page) + "&code=synthetic-code"
 	result := f.call(f.browser, "GET", callbackPath, nil, nil)
 	f.status(result, 200)
-	if !strings.Contains(result.body, "DingTalk is linked to this Member") || !strings.Contains(result.body, `href="`+accountReturn+`"`) || result.header.Get("Set-Cookie") != "" || !strings.Contains(result.header.Get("Content-Security-Policy"), "form-action 'self' https://login.dingtalk.com;") {
+	assertAccountFormAction(t, result, "https://login.dingtalk.com")
+	if !strings.Contains(result.body, "DingTalk is linked to this Member") || !strings.Contains(result.body, `href="`+accountReturn+`"`) || result.header.Get("Set-Cookie") != "" {
 		t.Fatal("incorrect account result", result.body)
 	}
 	if id := admittedMember(t, f, f.member.OrganizationID); id != f.member.ID {
