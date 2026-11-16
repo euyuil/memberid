@@ -328,6 +328,10 @@ test(
           "exec",
           database,
           "pg_isready",
+          // The image's temporary initialization server listens only on a
+          // Unix socket. Wait for the final TCP listener used by MemberID.
+          "--host",
+          "127.0.0.1",
           "--username",
           "postgres",
         ]);
