@@ -15,6 +15,7 @@ import (
 
 type FeishuProvider interface {
 	CheckAuthorization(context.Context, string, string) error
+	Membership(context.Context, string, string, string) (bool, error)
 	Login(context.Context, string, string, string, string, string) (feishu.Profile, error)
 }
 
@@ -174,10 +175,12 @@ func (apps *FeishuApplications) LoginSource(ctx context.Context, organizationID,
 }
 
 type FeishuProof struct {
-	applications    *FeishuApplications
-	login           FeishuLoginContext
-	profile         feishu.Profile
-	authenticatedAt time.Time
+	applications         *FeishuApplications
+	login                FeishuLoginContext
+	profile              feishu.Profile
+	authenticatedAt      time.Time
+	membership           *feishuMembershipSnapshot
+	membershipVerifiedAt time.Time
 }
 
 func (apps *FeishuApplications) Verify(ctx context.Context, login FeishuLoginContext, callback, code, verifier string) (FeishuProof, error) {
@@ -216,7 +219,30 @@ func (apps *FeishuApplications) Verify(ctx context.Context, login FeishuLoginCon
 	if profile.TenantKey != app.TenantID || !validText(profile.OpenID, 256) {
 		return FeishuProof{}, ErrIneligible
 	}
-	return FeishuProof{apps, login, profile, time.Now().UTC()}, nil
+	proof := FeishuProof{applications: apps, login: login, profile: profile, authenticatedAt: time.Now().UTC()}
+	var bindingID string
+	err = apps.store.pool.QueryRow(ctx, `SELECT b.id::text FROM member_auth_factor_bindings b JOIN authentication_factors f ON f.id=b.authentication_factor_id
+ WHERE b.organization_id=$1 AND f.type='feishu' AND f.namespace=$2 AND f.subject=$3`, login.OrganizationID, login.ProviderID, profile.OpenID).Scan(&bindingID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return proof, nil
+	}
+	if err != nil {
+		return FeishuProof{}, err
+	}
+	snapshot, err := readFeishuMembership(ctx, apps.store.pool, bindingID, false)
+	if err != nil {
+		return FeishuProof{}, err
+	}
+	snapshot, departed, err := apps.observeMembership(ctx, snapshot)
+	if err != nil {
+		return FeishuProof{}, ErrProviderUnavailable
+	}
+	if departed {
+		return FeishuProof{}, ErrIneligible
+	}
+	proof.membership = &snapshot
+	proof.membershipVerifiedAt = time.Now().UTC()
+	return proof, nil
 }
 
 // Check observed application credentials without holding a database lock.
@@ -372,9 +398,22 @@ func (apps *FeishuApplications) admit(ctx context.Context, tx pgx.Tx, proof Feis
 		if err != nil {
 			return MemberAdmission{}, err
 		}
+		if proof.membership == nil || !proof.membershipVerifiedAt.Add(time.Minute).After(time.Now()) {
+			return MemberAdmission{}, ErrConflict
+		}
+		current, err := readFeishuMembership(ctx, tx, binding.ID, true)
+		if err != nil {
+			return MemberAdmission{}, err
+		}
+		if current != *proof.membership {
+			return MemberAdmission{}, ErrConflict
+		}
 		if _, err := MemberEvidence(ctx, tx, factor.ID, binding.MemberID, org.ID); err != nil {
 			return MemberAdmission{}, err
 		}
+	}
+	if _, err := tx.Exec(ctx, "INSERT INTO feishu_memberships(binding_id) VALUES($1) ON CONFLICT DO NOTHING", binding.ID); err != nil {
+		return MemberAdmission{}, err
 	}
 	return MemberAdmission{Verification: Verification{Factor: factor, AuthenticatedAt: proof.authenticatedAt, Method: "feishu"}, OrganizationID: org.ID, MemberID: binding.MemberID, BindingID: binding.ID}, nil
 }

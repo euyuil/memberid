@@ -8,7 +8,7 @@ import (
 )
 
 const organizationColumns = "id,name,status,created_at,updated_at,lifecycle_revision"
-const memberColumns = "id,organization_id,display_name,manual_block,external_departure,created_at,updated_at"
+const memberColumns = "id,organization_id,display_name,manual_block,(external_departure OR " + feishuMemberDeparture + "),created_at,updated_at"
 const factorColumns = "id,type,namespace,subject,status,created_at,updated_at"
 const bindingColumns = "id::text,member_id,organization_id,authentication_factor_id,factor_type,status,created_at,revoked_at"
 

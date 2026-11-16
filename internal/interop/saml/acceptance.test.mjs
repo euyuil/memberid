@@ -883,7 +883,7 @@ test(
       assert.equal((await browser(`${spOrigin}/session`)).status, 401);
     });
     await t.test(
-      "schema 26 upgrades with stable identities and recovers with the old executable",
+      "supported baseline upgrades with stable identities and recovers with the old executable",
       { skip: !upgradeBaseline },
       async () => {
         const oldExecutable = executable;
@@ -907,7 +907,7 @@ test(
         const snapshot = () =>
           Object.fromEntries(
             pg(
-              "SELECT tablename FROM pg_tables WHERE schemaname='public' AND tablename NOT IN ('memberid_schema','database_upgrades') ORDER BY tablename",
+              "SELECT tablename FROM pg_tables WHERE schemaname='public' AND tablename NOT IN ('memberid_schema','database_upgrades','feishu_memberships') ORDER BY tablename",
             )
               .split(/\r?\n/)
               .map((name) => {
@@ -920,7 +920,14 @@ test(
                 ];
               }),
           );
-        assert.equal(pg("SELECT version FROM memberid_schema"), "26");
+        const sourceSchemaVersion = Number(
+          pg("SELECT version FROM memberid_schema"),
+        );
+        assert.ok([26, 27].includes(sourceSchemaVersion));
+        const previousUpgrades =
+          sourceSchemaVersion === 26
+            ? 0
+            : Number(pg("SELECT count(*) FROM database_upgrades"));
         assert.equal((await browser(acs, await responseForm())).status, 303);
         const originalNameID = JSON.parse(
           (await browser(`${spOrigin}/session`)).body,
@@ -1004,11 +1011,14 @@ test(
         ];
         const upgraded = JSON.parse(cli(...upgradeArgs));
         assert.equal(upgraded.upgraded, true);
-        assert.equal(upgraded.currentVersion, 27);
-        t.diagnostic("upgrade rehearsal: schema 27 committed");
+        assert.equal(upgraded.currentVersion, 28);
+        t.diagnostic("upgrade rehearsal: schema 28 committed");
         assert.deepEqual(snapshot(), before);
         assert.equal(JSON.parse(cli(...upgradeArgs)).upgraded, false);
-        assert.equal(pg("SELECT count(*) FROM database_upgrades"), "1");
+        assert.equal(
+          Number(pg("SELECT count(*) FROM database_upgrades")),
+          previousUpgrades + 28 - sourceSchemaVersion,
+        );
         cli("database", "backup-check", "--backup-directory", recovery);
         assert.throws(() => command(oldExecutable, ["database", "check"], env));
         await startProvider();
@@ -1094,7 +1104,7 @@ test(
         executable = oldExecutable;
         cli("database", "check");
         await startProvider();
-        t.diagnostic("upgrade rehearsal: recovered schema 26 started");
+        t.diagnostic("upgrade rehearsal: recovered source schema started");
         assert.equal(
           (
             await browser(

@@ -311,7 +311,10 @@ func TestSAMLUpstreamInvalidation(t *testing.T) {
 					t.Fatal(err)
 				}
 				result := s.call(s.browser, "GET", callback, nil, nil)
-				if result.status < 400 || strings.Contains(result.body, "SAMLResponse") {
+				// Feishu directory policy can reject the proof before admission,
+				// rendering the existing retry page without authenticating.
+				verificationFailed := method == "feishu" && result.status == 200 && strings.Contains(result.body, "Unable to verify the Feishu identity")
+				if (!verificationFailed && result.status < 400) || result.header.Get("Set-Cookie") != "" || strings.Contains(result.body, "SAMLResponse") {
 					t.Fatal("invalidated callback established authentication", result.status)
 				}
 				if err := s.store.Database().QueryRow(t.Context(), "SELECT count(*) FROM authentication_sessions").Scan(&countAfter); err != nil || countAfter != countBefore {

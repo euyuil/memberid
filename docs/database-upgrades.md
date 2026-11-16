@@ -6,13 +6,16 @@ Schema 26 is the first supported baseline. Upgrades are explicit operator operat
 
 | Source | Target | Result |
 | --- | --- | --- |
-| Empty database | 27 | Explicit `database init`; refuses existing user relations. |
-| 26 | 27 | Supported forward migration with a required recovery set. |
-| 27 | 27 | No change; `upgraded: false`, no new backup or history row. |
-| Before 26, after 27, missing/ambiguous version | 27 | Refused without changing the source. |
-| 27 | 26 | No reverse migration. Restore the pre-upgrade recovery set with the schema 26 executable into new destinations. |
+| Empty database | 28 | Explicit `database init`; refuses existing user relations. |
+| 26 | 28 | Apply versions 27 and 28 atomically with one source-26 recovery set. |
+| 27 | 28 | Apply version 28 with a source-27 recovery set. |
+| 28 | 28 | No change; `upgraded: false`, no new backup or history row. |
+| Before 26, after 28, missing/ambiguous version | 28 | Refused without changing the source. |
+| 28 | 26 or 27 | No reverse migration. Restore the matching pre-upgrade recovery set and source executable into new destinations. |
 
-The baseline executable is the ordinary distribution built from commit `a7c3ebed19d4cfb7196108f80c6360fc9449f882`. Schema 27 introduces the `database_upgrades` ledger. Its 26-to-27 migration leaves all existing business and protocol rows unchanged and records the source/target versions, migration SQL checksum, recovery-set ID and manifest checksum in the same transaction as the version change. Fresh schema 27 installations have an empty ledger. This first migration establishes the supported upgrade boundary; it is not a claim that every past or future version pair is compatible.
+The schema 26 baseline executable is the ordinary distribution built from commit `a7c3ebed19d4cfb7196108f80c6360fc9449f882`. The schema 27 baseline is the distribution built from `2e6881ef0190b4fbf9cc9ed84edd3fe9c6a55902`. Schema 27 introduced the `database_upgrades` ledger; its released migration remains unchanged. Schema 28 adds `feishu_memberships`, seeding pending checks for existing Feishu bindings without inferring employment state. All existing business and protocol rows are preserved.
+
+Each applied migration records its own source/target versions and SQL checksum together with the recovery-set receipt, in the same transaction as the final version change. Source 26 applies both steps using one source-26 backup; source 27 applies only the new step. Fresh schema 28 installations have an empty ledger. Supported paths start at schema 26 and do not include older demo schemas.
 
 ## Preflight and maintenance
 
@@ -36,7 +39,7 @@ Before upgrading:
 
 ```sh
 memberid database upgrade --directory ./installation \
-  --backup-directory ./protected-backups/before-schema-27 \
+  --backup-directory ./protected-backups/before-schema-28 \
   --maintenance-confirmed
 ```
 
@@ -46,7 +49,7 @@ The backup destination must be new and outside the installation. Existing destin
 
 - `database.dump`: a complete custom-format `pg_dump` archive, without ownership/ACL commands. Global database roles, tablespaces, external service settings and secrets outside the installation are not included; provision those separately on recovery.
 - `installation/`: the complete protected directory, including the issuer/client configuration, SAML signing material, OIDC keys, protocol/provider secrets and management credentials. Symlinks and special files are rejected. Copied files are made owner-only on Unix and their contents flushed.
-- `manifest.json`: schema 26, a random recovery-set ID, creation time and SHA-256 checksums for every file. Written last after verifying the copy and that source files did not change during backup. This detects damage/mixed sets, not a malicious operator able to rewrite both files and manifest.
+- `manifest.json`: the source schema (26 or 27), a random recovery-set ID, creation time and SHA-256 checksums for every file. Written last after verifying the copy and that source files did not change during backup. This detects damage/mixed sets, not a malicious operator able to rewrite both files and manifest.
 
 The command creates the archive while holding PostgreSQL SHARE locks over the public tables, excluding writes while allowing `pg_dump` to read. It then takes an exclusive version-table lock, rechecks stopped clients and applies the migration and ledger atomically. A shared maintenance lock on current MemberID database connections prevents a new current-version process from starting during upgrade. The final version-table lock also prevents a late schema 26 process from reading the old version and starting after commit. These checks complement the required maintenance window; they do not coordinate arbitrary external SQL tools, filesystem writers or deployment controllers. See [PostgreSQL locking](https://www.postgresql.org/docs/18/explicit-locking.html) and [pg_dump](https://www.postgresql.org/docs/18/app-pgdump.html).
 
@@ -55,11 +58,11 @@ The command creates the archive while holding PostgreSQL SHARE locks over the pu
 - Preflight or backup failure commits no database changes. An incomplete recovery directory may remain for inspection; it is not a completed backup without a valid manifest. Choose a new destination on a new attempt. Never delete the source to make initialization or upgrade pass.
 - Concurrent upgrades fail promptly on the database advisory lock. No process is terminated automatically. Locks are released with the connection/transaction; there is no stale filesystem lock to remove.
 - A SQL error or interruption before commit rolls back the DDL, ledger and version together. Keep the source offline, inspect it and correct the cause before retrying.
-- A connection failure around commit is an uncertain response, not proof of rollback. Run `upgrade-plan` and `database check` after the first connection has ended. Schema 27 means the complete transaction committed; inspect `database_upgrades` and verify the recorded recovery set. Repeating `upgrade` at schema 27 returns a no-op without touching its backup destination. Schema 26 means retry the supported upgrade with a new recovery destination. Never attempt a reverse SQL script.
+- A connection failure around commit is an uncertain response, not proof of rollback. Run `upgrade-plan` and `database check` after the first connection has ended. Schema 28 means the complete transaction committed; inspect `database_upgrades` and verify the recorded recovery set. Repeating `upgrade` at schema 28 returns a no-op without touching its backup destination. An unchanged source version (26 or 27) means retry the supported upgrade with a new recovery destination. Never attempt a reverse SQL script.
 - Filesystem or storage failure can invalidate a backup independently of the database transaction. Verify and protect the complete recovery set; the workflow is not a distributed transaction between PostgreSQL and backup storage, a continuous backup service or protection against losing both copies on one disk.
 
 ```sh
-memberid database backup-check --backup-directory ./protected-backups/before-schema-27
+memberid database backup-check --backup-directory ./protected-backups/before-schema-28
 memberid database check
 ```
 
@@ -75,10 +78,10 @@ Recovery returns to the backup point. It does not preserve writes made after the
    ```sh
    pg_restore --dbname=memberid_recovered \
      --exit-on-error --single-transaction --no-owner --no-acl \
-     ./protected-backups/before-schema-27/database.dump
+     ./protected-backups/before-schema-28/database.dump
    ```
 
-3. Copy the backed-up `installation/` into a new protected directory, preserving contents and enforcing access controls. Select the schema 26 executable and configure its connection to the **new restored database**. Verify `config check`, `database check`, and key/certificate validity before starting services. The backup does not renew expired certificates or change SP trust.
+3. Copy the backed-up `installation/` into a new protected directory, preserving contents and enforcing access controls. Select the matching source-schema executable and configure its connection to the **new restored database**. Verify `config check`, `database check`, and key/certificate validity before starting services. The backup does not renew expired certificates or change SP trust.
 4. Before exposing the recovered installation, invalidate restored sessions, grants and pending authentication/linking proofs using the supplied [recovery session script](recovery-sessions.sql), against the restored database only:
 
    ```sh
@@ -91,12 +94,12 @@ Recovery returns to the backup point. It does not preserve writes made after the
 
 ## Session and grant contract
 
-Normal 26-to-27 upgrade preserves sessions, grants, original authentication times, absolute/idle deadlines, consumed refresh tokens, replay reservations and revocations exactly. Maintenance downtime does not extend their lifetimes; expired state remains expired. No identities or keys are regenerated. A restored schema 26 backup contains point-in-time state and can resurrect subsequently revoked or consumed credentials. Recovery therefore requires the explicit invalidation and reconciliation step above before traffic resumes.
+Normal 26/27-to-28 upgrade preserves sessions, grants, original authentication times, absolute/idle deadlines, consumed refresh tokens, replay reservations and revocations exactly. Maintenance downtime does not extend their lifetimes; expired state remains expired. No identities or keys are regenerated. A restored source-schema backup contains point-in-time state and can resurrect subsequently revoked or consumed credentials. Recovery therefore requires the explicit invalidation and reconciliation step above before traffic resumes.
 
 ## Validation
 
-PostgreSQL integration tests cover backup refusal, active legacy clients, competing upgrades, blocked current-version startup, cancellation, SQL failure after DDL starts, rollback, retry, unsupported versions, and catalog equivalence between a migrated and freshly initialized schema 27. Recovery-set tests reject changed, missing and extra files.
+PostgreSQL integration tests additionally preserve populated schema 27 Feishu identities and seed unknown membership observations. They cover backup refusal, active legacy clients, competing upgrades, blocked current-version startup, cancellation, SQL failure after DDL starts, rollback, retry, unsupported versions, and catalog equivalence between a migrated and freshly initialized schema 28. Recovery-set tests reject changed, missing and extra files.
 
-The [packaged SAML fixture](saml-interop.md) accepts `MEMBERID_UPGRADE_BASELINE_PACKAGE` pointing to the ordinary schema 26 distribution, with `MEMBERID_SAML_PACKAGE` pointing to the current distribution. It creates Members, password bindings, administrator assignments, managed email, persistent and legacy NameIDs, an OIDC client, sessions and a Refresh Token using the old executable. It verifies all existing database-table contents across upgrade, reuses the OIDC grant without changing subject/authentication time, and completes SAML login with the same NameID. It then restores the generated recovery set into new destinations, invalidates restored sessions, rejects the old Refresh Token, and completes fresh SAML login with the old executable. The original upgraded database is retained until owned fixture cleanup. CI builds the pinned baseline and runs this rehearsal on Linux; the same fixture supports Windows native packages. This is automated HTTPS acceptance, not actual-browser inspection or real external-provider verification.
+The [packaged SAML fixture](saml-interop.md) accepts `MEMBERID_UPGRADE_BASELINE_PACKAGE` pointing to an ordinary schema 26 or 27 distribution, with `MEMBERID_SAML_PACKAGE` pointing to the current distribution. It creates Members, password bindings, administrator assignments, managed email, persistent and legacy NameIDs, an OIDC client, sessions and a Refresh Token using the old executable. It verifies all existing database-table contents across upgrade, reuses the OIDC grant without changing subject/authentication time, and completes SAML login with the same NameID. It then restores the generated recovery set into new destinations, invalidates restored sessions, rejects the old Refresh Token, and completes fresh SAML login with the matching old executable. The original upgraded database is retained until owned fixture cleanup. CI builds the pinned baseline and runs this rehearsal on Linux; the same fixture supports Windows native packages. This is automated HTTPS acceptance, not actual-browser inspection or real external-provider verification.
 
-On 2026-11-16, the Windows amd64 `0.0.0-upgrade106-acceptance` package passed all 17 scenarios (18 passing results including the parent) on HTTPS port 19001 with Go 1.27.4, Node 26.13.1, PostgreSQL 18.6 and Node-SAML 5.2.0. Its executable SHA-256 was `5a080532f8ab0187b3e3119ad457a7a33347faba1e2019be84eca226b6cc387b`. The baseline was the ordinary `0.0.0-nameid103` schema 26 package with executable SHA-256 `4598f5b6325a2c639fc85b79be2f16b205f721c846e563dfe41eb2fc077fa289`. The fixture removed its owned temporary environment and data after the run; it did not upgrade a persistent preview or user installation.
+Before schema 28, on 2026-11-16, the Windows amd64 `0.0.0-upgrade106-acceptance` package passed all 17 scenarios (18 passing results including the parent) on HTTPS port 19001 with Go 1.27.4, Node 26.13.1, PostgreSQL 18.6 and Node-SAML 5.2.0. Its executable SHA-256 was `5a080532f8ab0187b3e3119ad457a7a33347faba1e2019be84eca226b6cc387b`. The baseline was the ordinary `0.0.0-nameid103` schema 26 package with executable SHA-256 `4598f5b6325a2c639fc85b79be2f16b205f721c846e563dfe41eb2fc077fa289`. The fixture removed its owned temporary environment and data after the run; it did not upgrade a persistent preview or user installation.
