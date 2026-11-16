@@ -53,7 +53,7 @@ func (store *Store) EnrollOrganization(ctx context.Context, principal Principal,
 		return EnrollmentReceipt{}, ErrForbidden
 	}
 	var receipt EnrollmentReceipt
-	if input.OrganizationID == SystemOrganizationID {
+	if input.OrganizationID == SystemOrganizationID || input.MemberID == RootMemberID {
 		return receipt, ErrInvalid
 	}
 	if !ValidID(input.OrganizationID, OrganizationKind) || !ValidID(input.MemberID, MemberKind) || !ValidID(input.FactorID, FactorKind) || !ValidUUID(input.BindingID) || !validText(input.Name, 128) {

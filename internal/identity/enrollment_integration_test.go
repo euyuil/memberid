@@ -194,7 +194,13 @@ func TestEnrollmentRequiresActiveVerifiedPhoneAndNewOrganization(t *testing.T) {
 func TestEnrollmentInputValidation(t *testing.T) {
 	store := testStore(t)
 	input := enrollmentInput(t, store)
-	for _, change := range []func(*OrganizationEnrollment){func(v *OrganizationEnrollment) { v.Name = " " }, func(v *OrganizationEnrollment) { v.Name = strings.Repeat("x", 129) }, func(v *OrganizationEnrollment) { v.BindingID = "not-a-uuid" }, func(v *OrganizationEnrollment) { v.MemberID = v.OrganizationID }} {
+	for _, change := range []func(*OrganizationEnrollment){
+		func(v *OrganizationEnrollment) { v.Name = " " },
+		func(v *OrganizationEnrollment) { v.Name = strings.Repeat("x", 129) },
+		func(v *OrganizationEnrollment) { v.BindingID = "not-a-uuid" },
+		func(v *OrganizationEnrollment) { v.MemberID = v.OrganizationID },
+		func(v *OrganizationEnrollment) { v.MemberID = RootMemberID },
+	} {
 		invalid := input
 		change(&invalid)
 		if _, err := store.EnrollOrganization(t.Context(), OperatorPrincipal(), invalid); !errors.Is(err, ErrInvalid) {

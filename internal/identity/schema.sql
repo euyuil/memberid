@@ -1,7 +1,7 @@
 CREATE TABLE memberid_schema (
-    version integer PRIMARY KEY CHECK (version = 22)
+    version integer PRIMARY KEY CHECK (version = 23)
 );
-INSERT INTO memberid_schema(version) VALUES (22);
+INSERT INTO memberid_schema(version) VALUES (23);
 
 CREATE TABLE organizations (
     id text COLLATE "C" PRIMARY KEY CHECK (id = 'org_system' OR id ~ '^org_[0-9bcdfghjkmnpqrstvwxz]{27}$'),
@@ -15,7 +15,7 @@ CREATE TABLE organizations (
 INSERT INTO organizations(id,name) VALUES ('org_system','System organization');
 
 CREATE TABLE members (
-    id text COLLATE "C" PRIMARY KEY CHECK (id ~ '^mbr_[0-9bcdfghjkmnpqrstvwxz]{27}$'),
+    id text COLLATE "C" PRIMARY KEY CHECK (id = 'mbr_root' OR id ~ '^mbr_[0-9bcdfghjkmnpqrstvwxz]{27}$'),
     organization_id text COLLATE "C" NOT NULL REFERENCES organizations(id),
     display_name text NOT NULL CHECK (char_length(display_name) BETWEEN 1 AND 128),
     manual_block boolean NOT NULL DEFAULT false,
@@ -23,15 +23,10 @@ CREATE TABLE members (
     eligibility_revision bigint NOT NULL DEFAULT 0 CHECK (eligibility_revision >= 0),
     created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
     updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-    UNIQUE (id, organization_id)
+    UNIQUE (id, organization_id),
+    CHECK (id <> 'mbr_root' OR organization_id = 'org_system')
 );
 CREATE INDEX member_directory ON members (organization_id, created_at, id);
-
-CREATE TABLE installation_root_members (
-    organization_id text COLLATE "C" PRIMARY KEY CHECK (organization_id = 'org_system'),
-    member_id text COLLATE "C" NOT NULL,
-    FOREIGN KEY (member_id, organization_id) REFERENCES members(id, organization_id)
-);
 
 CREATE TABLE authentication_factors (
     id text COLLATE "C" PRIMARY KEY CHECK (id ~ '^af_[0-9bcdfghjkmnpqrstvwxz]{27}$'),

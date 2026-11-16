@@ -6,11 +6,15 @@ import (
 )
 
 func TestIdentifiers(t *testing.T) {
+	if RootMemberID != "mbr_root" || !ValidID(RootMemberID, MemberKind) ||
+		ValidID(RootMemberID, OrganizationKind) || ValidID(RootMemberID, FactorKind) {
+		t.Fatal("the reserved root identifier must be a Member ID")
+	}
 	seen := map[string]bool{}
 	for _, kind := range []Kind{OrganizationKind, MemberKind, FactorKind} {
 		for range 100 {
 			id, err := NewID(kind)
-			if err != nil || !ValidID(id, kind) || seen[id] {
+			if err != nil || !ValidID(id, kind) || id == RootMemberID || seen[id] {
 				t.Fatalf("invalid or duplicate generated identifier: %q, %v", id, err)
 			}
 			seen[id] = true
