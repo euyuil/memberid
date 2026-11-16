@@ -22,6 +22,8 @@ If the initial password is lost, run `memberid setup reset-password` from the pr
 
 ## Organization-scoped passwords
 
+Platform administrators can set or reset a Member's password from the console in any organization, including the system organization. Open **登录方式** on the Member detail page. Set a username when creating the credential. Reset uses the existing username, including `root`. The console shows the random password once in the success dialog. Save it before closing the dialog. Existing sign-in bindings and eligibility state are preserved. The console records the acting administrator without putting the credential in the operation history.
+
 An installation operator can provision or rotate an existing Member's password with `memberid member set-password --organization ORGANIZATION_ID --member MEMBER_ID --username USERNAME`. Save the generated password from stdout. Usernames contain 1–64 lowercase ASCII letters, digits, dots, underscores, or hyphens, beginning with a letter or digit. Each is unique within its organization. A Member has one locally managed username. Repeating the command with the same username rotates the password and revokes prior grants and password sessions. The reserved system `root` uses the recovery command above.
 
 MemberID generates passwords from 24 bytes of cryptographic randomness and persists a PBKDF2-HMAC-SHA-256 hash with an independent 16-byte salt and a stored work factor. Sign-in throttles each organization and username to ten attempts in five minutes and bounds concurrent password derivations per process. Passwords and password hashes are excluded from event payloads. Use HTTPS and keep the database, deployment shell, and operator command output protected.

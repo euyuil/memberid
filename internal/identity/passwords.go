@@ -57,8 +57,7 @@ func (store *Store) SetMemberPassword(ctx context.Context, principal Principal, 
 	if principal.kind != operatorPrincipal {
 		return "", ErrForbidden
 	}
-	if !ValidID(organizationID, OrganizationKind) || !ValidID(memberID, MemberKind) || !passwordUsername.MatchString(username) ||
-		organizationID == SystemOrganizationID && username == RootUsername {
+	if !ValidID(organizationID, OrganizationKind) || !ValidID(memberID, MemberKind) || !validNewPasswordUsername(organizationID, username) {
 		return "", ErrInvalid
 	}
 	password, hash, err := randomPassword()
@@ -78,7 +77,7 @@ func (store *Store) SetMemberPassword(ctx context.Context, principal Principal, 
 			return err
 		}
 		if !exists {
-			return insertMemberPassword(ctx, tx, organizationID, memberID, username, hash)
+			return insertMemberPassword(ctx, tx, principal, organizationID, memberID, username, hash)
 		}
 		return rotateMemberPassword(ctx, tx, organizationID, memberID, username, hash)
 	})
@@ -88,7 +87,11 @@ func (store *Store) SetMemberPassword(ctx context.Context, principal Principal, 
 	return password, nil
 }
 
-func insertMemberPassword(ctx context.Context, tx pgx.Tx, organizationID, memberID, username string, hash passwordHash) error {
+func validNewPasswordUsername(organizationID, username string) bool {
+	return passwordUsername.MatchString(username) && (organizationID != SystemOrganizationID || username != RootUsername)
+}
+
+func insertMemberPassword(ctx context.Context, tx pgx.Tx, principal Principal, organizationID, memberID, username string, hash passwordHash) error {
 	factorID, err := NewID(FactorKind)
 	if err != nil {
 		return err
@@ -102,7 +105,7 @@ func insertMemberPassword(ctx context.Context, tx pgx.Tx, organizationID, member
 	if _, err = tx.Exec(ctx, "INSERT INTO member_auth_factor_bindings(organization_id,member_id,authentication_factor_id,factor_type) VALUES($1,$2,$3,'password')", organizationID, memberID, factorID); err != nil {
 		return storageError(err)
 	}
-	return managementEvent(ctx, tx, OperatorPrincipal(), organizationID, memberID, "password.create", struct{}{}, nil)
+	return managementEvent(ctx, tx, principal, organizationID, memberID, "password.create", struct{}{}, nil)
 }
 
 func rotateMemberPassword(ctx context.Context, tx pgx.Tx, organizationID, memberID, username string, hash passwordHash) error {
@@ -112,20 +115,24 @@ func rotateMemberPassword(ctx context.Context, tx pgx.Tx, organizationID, member
 	if err != nil {
 		return storageError(err)
 	}
-	if _, err = tx.Exec(ctx, "UPDATE password_credentials SET salt=$2,digest=$3,iterations=$4 WHERE authentication_factor_id=$1", factorID, hash.salt, hash.digest, hash.iterations); err != nil {
+	return rotatePassword(ctx, tx, OperatorPrincipal(), organizationID, memberID, factorID, username, hash)
+}
+
+func rotatePassword(ctx context.Context, tx pgx.Tx, principal Principal, organizationID, memberID, factorID, username string, hash passwordHash) error {
+	if _, err := tx.Exec(ctx, "UPDATE password_credentials SET salt=$2,digest=$3,iterations=$4 WHERE authentication_factor_id=$1", factorID, hash.salt, hash.digest, hash.iterations); err != nil {
 		return err
 	}
-	if _, err = tx.Exec(ctx, "UPDATE authentication_sessions SET revoked_at=clock_timestamp() WHERE revoked_at IS NULL AND verification->'factor'->>'id'=$1", factorID); err != nil {
+	if _, err := tx.Exec(ctx, "UPDATE authentication_sessions SET revoked_at=clock_timestamp() WHERE revoked_at IS NULL AND verification->'factor'->>'id'=$1", factorID); err != nil {
 		return err
 	}
-	if _, err = tx.Exec(ctx, "UPDATE oidc_grants SET revoked_at=clock_timestamp() WHERE revoked_at IS NULL AND data->>'memberId'=$1", memberID); err != nil {
+	if _, err := tx.Exec(ctx, "UPDATE oidc_grants SET revoked_at=clock_timestamp() WHERE revoked_at IS NULL AND data->>'memberId'=$1", memberID); err != nil {
 		return err
 	}
 	attemptKey := passwordAttemptKey(organizationID, username)
-	if _, err = tx.Exec(ctx, "DELETE FROM password_attempt_windows WHERE account_hash=$1", attemptKey[:]); err != nil {
+	if _, err := tx.Exec(ctx, "DELETE FROM password_attempt_windows WHERE account_hash=$1", attemptKey[:]); err != nil {
 		return err
 	}
-	return managementEvent(ctx, tx, OperatorPrincipal(), organizationID, memberID, "password.reset", struct{}{}, nil)
+	return managementEvent(ctx, tx, principal, organizationID, memberID, "password.reset", struct{}{}, nil)
 }
 
 func passwordAttemptKey(organizationID, username string) [32]byte {

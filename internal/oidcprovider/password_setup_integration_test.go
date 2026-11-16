@@ -11,7 +11,7 @@ import (
 	"github.com/euyuil/memberid/internal/identity"
 )
 
-func TestConsoleFirstLoginWithProvisionedRoot(t *testing.T) {
+func TestConsoleFirstLoginAndMemberPasswordManagement(t *testing.T) {
 	var password string
 	f := newFixtureWithInitializer(t, false, func(ctx context.Context, databaseURL string) error {
 		return identity.InitializeWithRoot(ctx, databaseURL, func(initialPassword string) error {
@@ -21,35 +21,100 @@ func TestConsoleFirstLoginWithProvisionedRoot(t *testing.T) {
 	})
 	server := consoleFixture(t, f)
 	f.status(f.call(f.browser, "GET", server.URL+"/setup", nil, nil), 404)
-	response := f.call(f.browser, "GET", server.URL+"/auth/login", nil, nil)
-	f.status(response, 303)
-	login := f.call(f.browser, "GET", response.header.Get("Location"), nil, nil)
-	f.status(login, 302)
-	login = f.call(f.browser, "GET", login.header.Get("Location"), nil, nil)
-	f.status(login, 200)
+	loginPage := func() reply {
+		t.Helper()
+		response := f.call(f.browser, "GET", server.URL+"/auth/login", nil, nil)
+		f.status(response, 303)
+		response = f.call(f.browser, "GET", response.header.Get("Location"), nil, nil)
+		f.status(response, 302)
+		response = f.call(f.browser, "GET", response.header.Get("Location"), nil, nil)
+		f.status(response, 200)
+		return response
+	}
+	finishLogin := func(response reply) {
+		t.Helper()
+		f.status(response, 303)
+		response = f.call(f.browser, "GET", response.header.Get("Location"), nil, nil)
+		f.status(response, 302)
+		response = f.call(f.browser, "GET", response.header.Get("Location"), nil, nil)
+		f.status(response, 303)
+	}
 	fields := url.Values{"password_organization": {identity.SystemOrganizationID}, "username": {identity.RootUsername}, "password": {"incorrect"}}
-	login = f.submit(login.body, "password", fields)
+	login := f.submit(loginPage().body, "password", fields)
 	f.status(login, 200)
 	if !strings.Contains(login.body, "password is incorrect") {
 		t.Fatal("wrong password was not rejected")
 	}
 	fields.Set("password", password)
-	login = f.submit(login.body, "password", fields)
-	f.status(login, 303)
-	login = f.call(f.browser, "GET", login.header.Get("Location"), nil, nil)
-	f.status(login, 302)
-	login = f.call(f.browser, "GET", login.header.Get("Location"), nil, nil)
-	f.status(login, 303)
-	who := consoleJSON(t, f, server, "GET", "/api/session", "", "", 200)["actor"].(map[string]any)
+	finishLogin(f.submit(login.body, "password", fields))
+	session := consoleJSON(t, f, server, "GET", "/api/session", "", "", 200)
+	who := session["actor"].(map[string]any)
 	if who["displayName"] != "root" || who["organizationId"] != "org_system" || who["platform"] != true {
 		t.Fatal("root did not reach the console as platform administrator")
 	}
-	next, err := f.store.ResetRootPassword(t.Context(), identity.OperatorPrincipal())
-	if err != nil || len(next) != 32 || next == password {
-		t.Fatal("root password was not rotated", err)
+
+	csrf := session["csrf"].(string)
+	rootMemberID := who["memberId"].(string)
+	target := "/api/organizations/" + f.otherMember.OrganizationID + "/members/" + f.otherMember.ID
+	consoleJSON(t, f, server, "POST", target+"/password", "bad-token", `{"username":"example"}`, 403)
+	consoleJSON(t, f, server, "POST", target+"/password", csrf, `{"username":"example","password":"caller-supplied"}`, 400)
+	consoleJSON(t, f, server, "POST", "/api/organizations/"+f.member.OrganizationID+"/members/"+f.otherMember.ID+"/password", csrf, `{"username":"example"}`, 404)
+	created := consoleJSON(t, f, server, "POST", target+"/password", csrf, `{"username":"example"}`, 200)
+	consoleJSON(t, f, server, "POST", target+"/password", csrf, `{"username":"other"}`, 409)
+	generated, ok := created["password"].(string)
+	if !ok || len(generated) != 32 || created["username"] != "example" {
+		t.Fatal("the console did not return the generated Member credential")
+	}
+	detail := consoleJSON(t, f, server, "GET", target, "", "", 200)
+	if len(detail["bindings"].([]any)) != 2 {
+		t.Fatal("password setup did not preserve the Member's existing phone binding")
+	}
+	consoleJSON(t, f, server, "PUT", target+"/administrator", csrf, `{"enabled":true}`, 200)
+	rootBrowser := f.browser
+	f.browser = browserClient()
+	memberFields := url.Values{"password_organization": {f.otherMember.OrganizationID}, "username": {"example"}, "password": {generated}}
+	finishLogin(f.submit(loginPage().body, "password", memberFields))
+	memberActor := consoleJSON(t, f, server, "GET", "/api/session", "", "", 200)["actor"].(map[string]any)
+	if memberActor["memberId"] != f.otherMember.ID || memberActor["platform"] != false {
+		t.Fatal("new credential did not sign in as the intended organization administrator")
+	}
+	f.browser = rootBrowser
+
+	rootReset := "/api/organizations/org_system/members/" + rootMemberID + "/password/reset"
+	consoleJSON(t, f, server, "POST", rootReset, csrf, `{"username":"another-root"}`, 400)
+	rotated := consoleJSON(t, f, server, "POST", rootReset, csrf, `{}`, 200)
+	next, ok := rotated["password"].(string)
+	if !ok || len(next) != 32 || next == password || rotated["username"] != identity.RootUsername {
+		t.Fatal("root password was not rotated under its existing username")
 	}
 	consoleJSON(t, f, server, "GET", "/api/session", "", "", 401)
+	f.browser = browserClient()
+	login = f.submit(loginPage().body, "password", fields)
+	f.status(login, 200)
+	if !strings.Contains(login.body, "password is incorrect") {
+		t.Fatal("old root password was accepted after rotation")
+	}
+	fields.Set("password", next)
+	finishLogin(f.submit(login.body, "password", fields))
+	for _, expected := range []struct{ organizationID, memberID, action string }{
+		{f.otherMember.OrganizationID, f.otherMember.ID, "password.create"},
+		{identity.SystemOrganizationID, rootMemberID, "password.reset"},
+	} {
+		events := consoleJSON(t, f, server, "GET", "/api/events?organizationId="+expected.organizationID+"&memberId="+expected.memberID, "", "", 200)["items"].([]any)
+		found := false
+		for _, item := range events {
+			event := item.(map[string]any)
+			if event["action"] == expected.action {
+				found = event["actor"] == rootMemberID && len(event["changes"].(map[string]any)) == 0 && len(event["previous"].(map[string]any)) == 0
+				break
+			}
+		}
+		if !found {
+			t.Fatal("password mutation was not attributed to the console actor with an empty audit payload")
+		}
+	}
 }
+
 func TestPasswordLoginOrganizationIsolationAndRefreshRevocation(t *testing.T) {
 	f := newConfiguredFixture(t, true)
 	operator := identity.OperatorPrincipal()

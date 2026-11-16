@@ -41,6 +41,7 @@ operation requires extending that matrix and this catalog as well as the code.
 | --- | --- |
 | O5-O6: organization updates | Shared scope/action checks at the existing transactional authorization point, including explicitly submitted unchanged status fields. Private/CLI updates retain their installation-only entry contract. |
 | O4, M4-M6, A2-A3: organization/Member creation, Member changes and administrator assignments | Shared checks for collection create, field-specific update/status.update, and assignment create/delete. Private/CLI Member writes and new update receipts use the same operation mappings under installation-only admission. |
+| M7-M8: Member password writes | Member-only console admission and transactional create/update authority on the target Member's password. |
 | O1-O3, M1-M3, A1, B1 (console), E1-E2: management reads | Shared service checks before querying any response contents. Composite Member responses require all listed pairs; navigation and event defaults select only a view permitted by current authority. |
 | P1-P4 and I2: provider management | Shared directory and typed create/update/status checks. The authoritative save check follows upstream verification; private/CLI credential configuration retains installation-only admission. |
 | S1-S3: account views and binding creation | Shared checks with an account principal restricted to the selected Member. Current SSO/source-binding evidence is resolved from storage; commit retains fresh verification, request, client and lifecycle checks. |
@@ -102,6 +103,7 @@ comes from stored relationships, not caller-supplied path strings.
 | `organizations` | Platform organization collection; creation and platform listing. |
 | `O` | One organization; ordinary properties and status share this target. |
 | `O/members`, `M` | Member collection and individual Member. |
+| `M/password` | One Member's local password credential. |
 | `M/bindings`, `M/bindings/{bindingId}` | Explicit Member bindings; no authority over the shared factor or its other bindings. |
 | `O/roleAssignments`, `O/roleAssignments/{roleAssignmentId}` | Administrator assignments. The current store keys them by Member; the Member ID is the internal logical assignment key used for deletion, not a new public ID format or API. |
 | `O/providers` | Combined directory of configured provider applications. |
@@ -135,6 +137,7 @@ Member. All administrative entries require current identity/session eligibility.
 | Rename Member | `update` on any `M` | `update` on own organization's `M` | No self-service rename interface |
 | Manually block/unblock Member | `status.update` on any `M` | `status.update` on own organization's `M` | No |
 | Read bindings and assignment lists | Any organization | Own organization | No administrative list; only the account flow's necessary source context |
+| Set or reset a Member password | `create` / `update` on any `M/password`, including the system organization | No | No |
 | Grant/revoke administrator | `create` / `delete` for assignments in any organization | `create` / `delete` for assignments in own ordinary organization | No |
 | List/create/configure providers | Any supported organization: `list`, `create`, `update`, `status.update` on the relevant targets | Same operations within own organization | No |
 | Manage SAML registrations | Any organization: collection `list`/`create`; item `get`/`update`/`status.update`/`delete` | Same operations within own organization | No |
@@ -178,6 +181,13 @@ and `M`. Source and test references are indexed by row ID below.
 | M4 | `POST /api/O/members`: create Member | `O/members` | `create` | Platform; own organization admin | Console write; no administrator assignment or verified binding is created. System Members require platform access. |
 | M5 | `PATCH /api/M` with `displayName` | `M` | `update` | Platform; own organization admin | Console write; organization-bound Member lookup and valid display name. |
 | M6 | Same PATCH with `manualBlocked` | `M` | `status.update` | Platform; own organization admin | Console write; preserve administrator availability. Clearing manual block does not clear external departure. Combined fields require M5 and M6. |
+| M7 | `POST /api/M/password` with `username` | `M/password` | `create` | Platform | Console write; unique username within the organization and one password credential per Member. |
+| M8 | `POST /api/M/password/reset` with an empty JSON object | `M/password` | `update` | Platform | Console write; retain the username and revoke the Member's grants and password-authenticated SSO sessions. |
+
+Both password operations return the username and generated password in a
+non-cacheable response after commit. Member detail and operation history do
+not return the password. A failed or uncertain request is not retried
+automatically.
 
 Writes and composite reads use the shared evaluator. Composite reads require
 all listed pairs before fetching contents; they do not return partial responses
