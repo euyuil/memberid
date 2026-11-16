@@ -18,6 +18,9 @@ type checkFeishuFunc func(context.Context, string, string) error
 func (fn checkFeishuFunc) CheckAuthorization(ctx context.Context, client, secret string) error {
 	return fn(ctx, client, secret)
 }
+func (fn checkFeishuFunc) Membership(context.Context, string, string, string) (bool, error) {
+	return false, feishu.ErrUnavailable
+}
 func (fn checkFeishuFunc) Login(context.Context, string, string, string, string, string) (feishu.Profile, error) {
 	return feishu.Profile{}, feishu.ErrUnavailable
 }

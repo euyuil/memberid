@@ -128,7 +128,10 @@ func copyInstallation(source, destination string) error {
 
 // Create is called only while UpgradeDatabase holds table locks excluding
 // writes. pg_dump uses a separate read connection, then exits before migration.
-func Create(ctx context.Context, databaseURL, directory, destination, pgDump, snapshot string) (identity.UpgradeBackup, error) {
+func Create(ctx context.Context, databaseURL, directory, destination, pgDump, snapshot string, schemaVersion int) (identity.UpgradeBackup, error) {
+	if schemaVersion < 26 || schemaVersion >= identity.SchemaVersion {
+		return identity.UpgradeBackup{}, errors.New("unsupported recovery source schema")
+	}
 	var receipt identity.UpgradeBackup
 	if snapshot == "" {
 		return receipt, errors.New("an exported database snapshot is required")
@@ -214,7 +217,7 @@ func Create(ctx context.Context, databaseURL, directory, destination, pgDump, sn
 	if err != nil {
 		return receipt, err
 	}
-	manifest := Manifest{Version: 1, ID: rand.Text(), SchemaVersion: 26, CreatedAt: time.Now().UTC(), Files: files}
+	manifest := Manifest{Version: 1, ID: rand.Text(), SchemaVersion: schemaVersion, CreatedAt: time.Now().UTC(), Files: files}
 	data, err := json.MarshalIndent(manifest, "", "  ")
 	if err != nil {
 		return receipt, err
@@ -235,7 +238,7 @@ func Verify(directory string) (Manifest, identity.UpgradeBackup, error) {
 	if err := config.ReadJSON(filepath.Join(directory, "manifest.json"), &manifest); err != nil {
 		return manifest, receipt, err
 	}
-	if manifest.Version != 1 || manifest.SchemaVersion != 26 || manifest.ID == "" || manifest.CreatedAt.IsZero() {
+	if manifest.Version != 1 || (manifest.SchemaVersion < 26 || manifest.SchemaVersion > identity.SchemaVersion) || manifest.ID == "" || manifest.CreatedAt.IsZero() {
 		return manifest, receipt, errors.New("unsupported recovery manifest")
 	}
 	files, err := inventory(directory, true)

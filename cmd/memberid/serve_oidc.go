@@ -113,18 +113,11 @@ func authenticationHandler(ctx context.Context, directory string) (http.Handler,
 		if feishuApps == nil {
 			return
 		}
-		ticker := time.NewTicker(15 * time.Minute)
-		defer ticker.Stop()
-		for {
-			if err := feishuApps.CheckApplications(cleanup); err != nil && cleanup.Err() == nil {
-				slog.Warn("Feishu application checks incomplete")
+		feishuApps.RunSynchronization(cleanup, func(result identity.FeishuReconciliation, err error) {
+			if err != nil {
+				slog.Warn("Feishu synchronization incomplete", "membership", result)
 			}
-			select {
-			case <-cleanup.Done():
-				return
-			case <-ticker.C:
-			}
-		}
+		})
 	}()
 	go func() {
 		defer close(finished)

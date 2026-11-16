@@ -275,5 +275,8 @@ func (verifier *DingTalkVerifier) admit(ctx context.Context, tx pgx.Tx, proof Di
 	if err != nil {
 		return MemberAdmission{}, storageError(err)
 	}
+	if _, err := MemberEvidence(ctx, tx, factor.ID, memberID, app.OrganizationID); err != nil {
+		return MemberAdmission{}, err
+	}
 	return MemberAdmission{Verification: Verification{Factor: factor, AuthenticatedAt: proof.authenticatedAt, Method: "dingtalk"}, OrganizationID: app.OrganizationID, MemberID: memberID, BindingID: bound.ID}, nil
 }

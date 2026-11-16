@@ -89,13 +89,13 @@ func (store *Store) memberDirectory(ctx context.Context, organizationID, after s
 		}
 	}
 	rows, err := store.pool.Query(ctx, `SELECT
- m.id,m.organization_id,m.display_name,m.manual_block,m.external_departure,m.created_at,m.updated_at,
+ m.id,m.organization_id,m.display_name,m.manual_block,(m.external_departure OR `+feishuDeparture+`),m.created_at,m.updated_at,
  o.name,a.member_id IS NOT NULL
  FROM members m JOIN organizations o ON o.id=m.organization_id
  LEFT JOIN administrators a ON a.organization_id=m.organization_id AND a.member_id=m.id
  WHERE ($1='' OR m.organization_id=$1) AND m.id>$2
  AND ($4='' OR strpos(lower(m.display_name),lower($4))>0 OR strpos(m.id,lower($4))>0)
- AND ($5='' OR (m.manual_block OR m.external_departure)=($5='blocked'))
+ AND ($5='' OR (m.manual_block OR m.external_departure OR `+feishuDeparture+`)=($5='blocked'))
  AND ($6='' OR (a.member_id IS NOT NULL)=($6='yes'))
  ORDER BY m.id LIMIT $3`, organizationID, after, limit+1, filter.Query, filter.Status, filter.Administrator)
 	if err != nil {

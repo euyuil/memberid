@@ -90,3 +90,49 @@ func TestFeishuAuthorizationCheckClassifiesOnlyDefinitiveFailures(t *testing.T) 
 		})
 	}
 }
+
+func TestMembershipRequiresExplicitScopedEmployeeEvidence(t *testing.T) {
+	for _, test := range []struct {
+		name     string
+		status   int
+		body     string
+		departed bool
+		want     error
+	}{
+		{"present", 200, `{"code":0,"data":{"user":{"open_id":"ou_example","status":{"is_resigned":false,"is_activated":true,"is_frozen":false,"is_exited":false,"is_unjoin":false}}}}`, false, nil},
+		{"departed", 200, `{"code":0,"data":{"user":{"open_id":"ou_example","status":{"is_resigned":true}}}}`, true, nil},
+		{"unknown user", 200, `{"code":41001}`, false, ErrMembershipUnknown},
+		{"permission", 403, `{"code":41050}`, false, ErrPermissionDenied},
+		{"missing status scope", 200, `{"code":0,"data":{"user":{"open_id":"ou_example"}}}`, false, ErrMembershipUnknown},
+		{"different app subject", 200, `{"code":0,"data":{"user":{"open_id":"ou_other","status":{"is_resigned":true}}}}`, false, ErrMembershipUnknown},
+		{"frozen", 200, `{"code":0,"data":{"user":{"open_id":"ou_example","status":{"is_resigned":false,"is_activated":true,"is_frozen":true,"is_exited":false,"is_unjoin":false}}}}`, false, ErrMembershipUnknown},
+		{"incomplete restoration", 200, `{"code":0,"data":{"user":{"open_id":"ou_example","status":{"is_resigned":false}}}}`, false, ErrMembershipUnknown},
+		{"ambiguous denial", 400, `{"code":20009}`, false, ErrUnavailable},
+		{"not found", 404, `{"code":41001}`, false, ErrUnavailable},
+		{"outage", 503, `{"code":0}`, false, ErrUnavailable},
+		{"redirect", 307, `{}`, false, ErrUnavailable},
+		{"oversized", 200, strings.Repeat("x", (64<<10)+1), false, ErrUnavailable},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			client := New()
+			calls := 0
+			client.http.Transport = transportFunc(func(r *http.Request) (*http.Response, error) {
+				calls++
+				if calls == 1 {
+					if r.URL.String() != applicationTokenURL || r.Method != "POST" || r.ParseForm() != nil || r.PostForm.Get("client_id") != "cli_example" || r.PostForm.Get("client_secret") != "example-secret" {
+						t.Fatal("wrong application credential exchange")
+					}
+					return response(200, `{"code":0,"access_token":"example-token","expires_in":3600,"token_type":"Bearer"}`), nil
+				}
+				if r.Method != "GET" || r.URL.String() != "https://open.feishu.cn/open-apis/contact/v3/users/ou_example?user_id_type=open_id" || r.Header.Get("Authorization") != "Bearer example-token" {
+					t.Fatal("unscoped membership lookup")
+				}
+				return response(test.status, test.body), nil
+			})
+			departed, err := client.Membership(t.Context(), "cli_example", "example-secret", "ou_example")
+			if departed != test.departed || !errors.Is(err, test.want) || calls != 2 {
+				t.Fatal("unexpected membership evidence", departed, err, calls)
+			}
+		})
+	}
+}

@@ -264,7 +264,7 @@ func (s *storage) createCodeTokens(ctx context.Context, request *authorizationRe
 		if err := s.validateDirectory(ctx, tx, observation, observationErr); err != nil {
 			return err
 		}
-		if err := s.lockFeishuOrganization(ctx, tx, &request.grant); err != nil {
+		if err := s.lockMemberOrganization(ctx, tx, &request.grant); err != nil {
 			return err
 		}
 		if err := s.eligible(ctx, tx, &request.grant); err != nil {
@@ -481,9 +481,9 @@ func (s *storage) endSession(ctx context.Context, sessionID, secret string) erro
 	return err
 }
 
-// Feishu source changes and token issuance take complementary organization locks.
-func (s *storage) lockFeishuOrganization(ctx context.Context, tx pgx.Tx, g *grant) error {
-	if g.FactorType != "feishu" {
+// Member eligibility changes and token issuance take complementary organization locks.
+func (s *storage) lockMemberOrganization(ctx context.Context, tx pgx.Tx, g *grant) error {
+	if g.MemberID == "" {
 		return nil
 	}
 	var id string

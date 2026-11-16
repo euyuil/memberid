@@ -21,6 +21,28 @@ type testFeishu struct {
 	revoked, wrongTenant atomic.Bool
 	calls                atomic.Int64
 	before               func()
+	membershipDeparted   atomic.Bool
+	membershipCalls      atomic.Int64
+	membershipError      error
+	membershipBefore     func()
+	membershipResult     func(string, string) (bool, error)
+}
+
+func (provider *testFeishu) Membership(ctx context.Context, clientID, secret, openID string) (bool, error) {
+	provider.membershipCalls.Add(1)
+	if provider.membershipBefore != nil {
+		provider.membershipBefore()
+	}
+	if err := provider.CheckAuthorization(ctx, clientID, secret); err != nil {
+		return false, err
+	}
+	if provider.membershipResult != nil {
+		return provider.membershipResult(clientID, openID)
+	}
+	if openID != "ou_example" {
+		return false, feishu.ErrMembershipUnknown
+	}
+	return provider.membershipDeparted.Load(), provider.membershipError
 }
 
 func (provider *testFeishu) CheckAuthorization(_ context.Context, clientID, _ string) error {

@@ -64,8 +64,8 @@ func databaseUpgrade(ctx context.Context, args []string, stdout, stderr io.Write
 	if directory == "" || backup == "" || !maintenance {
 		return errors.New("upgrade requires --directory, --backup-directory and --maintenance-confirmed")
 	}
-	result, err := identity.UpgradeDatabase(ctx, databaseURL, func(ctx context.Context, snapshot string) (identity.UpgradeBackup, error) {
-		return recovery.Create(ctx, databaseURL, directory, backup, pgDump, snapshot)
+	result, err := identity.UpgradeDatabase(ctx, databaseURL, func(ctx context.Context, snapshot string, version int) (identity.UpgradeBackup, error) {
+		return recovery.Create(ctx, databaseURL, directory, backup, pgDump, snapshot, version)
 	})
 	if err != nil {
 		return err

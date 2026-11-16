@@ -12,7 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-const SchemaVersion = 27
+const SchemaVersion = 28
 
 // The two-int key space is separate from existing bigint initialization,
 // administration and worker locks. MID identifies this maintenance namespace.
@@ -24,6 +24,9 @@ var ErrUpgradeUnsupported = errors.New("unsupported database upgrade; first supp
 
 //go:embed migrations/0027_upgrade_history.sql
 var upgrade27 string
+
+//go:embed migrations/0028_feishu_memberships.sql
+var upgrade28 string
 
 type DatabasePlan struct {
 	CurrentVersion  int  `json:"currentVersion"`
@@ -68,7 +71,7 @@ func databasePlan(ctx context.Context, db queryer) (DatabasePlan, error) {
 	if count != 1 {
 		return plan, ErrSchemaRequired
 	}
-	plan.Supported = plan.CurrentVersion == 26 || plan.CurrentVersion == SchemaVersion
+	plan.Supported = plan.CurrentVersion >= 26 && plan.CurrentVersion <= SchemaVersion
 	plan.UpgradeRequired = plan.CurrentVersion != SchemaVersion
 	return plan, nil
 }
@@ -107,7 +110,7 @@ func requireStoppedClients(ctx context.Context, tx pgx.Tx) error {
 // UpgradeDatabase holds write-excluding table locks while the caller creates a
 // consistent database/configuration backup. No SQL changes commit without it.
 // The callback must fail if the protected files change while being copied.
-func UpgradeDatabase(ctx context.Context, databaseURL string, backup func(context.Context, string) (UpgradeBackup, error)) (UpgradeResult, error) {
+func UpgradeDatabase(ctx context.Context, databaseURL string, backup func(context.Context, string, int) (UpgradeBackup, error)) (UpgradeResult, error) {
 	var result UpgradeResult
 	c, err := maintenanceConnection(ctx, databaseURL)
 	if err != nil {
@@ -163,7 +166,7 @@ func UpgradeDatabase(ctx context.Context, databaseURL string, backup func(contex
 		if err := tx.QueryRow(ctx, "SELECT pg_export_snapshot()").Scan(&snapshot); err != nil {
 			return err
 		}
-		receipt, err := backup(ctx, snapshot)
+		receipt, err := backup(ctx, snapshot, plan.CurrentVersion)
 		if err != nil {
 			return err
 		}
@@ -172,19 +175,27 @@ func UpgradeDatabase(ctx context.Context, databaseURL string, backup func(contex
 			return errors.New("invalid recovery backup receipt")
 		}
 		// Block schema-26 startup's version read before the final client check.
-		// A late old process sees schema 27 only after commit and refuses startup.
+		// A late old process sees the new version only after commit and refuses startup.
 		if _, err := tx.Exec(ctx, "LOCK TABLE memberid_schema IN ACCESS EXCLUSIVE MODE NOWAIT"); err != nil {
 			return err
 		}
 		if err := requireStoppedClients(ctx, tx); err != nil {
 			return err
 		}
-		if _, err := tx.Exec(ctx, upgrade27); err != nil {
-			return err
-		}
-		migrationHash := sha256.Sum256([]byte(upgrade27))
-		if _, err := tx.Exec(ctx, "INSERT INTO database_upgrades(from_version,to_version,migration_sha256,backup_id,backup_sha256) VALUES(26,27,$1,$2,$3)", hex.EncodeToString(migrationHash[:]), receipt.ID, receipt.SHA256); err != nil {
-			return err
+		for _, migration := range []struct {
+			from, to int
+			sql      string
+		}{{26, 27, upgrade27}, {27, 28, upgrade28}} {
+			if migration.from < plan.CurrentVersion {
+				continue
+			}
+			if _, err := tx.Exec(ctx, migration.sql); err != nil {
+				return err
+			}
+			migrationHash := sha256.Sum256([]byte(migration.sql))
+			if _, err := tx.Exec(ctx, "INSERT INTO database_upgrades(from_version,to_version,migration_sha256,backup_id,backup_sha256) VALUES($1,$2,$3,$4,$5)", migration.from, migration.to, hex.EncodeToString(migrationHash[:]), receipt.ID, receipt.SHA256); err != nil {
+				return err
+			}
 		}
 		result.Upgraded, result.UpgradeBackup = true, receipt
 		result.CurrentVersion, result.UpgradeRequired = SchemaVersion, false

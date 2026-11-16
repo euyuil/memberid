@@ -1,7 +1,7 @@
 CREATE TABLE memberid_schema (
-    version integer PRIMARY KEY CHECK (version = 27)
+    version integer PRIMARY KEY CHECK (version = 28)
 );
-INSERT INTO memberid_schema(version) VALUES (27);
+INSERT INTO memberid_schema(version) VALUES (28);
 
 CREATE TABLE database_upgrades (
     to_version integer PRIMARY KEY,
@@ -80,6 +80,15 @@ CREATE TABLE member_auth_factor_bindings (
 );
 CREATE UNIQUE INDEX member_single_factor_type ON member_auth_factor_bindings (member_id, factor_type) WHERE factor_type <> 'feishu';
 CREATE UNIQUE INDEX member_feishu_source ON member_auth_factor_bindings (member_id, provider_namespace) WHERE factor_type = 'feishu';
+
+CREATE TABLE feishu_memberships (
+    binding_id uuid PRIMARY KEY REFERENCES member_auth_factor_bindings(id),
+    departed boolean NOT NULL DEFAULT false,
+    checked_at timestamptz,
+    attempted_at timestamptz NOT NULL DEFAULT '-infinity',
+    CHECK (NOT departed OR checked_at IS NOT NULL)
+);
+CREATE INDEX feishu_memberships_due ON feishu_memberships (attempted_at, binding_id);
 
 CREATE TABLE password_credentials (
     authentication_factor_id text COLLATE "C" PRIMARY KEY REFERENCES authentication_factors(id),

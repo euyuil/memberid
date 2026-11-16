@@ -76,7 +76,7 @@ func baselineDatabase(t *testing.T) string {
 	return dsn
 }
 
-func syntheticBackup(context.Context, string) (UpgradeBackup, error) {
+func syntheticBackup(context.Context, string, int) (UpgradeBackup, error) {
 	return UpgradeBackup{ID: "synthetic-backup", SHA256: strings.Repeat("a", 64)}, nil
 }
 
@@ -104,7 +104,7 @@ func TestDatabaseUpgradeAtomicFailureAndRetry(t *testing.T) {
 	if err != nil || !plan.Supported || plan.CurrentVersion != 26 || !plan.UpgradeRequired {
 		t.Fatal(plan, err)
 	}
-	if _, err := UpgradeDatabase(t.Context(), dsn, func(context.Context, string) (UpgradeBackup, error) {
+	if _, err := UpgradeDatabase(t.Context(), dsn, func(context.Context, string, int) (UpgradeBackup, error) {
 		return UpgradeBackup{}, errors.New("synthetic failed backup")
 	}); err == nil {
 		t.Fatal("accepted failed backup")
@@ -132,10 +132,10 @@ func TestDatabaseUpgradeAtomicFailureAndRetry(t *testing.T) {
 	}
 	c.Close(context.Background())
 	result, err := UpgradeDatabase(t.Context(), dsn, syntheticBackup)
-	if err != nil || !result.Upgraded || result.CurrentVersion != 27 {
+	if err != nil || !result.Upgraded || result.CurrentVersion != SchemaVersion {
 		t.Fatal(result, err)
 	}
-	result, err = UpgradeDatabase(t.Context(), dsn, func(context.Context, string) (UpgradeBackup, error) {
+	result, err = UpgradeDatabase(t.Context(), dsn, func(context.Context, string, int) (UpgradeBackup, error) {
 		t.Error("repeat created another backup")
 		return UpgradeBackup{}, nil
 	})
@@ -204,10 +204,10 @@ func TestDatabaseUpgradeMaintenanceAndConcurrentAttempts(t *testing.T) {
 	entered, release := make(chan struct{}), make(chan struct{})
 	done := make(chan error, 1)
 	go func() {
-		_, err := UpgradeDatabase(t.Context(), dsn, func(ctx context.Context, _ string) (UpgradeBackup, error) {
+		_, err := UpgradeDatabase(t.Context(), dsn, func(ctx context.Context, _ string, _ int) (UpgradeBackup, error) {
 			close(entered)
 			<-release
-			return syntheticBackup(ctx, "")
+			return syntheticBackup(ctx, "", 26)
 		})
 		done <- err
 	}()
@@ -228,7 +228,7 @@ func TestDatabaseUpgradeMaintenanceAndConcurrentAttempts(t *testing.T) {
 }
 
 func TestDatabaseUpgradeUnsupportedAndCancellation(t *testing.T) {
-	for _, version := range []int{25, 28} {
+	for _, version := range []int{25, 29} {
 		dsn := testdb.Create(t)
 		c, err := pgx.Connect(t.Context(), dsn)
 		if err != nil {
@@ -241,7 +241,7 @@ func TestDatabaseUpgradeUnsupportedAndCancellation(t *testing.T) {
 			t.Fatal(err)
 		}
 		c.Close(context.Background())
-		if _, err := UpgradeDatabase(t.Context(), dsn, func(context.Context, string) (UpgradeBackup, error) {
+		if _, err := UpgradeDatabase(t.Context(), dsn, func(context.Context, string, int) (UpgradeBackup, error) {
 			t.Error("unsupported version backed up")
 			return UpgradeBackup{}, nil
 		}); !errors.Is(err, ErrUpgradeUnsupported) {
@@ -254,8 +254,67 @@ func TestDatabaseUpgradeUnsupportedAndCancellation(t *testing.T) {
 	}
 	dsn := baselineDatabase(t)
 	ctx, cancel := context.WithCancel(t.Context())
-	if _, err := UpgradeDatabase(ctx, dsn, func(context.Context, string) (UpgradeBackup, error) { cancel(); return syntheticBackup(ctx, "") }); err == nil {
+	if _, err := UpgradeDatabase(ctx, dsn, func(context.Context, string, int) (UpgradeBackup, error) {
+		cancel()
+		return syntheticBackup(ctx, "", 26)
+	}); err == nil {
 		t.Fatal("canceled upgrade succeeded")
 	}
 	assertBaseline(t, dsn)
+}
+
+func TestSchema27UpgradeRetainsAdmittedFeishuBindings(t *testing.T) {
+	dsn := baselineDatabase(t)
+	c, err := pgx.Connect(t.Context(), dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.Exec(t.Context(), upgrade27); err != nil {
+		t.Fatal(err)
+	}
+	org, _ := NewID(OrganizationKind)
+	member, _ := NewID(MemberKind)
+	factor, _ := NewID(FactorKind)
+	if _, err := c.Exec(t.Context(), "INSERT INTO organizations(id,name) VALUES($1,'Synthetic tenant')", org); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.Exec(t.Context(), "INSERT INTO members(id,organization_id,display_name,manual_block) VALUES($1,$2,'Retained Member',true)", member, org); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.Exec(t.Context(), "INSERT INTO feishu_applications(organization_id,namespace,display_name,enabled,tenant_key,client_id,revision,secret_ciphertext) VALUES($1,'synthetic-feishu','Synthetic Feishu',true,'synthetic-tenant','cli_synthetic',1,$2)", org, []byte("synthetic encrypted fixture")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.Exec(t.Context(), "INSERT INTO authentication_factors(id,type,namespace,subject) VALUES($1,'feishu','synthetic-feishu','ou_synthetic')", factor); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.Exec(t.Context(), "INSERT INTO member_auth_factor_bindings(member_id,organization_id,authentication_factor_id,factor_type,provider_namespace) VALUES($1,$2,$3,'feishu','synthetic-feishu')", member, org, factor); err != nil {
+		t.Fatal(err)
+	}
+	const snapshot = `SELECT jsonb_build_object('member',(SELECT to_jsonb(m) FROM members m WHERE id=$1),'factor',(SELECT to_jsonb(f) FROM authentication_factors f WHERE id=$2),'binding',(SELECT to_jsonb(b) FROM member_auth_factor_bindings b WHERE authentication_factor_id=$2),'app',(SELECT to_jsonb(a) FROM feishu_applications a WHERE namespace='synthetic-feishu'))::text`
+	var before, after string
+	if err := c.QueryRow(t.Context(), snapshot, member, factor).Scan(&before); err != nil {
+		t.Fatal(err)
+	}
+	c.Close(context.Background())
+	result, err := UpgradeDatabase(t.Context(), dsn, func(ctx context.Context, snapshot string, version int) (UpgradeBackup, error) {
+		if version != 27 || snapshot == "" {
+			t.Fatal("incorrect backup source", version)
+		}
+		return syntheticBackup(ctx, snapshot, version)
+	})
+	if err != nil || result.CurrentVersion != 28 || !result.Upgraded {
+		t.Fatal(result, err)
+	}
+	store, err := Open(t.Context(), dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	if err := store.pool.QueryRow(t.Context(), snapshot, member, factor).Scan(&after); err != nil || after != before {
+		t.Fatal("upgrade changed existing admitted identity", err)
+	}
+	var count int
+	if err := store.pool.QueryRow(t.Context(), "SELECT count(*) FROM feishu_memberships WHERE NOT departed AND checked_at IS NULL").Scan(&count); err != nil || count != 1 {
+		t.Fatal("upgrade invented directory evidence", count, err)
+	}
 }
