@@ -35,7 +35,7 @@ func (provider *testFeishu) Login(_ context.Context, clientID, secret, callback,
 	if provider.CheckAuthorization(context.Background(), clientID, secret) != nil {
 		return feishu.Profile{}, feishu.ErrAuthorizationDenied
 	}
-	if code != "synthetic-code" || len(verifier) != 43 || !strings.HasSuffix(callback, feishuCallbackPath) || len(secret) < 16 {
+	if code != "synthetic-code" || len(verifier) != 43 || (!strings.HasSuffix(callback, feishuCallbackPath) && !strings.HasSuffix(callback, feishuAccountCallbackPath)) || len(secret) < 16 {
 		return feishu.Profile{}, feishu.ErrUnavailable
 	}
 	if provider.before != nil {
