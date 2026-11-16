@@ -1,5 +1,5 @@
-import { useState, type ReactNode } from "react"
-import { Copy } from "lucide-react"
+import { useEffect, useState, type ReactNode } from "react"
+import { Check, Copy } from "lucide-react"
 import accessDenied from "@/assets/directory-states/access-denied.webp"
 import emptyDirectory from "@/assets/directory-states/empty.webp"
 import loadFailed from "@/assets/directory-states/load-failed.webp"
@@ -72,40 +72,62 @@ export function RecordIdentifier({
   value: string
   label: string
 }) {
-  const [feedback, setFeedback] = useState("")
-  const [copying, setCopying] = useState(false)
+  const [copyResult, setCopyResult] = useState<{
+    status: "idle" | "copying" | "copied" | "failed"
+  }>({ status: "idle" })
+
+  useEffect(() => {
+    if (copyResult.status !== "copied") return
+    const timeout = window.setTimeout(
+      () => setCopyResult({ status: "idle" }),
+      2000
+    )
+    return () => window.clearTimeout(timeout)
+  }, [copyResult])
+
   return (
     <div className="min-w-0">
       <InputGroup>
         <InputGroupInput
           aria-label={label}
+          className="h-full rounded-s-[calc(var(--radius)-1px)] bg-input/50 dark:bg-input/80"
           value={value}
           readOnly
           onFocus={(event) => event.currentTarget.select()}
         />
-        <InputGroupAddon align="inline-end">
+        <InputGroupAddon
+          align="inline-end"
+          className="h-full px-0.75 py-0 has-[>button]:mr-0"
+        >
           <InputGroupButton
             size="icon-xs"
             aria-label={`复制${label}`}
-            disabled={copying}
+            disabled={copyResult.status === "copying"}
             onClick={async () => {
-              setCopying(true)
+              setCopyResult({ status: "copying" })
               try {
                 await navigator.clipboard.writeText(value)
-                setFeedback("已复制完整 ID。")
+                setCopyResult({ status: "copied" })
               } catch {
-                setFeedback("无法自动复制，请选中上方 ID 手动复制。")
-              } finally {
-                setCopying(false)
+                setCopyResult({ status: "failed" })
               }
             }}
           >
-            <Copy aria-hidden="true" />
+            {copyResult.status === "copied" ? (
+              <Check
+                aria-hidden="true"
+                className="text-green-600 dark:text-green-400"
+              />
+            ) : (
+              <Copy aria-hidden="true" />
+            )}
           </InputGroupButton>
         </InputGroupAddon>
       </InputGroup>
       <p className="identifier-feedback" role="status">
-        {feedback}
+        {copyResult.status === "failed" &&
+          "无法自动复制，请选中上方 ID 手动复制。"}
+        {copyResult.status === "copied" && <span className="sr-only">已复制</span>}
       </p>
     </div>
   )
