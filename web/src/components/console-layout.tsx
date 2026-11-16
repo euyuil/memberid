@@ -1,5 +1,6 @@
 import { Fragment, useState, type ReactNode } from "react"
 import {
+  ChevronRight,
   ChevronsUpDown,
   LogOut,
   UserRound,
@@ -18,6 +19,11 @@ import {
 } from "@/components/ui/breadcrumb"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible"
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuGroup,
@@ -32,13 +38,14 @@ import {
   SidebarContent,
   SidebarFooter,
   SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarInset,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
   SidebarProvider,
   SidebarRail,
   SidebarTrigger,
@@ -49,9 +56,12 @@ import { TooltipProvider } from "@/components/ui/tooltip"
 type NavigationItem = {
   label: string
   href: string
-  icon: LucideIcon
   active: boolean
-  group: string
+}
+type NavigationGroup = {
+  label: string
+  icon: LucideIcon
+  items: NavigationItem[]
 }
 export type BreadcrumbItem = {
   label: string
@@ -61,7 +71,7 @@ export type BreadcrumbItem = {
 
 type ConsoleLayoutProps = {
   breadcrumbs: BreadcrumbItem[]
-  navigation: NavigationItem[]
+  navigation: NavigationGroup[]
   actor: {
     displayName: string
     memberId: string
@@ -73,36 +83,55 @@ type ConsoleLayoutProps = {
   onSignOut: () => Promise<void>
 }
 
-function Navigation({ items }: { items: NavigationItem[] }) {
+function Navigation({ groups }: { groups: NavigationGroup[] }) {
   const { setOpenMobile } = useSidebar()
   return (
     <nav aria-label="主导航">
-      {[...new Set(items.map((item) => item.group))].map((group) => (
-        <SidebarGroup key={group} role="group" aria-label={group}>
-          <SidebarGroupLabel>{group}</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {items
-                .filter((item) => item.group === group)
-                .map(({ label, href, icon: Icon, active }) => (
-                  <SidebarMenuItem key={label}>
-                    <SidebarMenuButton
-                      render={<Link href={href} />}
-                      isActive={active}
-                      aria-current={active ? "page" : undefined}
-                      aria-label={label}
-                      tooltip={label}
-                      onClick={() => setOpenMobile(false)}
-                    >
-                      <Icon aria-hidden="true" />
-                      <span>{label}</span>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-      ))}
+      <SidebarGroup>
+        <SidebarMenu>
+          {groups.map(({ label, icon: Icon, items }) => (
+            <Collapsible
+              key={label}
+              defaultOpen={items.some((item) => item.active)}
+              className="group/collapsible"
+              render={<SidebarMenuItem />}
+            >
+              <CollapsibleTrigger
+                render={
+                  <SidebarMenuButton
+                    tooltip={label}
+                    isActive={items.some((item) => item.active)}
+                  />
+                }
+                aria-label={label}
+              >
+                <Icon aria-hidden="true" />
+                <span>{label}</span>
+                <ChevronRight
+                  aria-hidden="true"
+                  className="ml-auto transition-transform duration-200 group-data-open/collapsible:rotate-90"
+                />
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <SidebarMenuSub>
+                  {items.map(({ label, href, active }) => (
+                    <SidebarMenuSubItem key={label}>
+                      <SidebarMenuSubButton
+                        render={<Link href={href} />}
+                        isActive={active}
+                        aria-current={active ? "page" : undefined}
+                        onClick={() => setOpenMobile(false)}
+                      >
+                        <span>{label}</span>
+                      </SidebarMenuSubButton>
+                    </SidebarMenuSubItem>
+                  ))}
+                </SidebarMenuSub>
+              </CollapsibleContent>
+            </Collapsible>
+          ))}
+        </SidebarMenu>
+      </SidebarGroup>
     </nav>
   )
 }
@@ -167,7 +196,7 @@ function ConsoleContents({
       <Sidebar id="console-sidebar" collapsible="icon" aria-label="管理导航">
         <SidebarHeader>{scope}</SidebarHeader>
         <SidebarContent>
-          <Navigation items={navigation} />
+          <Navigation groups={navigation} />
         </SidebarContent>
         <SidebarFooter>
           <SidebarMenu>

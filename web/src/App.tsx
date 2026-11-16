@@ -6,11 +6,9 @@ import {
   ChevronRight,
   Fingerprint,
   History,
-  KeyRound,
   Plus,
   RefreshCw,
   X,
-  Users,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -717,49 +715,58 @@ export default function App() {
       breadcrumbs={breadcrumbs}
       navigation={[
         {
-          label: "组织",
-          href: routeURL({ view: "organization", ...navigationScope }),
+          label: "身份管理",
           icon: Building2,
-          active: activeView === "organization",
-          group: "身份管理",
+          items: [
+            {
+              label: "组织",
+              href: routeURL({ view: "organization", ...navigationScope }),
+              active: activeView === "organization",
+            },
+            {
+              label: "成员",
+              href: routeURL({ view: "members", ...navigationScope }),
+              active: membersView,
+            },
+            {
+              label: "身份提供商",
+              href: routeURL({ view: "providers", ...navigationScope }),
+              active: providers,
+            },
+          ],
         },
         {
-          label: "成员",
-          href: routeURL({ view: "members", ...navigationScope }),
-          icon: Users,
-          active: membersView,
-          group: "身份管理",
-        },
-        {
-          label: "身份提供商",
-          href: routeURL({ view: "providers", ...navigationScope }),
-          icon: KeyRound,
-          active: providers,
-          group: "身份管理",
-        },
-        {
-          label: "SAML 应用",
-          href: routeURL({
-            view: "saml-service-providers",
-            ...navigationScope,
-          }),
+          label: "应用接入",
           icon: AppWindow,
-          active: saml,
-          group: "应用接入",
+          items: [
+            {
+              label: "SAML 应用",
+              href: routeURL({
+                view: "saml-service-providers",
+                ...navigationScope,
+              }),
+              active: saml,
+            },
+          ],
         },
         {
-          label: "认证记录",
-          href: routeURL({ view: "authentication-events", ...navigationScope }),
-          icon: Fingerprint,
-          active: authenticationEvents,
-          group: "活动",
-        },
-        {
-          label: "操作记录",
-          href: routeURL({ view: "events", ...navigationScope }),
+          label: "活动",
           icon: History,
-          active: events,
-          group: "活动",
+          items: [
+            {
+              label: "认证记录",
+              href: routeURL({
+                view: "authentication-events",
+                ...navigationScope,
+              }),
+              active: authenticationEvents,
+            },
+            {
+              label: "操作记录",
+              href: routeURL({ view: "events", ...navigationScope }),
+              active: events,
+            },
+          ],
         },
       ]}
       onSignOut={async () => {
