@@ -1,5 +1,6 @@
 import { Fragment, useState, type ReactNode } from "react"
 import {
+  Check,
   ChevronRight,
   ChevronsUpDown,
   LogOut,
@@ -86,7 +87,8 @@ type ConsoleLayoutProps = {
 }
 
 function Navigation({ groups }: { groups: NavigationGroup[] }) {
-  const { setOpenMobile } = useSidebar()
+  const { isMobile, setOpenMobile, state } = useSidebar()
+  const collapsed = !isMobile && state === "collapsed"
   return (
     <nav aria-label="主导航">
       <SidebarGroup>
@@ -98,38 +100,80 @@ function Navigation({ groups }: { groups: NavigationGroup[] }) {
               className="group/collapsible"
               render={<SidebarMenuItem />}
             >
-              <CollapsibleTrigger
-                render={
-                  <SidebarMenuButton
-                    tooltip={label}
-                    isActive={items.some((item) => item.active)}
-                  />
-                }
-                aria-label={label}
-              >
-                <Icon aria-hidden="true" />
-                <span>{label}</span>
-                <ChevronRight
-                  aria-hidden="true"
-                  className="ml-auto transition-transform duration-200 group-data-open/collapsible:rotate-90"
-                />
-              </CollapsibleTrigger>
-              <CollapsibleContent>
-                <SidebarMenuSub>
-                  {items.map(({ label, href, active }) => (
-                    <SidebarMenuSubItem key={label}>
-                      <SidebarMenuSubButton
-                        render={<Link href={href} />}
-                        isActive={active}
-                        aria-current={active ? "page" : undefined}
-                        onClick={() => setOpenMobile(false)}
-                      >
-                        <span>{label}</span>
-                      </SidebarMenuSubButton>
-                    </SidebarMenuSubItem>
-                  ))}
-                </SidebarMenuSub>
-              </CollapsibleContent>
+              {collapsed ? (
+                <DropdownMenu modal={false}>
+                  <DropdownMenuTrigger
+                    render={
+                      <SidebarMenuButton
+                        tooltip={label}
+                        isActive={items.some((item) => item.active)}
+                      />
+                    }
+                    aria-label={label}
+                  >
+                    <Icon aria-hidden="true" />
+                    <span>{label}</span>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    side="right"
+                    align="start"
+                    sideOffset={4}
+                    className="min-w-40"
+                    aria-label={label}
+                  >
+                    <DropdownMenuGroup>
+                      <DropdownMenuLabel>{label}</DropdownMenuLabel>
+                      {items.map(({ label, href, active }) => (
+                        <DropdownMenuItem
+                          key={label}
+                          nativeButton={false}
+                          render={<Link href={href} />}
+                          aria-current={active ? "page" : undefined}
+                          inset={!active}
+                        >
+                          {active && <Check aria-hidden="true" />}
+                          {label}
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuGroup>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              ) : (
+                <>
+                  <CollapsibleTrigger
+                    render={
+                      <SidebarMenuButton
+                        tooltip={label}
+                        isActive={items.some((item) => item.active)}
+                      />
+                    }
+                    aria-label={label}
+                  >
+                    <Icon aria-hidden="true" />
+                    <span>{label}</span>
+                    <ChevronRight
+                      aria-hidden="true"
+                      className="ml-auto transition-transform duration-200 group-data-open/collapsible:rotate-90"
+                    />
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <SidebarMenuSub>
+                      {items.map(({ label, href, active }) => (
+                        <SidebarMenuSubItem key={label}>
+                          <SidebarMenuSubButton
+                            render={<Link href={href} />}
+                            isActive={active}
+                            aria-current={active ? "page" : undefined}
+                            onClick={() => setOpenMobile(false)}
+                          >
+                            <span>{label}</span>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                      ))}
+                    </SidebarMenuSub>
+                  </CollapsibleContent>
+                </>
+              )}
             </Collapsible>
           ))}
         </SidebarMenu>
