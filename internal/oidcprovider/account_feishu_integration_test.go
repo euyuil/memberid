@@ -92,6 +92,7 @@ func accountLoginSnapshot(t *testing.T, f *fixture) string {
 
 func TestFeishuAccountPreservesIdentityAndAuthentication(t *testing.T) {
 	f, provider, id, page := feishuAccountFixture(t)
+	assertAccountFormAction(t, page, "https://accounts.feishu.cn")
 	sp := enableSAML(t, f)
 	samlLogin := samlPage(t, f, sp)
 	before := verifySAMLResponse(t, f, sp, f.submit(samlLogin.body, "continue", url.Values{"member": {f.member.ID}, "consent": {"yes"}}))
@@ -99,6 +100,7 @@ func TestFeishuAccountPreservesIdentityAndAuthentication(t *testing.T) {
 	callback := startFeishuAccount(f, page, id)
 	result := f.call(f.browser, "GET", callback, nil, nil)
 	f.status(result, 200)
+	assertAccountFormAction(t, result, "https://accounts.feishu.cn")
 	if !strings.Contains(result.body, "Feishu is linked to this Member") || !strings.Contains(result.body, `href="`+accountReturn+`"`) || result.header.Get("Set-Cookie") != "" {
 		t.Fatal("incorrect link result")
 	}

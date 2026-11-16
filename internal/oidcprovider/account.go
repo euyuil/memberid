@@ -448,8 +448,10 @@ func (service *Service) renderAccount(w http.ResponseWriter, r *http.Request, re
 		}
 	}
 	label := "DingTalk"
+	formAction := "https://login.dingtalk.com"
 	if request.Kind == "feishu" {
 		label = "Feishu"
+		formAction = "https://accounts.feishu.cn"
 	}
 	fresh := service.freshAccountSession(session)
 	if message == "" {
@@ -489,7 +491,7 @@ func (service *Service) renderAccount(w http.ResponseWriter, r *http.Request, re
 	if !availableProvider && message == "" {
 		data.Message = "No available application. Existing or revoked bindings require an administrator."
 	}
-	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'nonce-"+data.Nonce+"'; form-action 'self' https://login.dingtalk.com; base-uri 'none'; frame-ancestors 'none'")
+	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'nonce-"+data.Nonce+"'; form-action 'self' "+formAction+"; base-uri 'none'; frame-ancestors 'none'")
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_ = accountPage.Execute(w, data)
 }

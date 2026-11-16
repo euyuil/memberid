@@ -62,6 +62,38 @@ The fresh-install schema is version 28. Databases with another schema version ar
 
 Automated HTTP and disposable-PostgreSQL tests cover real forms and callbacks, phone attempt limits, atomic verification rollback, cancellation during SMS delivery, CSRF, browser and session binding, exact return validation, fresh authentication, cancellation, concurrent replay, failed upstream verification, eligibility changes during provider I/O, binding conflicts, distinct organizations, stable OIDC subjects, and original session/grant preservation. Browser inspection of the actual phone template at 320-pixel width confirmed identical input and button positions across seven synthetic states, with no horizontal overflow. These are rendered-state checks, separate from HTTP flow validation. Feishu HTTP/database regressions additionally cover PKCE, wrong tenant and application selection, cross-organization requests, source changes during upstream I/O, conflicting and revoked slots, concurrent callbacks, unchanged sessions/grants, and stable OIDC subjects and SP-specific SAML NameIDs. These checks simulate SMS delivery, DingTalk, and Feishu and do not establish real upstream authorization or live GitLab acceptance.
 
+### Browser regression: external authorization redirects
+
+The external account page's CSP `form-action` allows its own origin and only the
+selected provider's authorization origin: `https://accounts.feishu.cn` for Feishu
+or `https://login.dingtalk.com` for DingTalk. The HTTP regression tests check this
+allowlist on both the initial form and the completed callback page. The other
+restrictions remain `default-src 'none'`, nonce-protected styles,
+`base-uri 'none'`, and `frame-ancestors 'none'`.
+
+For changes to these forms or their CSP, use a temporary HTTPS installation and
+synthetic identities, following [local development](local-development.md):
+
+1. Establish a fresh MemberID session, then open the Feishu account page for an
+   eligible Member with an enabled Feishu application.
+2. Submit **Verify and link Feishu**. Confirm that the browser follows the
+   same-origin POST and its HTTP 303 to `accounts.feishu.cn`; inspect browser
+   errors if it remains on the form. A server-side 303 alone does not establish
+   that the browser accepted the redirect under `form-action`.
+3. Repeat with **Verify and link DingTalk**, confirming navigation to
+   `login.dingtalk.com`.
+
+Reauthenticate if the five-minute freshness window expires. With synthetic
+provider application identifiers, reaching a provider error page verifies only
+the outbound browser navigation; it does not verify real provider authorization
+or completion of the binding callback.
+
+On 2026-11-16, Chrome inspection of the production handlers and templates in an
+isolated HTTPS fixture reached both provider origins with synthetic applications.
+The old Feishu policy control stayed on the form despite a server-side 303;
+the corrected policy reached Feishu's invalid-application page. DingTalk reached
+its corresponding application-error page. No real provider login was performed.
+
 ## Scoped self-service authorization
 
 Account views and final phone/DingTalk/Feishu binding creation use the shared
