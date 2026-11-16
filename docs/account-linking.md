@@ -1,16 +1,17 @@
 # Member account linking
 
-MemberID hosts self-service pages for linking a freshly verified phone or DingTalk identity to an existing Member. It uses MemberID's own browser session and current binding eligibility. It needs no application-specific roles, management API credential, or special identity-evidence scope. This is account functionality, not an alternative login, token, or refresh protocol.
+MemberID hosts self-service pages for linking a freshly verified phone, DingTalk, or Feishu identity to an existing Member. It uses MemberID's own browser session and current binding eligibility. It needs no application-specific roles, management API credential, or special identity-evidence scope. This is account functionality, not an alternative login, token, or refresh protocol.
 
 ## Open the page
 
-For phone linking, enable the optional [phone adapter](phone-authentication.md). It currently supports mainland China mobile numbers. For DingTalk linking, enable the DingTalk login adapter, configure the organization's application, and register `<issuer>/account/dingtalk/callback` as an exact DingTalk callback in addition to the ordinary login callback. The application needs the same corporation and directory permissions as [DingTalk login](dingtalk.md).
+For phone linking, enable the optional [phone adapter](phone-authentication.md). It currently supports mainland China mobile numbers. For DingTalk linking, enable the DingTalk login adapter, configure the organization's application, and register `<issuer>/account/dingtalk/callback` as an exact DingTalk callback in addition to the ordinary login callback. The application needs the same corporation and directory permissions as [DingTalk login](dingtalk.md). For Feishu, enable its adapter, configure an enabled application for the organization, and register `<issuer>/account/feishu/callback` as an additional exact callback in the Feishu application security settings. It uses the same tenant and UserInfo permissions as [Feishu login](feishu.md). Feishu linking is limited to ordinary organizations.
 
 After authenticating through a registered OIDC application, navigate to:
 
 ```text
 <issuer>/account/link/phone?memberId=<member-id>
 <issuer>/account/link/dingtalk?memberId=<member-id>
+<issuer>/account/link/feishu?memberId=<member-id>
 ```
 
 The selected Member must already be eligible through the browser session's verified factor. MemberID checks the explicit binding and displays the organization's name and identifier and the Member's name and identifier before starting verification. A caller-supplied Member identifier never establishes ownership. No session or an ineligible Member produces a generic error without exposing another Member's details.
@@ -27,13 +28,19 @@ The client must use the Member subject profile and allow that organization. Only
 
 Linking requires a MemberID session authenticated within the preceding five minutes, both when starting and when committing the binding. An older session can view the page but must authenticate again through a registered application before linking. An RP can request fresh authentication through standard OIDC `prompt=login` or `max_age`; a Refresh Token does not reset `auth_time` or satisfy this requirement. The five-minute rule is MemberID account policy, not an OIDC requirement.
 
-The pages keep identity fields, verification controls, action buttons, and feedback areas in stable positions. The phone number and code fields remain mounted throughout verification; cancel a pending attempt to edit the accepted number. A fresh form is bound to the browser, session, selected Member, original binding, client, and return destination. Same-origin form submissions require its CSRF value. Account forms expire after five minutes; DingTalk attempts also use random, hashed upstream state. Reopening the same pending flow preserves its cancellation action. Starting a newer flow for the same session and Member cancels older forms and attempts.
+The pages keep identity fields, verification controls, action buttons, and feedback areas in stable positions. The phone number and code fields remain mounted throughout verification; cancel a pending attempt to edit the accepted number. A fresh form is bound to the browser, session, selected Member, original binding, client, and return destination. Same-origin form submissions require its CSRF value. Account forms expire after five minutes; external provider attempts also use random, hashed upstream state. Reopening the same pending flow preserves its cancellation action. Starting a newer flow for the same session and Member cancels older forms and attempts.
 
 ### DingTalk
 
 The callback requires the same browser and current MemberID session. State is consumed atomically before contacting DingTalk; replay, concurrent callbacks, wrong browsers, canceled attempts, expired forms, and failed responses cannot reuse it. A failed verification can be canceled and restarted. The provider must freshly establish the configured corporation and consistent internal-employee identifiers. The result uses the same organization, application, directory-event, and authorization revision checks as login admission.
 
 After provider I/O, one transaction rechecks the session, request, current factor and binding, organization, Member eligibility, and current client return policy before applying the link. Session revocation, source-factor disablement, binding revocation, departure, manual block, cancellation, or a changed provider configuration prevents an in-flight link from committing. Partial failure leaves no new factor, binding, or admitted identity.
+
+### Feishu
+
+Feishu uses the same authenticated account form and final transaction checks as DingTalk, with a separate callback and provider-specific evidence. Select an enabled Feishu application belonging to the selected Member's organization. The server binds its configuration, authorization, and organization revisions to random hashed single-use state and a PKCE S256 verifier. It consumes state before upstream I/O, clears the stored verifier, exchanges the code with the exact account callback, and fetches UserInfo. The returned tenant key must exactly match the configured tenant; the open ID is interpreted only in that application's namespace.
+
+Canceling an attempt, denying upstream authorization, a failed exchange, or an expired form leaves existing identities and grants intact. After failure, cancel and restart to obtain fresh state and PKCE. A conflicting identity or occupied or revoked application slot produces an explicit failure; self-service cannot transfer, replace, or restore it. Other unoccupied Feishu application slots remain available. No phone, email, or name matching participates in this decision.
 
 ### Phone
 
@@ -53,11 +60,11 @@ The fresh-install schema is version 27. Databases with another schema version ar
 
 ## Validation boundary
 
-Automated HTTP and disposable-PostgreSQL tests cover real forms and callbacks, phone attempt limits, atomic verification rollback, cancellation during SMS delivery, CSRF, browser and session binding, exact return validation, fresh authentication, cancellation, concurrent replay, failed upstream verification, eligibility changes during provider I/O, binding conflicts, distinct organizations, stable OIDC subjects, and original session/grant preservation. Browser inspection of the actual phone template at 320-pixel width confirmed identical input and button positions across seven synthetic states, with no horizontal overflow. These are rendered-state checks, separate from HTTP flow validation. These checks simulate SMS delivery and DingTalk and do not establish real upstream authorization or live GitLab acceptance.
+Automated HTTP and disposable-PostgreSQL tests cover real forms and callbacks, phone attempt limits, atomic verification rollback, cancellation during SMS delivery, CSRF, browser and session binding, exact return validation, fresh authentication, cancellation, concurrent replay, failed upstream verification, eligibility changes during provider I/O, binding conflicts, distinct organizations, stable OIDC subjects, and original session/grant preservation. Browser inspection of the actual phone template at 320-pixel width confirmed identical input and button positions across seven synthetic states, with no horizontal overflow. These are rendered-state checks, separate from HTTP flow validation. Feishu HTTP/database regressions additionally cover PKCE, wrong tenant and application selection, cross-organization requests, source changes during upstream I/O, conflicting and revoked slots, concurrent callbacks, unchanged sessions/grants, and stable OIDC subjects and SP-specific SAML NameIDs. These checks simulate SMS delivery, DingTalk, and Feishu and do not establish real upstream authorization or live GitLab acceptance.
 
 ## Scoped self-service authorization
 
-Account views and final phone/DingTalk binding creation use the shared
+Account views and final phone/DingTalk/Feishu binding creation use the shared
 [scope/action evaluator](management-permissions.md). The server constructs an
 account principal from the authenticated SSO session and selected Member's source
 binding. Authorization resolves current session and binding evidence and permits

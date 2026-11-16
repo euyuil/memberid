@@ -286,9 +286,28 @@ func (apps *FeishuApplications) CheckApplications(ctx context.Context) error {
 	return failure
 }
 
+// Link uses the caller's locked, single-use account transaction. It cannot
+// replace an occupied application slot, restore revocation, or transfer identity.
+func (apps *FeishuApplications) Link(ctx context.Context, tx pgx.Tx, principal Principal, proof FeishuProof, memberID string) (MemberAdmission, error) {
+	if principal.kind != accountPrincipal {
+		return MemberAdmission{}, ErrForbidden
+	}
+	if !ValidID(memberID, MemberKind) {
+		return MemberAdmission{}, ErrInvalid
+	}
+	if err := authorizeAll(ctx, tx, principal, bindingsResource.require(actionCreate, proof.login.OrganizationID, memberID)); err != nil {
+		return MemberAdmission{}, err
+	}
+	return apps.admit(ctx, tx, proof, &principal, memberID)
+}
+
 func (apps *FeishuApplications) Admit(ctx context.Context, tx pgx.Tx, proof FeishuProof) (MemberAdmission, error) {
+	return apps.admit(ctx, tx, proof, nil, "")
+}
+
+func (apps *FeishuApplications) admit(ctx context.Context, tx pgx.Tx, proof FeishuProof, source *Principal, targetID string) (MemberAdmission, error) {
 	login := proof.login
-	if proof.applications != apps || !proof.authenticatedAt.Add(5*time.Minute).After(time.Now()) || login.OrganizationID == SystemOrganizationID {
+	if proof.applications != apps || proof.authenticatedAt.IsZero() || proof.authenticatedAt.After(time.Now()) || !proof.authenticatedAt.Add(5*time.Minute).After(time.Now()) || login.OrganizationID == SystemOrganizationID {
 		return MemberAdmission{}, ErrIneligible
 	}
 	org, err := readOrganization(tx.QueryRow(ctx, "SELECT "+organizationColumns+" FROM organizations WHERE id=$1 FOR UPDATE", login.OrganizationID))
@@ -299,26 +318,50 @@ func (apps *FeishuApplications) Admit(ctx context.Context, tx pgx.Tx, proof Feis
 	if err != nil {
 		return MemberAdmission{}, err
 	}
-	if org.Status != "enabled" || org.lifecycleRevision != login.OrganizationRevision || !app.Enabled ||
-		app.AuthorizationStatus != "active" || app.Revision != login.Revision || app.authorizationRevision != login.AuthorizationRevision {
+	if org.Status != "enabled" || org.lifecycleRevision != login.OrganizationRevision || !app.Enabled || app.AuthorizationStatus != "active" || app.Revision != login.Revision || app.authorizationRevision != login.AuthorizationRevision {
 		return MemberAdmission{}, ErrIneligible
+	}
+	if source != nil {
+		var id string
+		if err := tx.QueryRow(ctx, "SELECT id FROM authentication_factors WHERE id=$1 AND status='active' FOR SHARE", source.factorID).Scan(&id); err != nil {
+			return MemberAdmission{}, linkEligibilityError(err)
+		}
+		if err := tx.QueryRow(ctx, "SELECT id::text FROM member_auth_factor_bindings WHERE id=$1 AND member_id=$2 AND organization_id=$3 AND authentication_factor_id=$4 AND status='active' FOR SHARE", source.bindingID, targetID, org.ID, source.factorID).Scan(&id); err != nil {
+			return MemberAdmission{}, linkEligibilityError(err)
+		}
+		if err := tx.QueryRow(ctx, "SELECT id FROM members WHERE id=$1 AND organization_id=$2 AND NOT manual_block AND NOT external_departure FOR UPDATE", targetID, org.ID).Scan(&id); err != nil {
+			return MemberAdmission{}, linkEligibilityError(err)
+		}
+		binding, err := MemberEvidence(ctx, tx, source.factorID, targetID, org.ID)
+		if err != nil {
+			return MemberAdmission{}, linkEligibilityError(err)
+		}
+		if binding != source.bindingID {
+			return MemberAdmission{}, ErrIneligible
+		}
 	}
 	factor, err := ensureFactor(ctx, tx, "feishu", app.ID, proof.profile.OpenID)
 	if err != nil {
 		return MemberAdmission{}, err
 	}
 	binding, err := readBinding(tx.QueryRow(ctx, "SELECT "+bindingColumns+" FROM member_auth_factor_bindings WHERE organization_id=$1 AND authentication_factor_id=$2 FOR UPDATE", org.ID, factor.ID))
+	if source != nil && err == nil {
+		return MemberAdmission{}, ErrConflict
+	}
 	if errors.Is(err, ErrNotFound) {
-		id, err := NewID(MemberKind)
-		if err != nil {
-			return MemberAdmission{}, err
-		}
-		name := proof.profile.Name
-		if !validText(name, 128) {
-			name = "Member"
-		}
-		if _, err := tx.Exec(ctx, "INSERT INTO members(id,organization_id,display_name) VALUES($1,$2,$3)", id, org.ID, name); err != nil {
-			return MemberAdmission{}, storageError(err)
+		id := targetID
+		if source == nil {
+			id, err = NewID(MemberKind)
+			if err != nil {
+				return MemberAdmission{}, err
+			}
+			name := proof.profile.Name
+			if !validText(name, 128) {
+				name = "Member"
+			}
+			if _, err := tx.Exec(ctx, "INSERT INTO members(id,organization_id,display_name) VALUES($1,$2,$3)", id, org.ID, name); err != nil {
+				return MemberAdmission{}, storageError(err)
+			}
 		}
 		binding, err = readBinding(tx.QueryRow(ctx, `INSERT INTO member_auth_factor_bindings(member_id,organization_id,authentication_factor_id,factor_type,provider_namespace)
  VALUES($1,$2,$3,'feishu',$4) RETURNING `+bindingColumns, id, org.ID, factor.ID, app.ID))

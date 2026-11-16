@@ -191,7 +191,7 @@ func (service *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		r.PostForm.Del("token_type_hint")
 	}
 	browser := service.cookieValue(r, "browser")
-	interactive := r.URL.Path == samlprovider.SSOPath || r.URL.Path == "/account/link/dingtalk" || r.URL.Path == "/login" || r.URL.Path == "/oauth/logout" || strings.HasPrefix(r.URL.Path, "/oauth/authorize")
+	interactive := r.URL.Path == samlprovider.SSOPath || (r.URL.Path == accountPath || r.URL.Path == feishuAccountPath) || r.URL.Path == "/login" || r.URL.Path == "/oauth/logout" || strings.HasPrefix(r.URL.Path, "/oauth/authorize")
 	if interactive && len(browser) != 43 {
 		browser = config.RandomSecret()
 		service.cookie(w, "browser", browser, sessionIdleLifetime)
@@ -232,10 +232,16 @@ func (service *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		service.accountPhone(w, r)
 		return
 	case "/account/link/dingtalk":
-		service.accountDingTalk(w, r)
+		service.accountExternal(w, r, "dingtalk")
 		return
 	case "/account/dingtalk/callback":
-		service.accountDingTalkCallback(w, r)
+		service.accountExternalCallback(w, r, "dingtalk")
+		return
+	case feishuAccountPath:
+		service.accountExternal(w, r, "feishu")
+		return
+	case feishuAccountCallbackPath:
+		service.accountExternalCallback(w, r, "feishu")
 		return
 	case feishuCallbackPath:
 		service.feishuCallback(w, r)

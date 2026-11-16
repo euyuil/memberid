@@ -14,12 +14,16 @@ import (
 
 	"github.com/euyuil/memberid/internal/authevent"
 	"github.com/euyuil/memberid/internal/config"
+	"github.com/euyuil/memberid/internal/feishu"
 	"github.com/euyuil/memberid/internal/identity"
 	"github.com/jackc/pgx/v5"
+	"golang.org/x/oauth2"
 )
 
 const accountLifetime = 5 * time.Minute
 const accountPath = "/account/link/dingtalk"
+const feishuAccountPath = "/account/link/feishu"
+const feishuAccountCallbackPath = "/account/feishu/callback"
 
 //go:embed account.html
 var accountHTML string
@@ -44,6 +48,7 @@ type accountDetails struct {
 	BrowserHash    string                        `json:"browserHash"`
 	CSRF           string                        `json:"csrf"`
 	Login          identity.DingTalkLoginContext `json:"login"`
+	Feishu         *feishuAttempt                `json:"feishu,omitempty"`
 }
 type accountSession struct {
 	id       string
@@ -123,7 +128,7 @@ func (service *Service) readAccount(r *http.Request, field, value string) (accou
 	if err == nil {
 		err = json.Unmarshal(data, &request.accountDetails)
 	}
-	if err == nil && ((request.Kind != "phone" && request.Kind != "dingtalk") || len(accountBrowser(r)) != 43 || !service.accountClient(request.accountDetails) || !sameSecret(request.BrowserHash, config.SecretHash(accountBrowser(r)))) {
+	if err == nil && ((request.Kind != "phone" && request.Kind != "dingtalk" && request.Kind != "feishu") || len(accountBrowser(r)) != 43 || !service.accountClient(request.accountDetails) || !sameSecret(request.BrowserHash, config.SecretHash(accountBrowser(r)))) {
 		err = identity.ErrIneligible
 	}
 	return request, err
@@ -137,8 +142,8 @@ func accountAddress(request accountDetails) string {
 	return "/account/link/" + request.Kind + "?" + query.Encode()
 }
 
-func (service *Service) accountDingTalk(w http.ResponseWriter, r *http.Request) {
-	if service.dingtalk == nil {
+func (service *Service) accountExternal(w http.ResponseWriter, r *http.Request, kind string) {
+	if !service.accountProviderEnabled(kind) {
 		http.NotFound(w, r)
 		return
 	}
@@ -153,10 +158,10 @@ func (service *Service) accountDingTalk(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if r.Method == http.MethodPost {
-		service.accountDingTalkPost(w, r, session)
+		service.accountExternalPost(w, r, session, kind)
 		return
 	}
-	request, member, ok := service.openAccount(w, r, session, "dingtalk")
+	request, member, ok := service.openAccount(w, r, session, kind)
 	if ok {
 		service.renderAccount(w, r, request, session, member, "")
 	}
@@ -200,14 +205,14 @@ func (service *Service) openAccount(w http.ResponseWriter, r *http.Request, sess
 	return request, member, true
 }
 
-func (service *Service) accountDingTalkPost(w http.ResponseWriter, r *http.Request, session accountSession) {
+func (service *Service) accountExternalPost(w http.ResponseWriter, r *http.Request, session accountSession, kind string) {
 	media, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
 	if err != nil || media != "application/x-www-form-urlencoded" || r.URL.RawQuery != "" || r.Header.Get("Origin") != service.configuration.Issuer || !accountFields(r, "request", "csrf", "action", "provider") {
 		http.Error(w, "Invalid account submission", 403)
 		return
 	}
 	request, err := service.readAccount(r, "id", r.PostForm.Get("request"))
-	if err != nil || request.Kind != "dingtalk" || request.SessionID != session.id || !sameSecret(request.CSRF, r.PostForm.Get("csrf")) {
+	if err != nil || request.Kind != kind || request.SessionID != session.id || !sameSecret(request.CSRF, r.PostForm.Get("csrf")) {
 		http.Error(w, "Invalid or expired account request", 403)
 		return
 	}
@@ -229,13 +234,26 @@ func (service *Service) accountDingTalkPost(w http.ResponseWriter, r *http.Reque
 			service.renderAccount(w, r, request, session, member, "Sign in again through your application before linking a new authentication method.")
 			return
 		}
-		app, err := service.dingtalk.ApplicationSource(r.Context(), member.OrganizationID, r.PostForm.Get("provider"))
-		if err != nil {
-			service.renderAccount(w, r, request, session, member, "DingTalk is not available for this organization.")
-			return
-		}
-		request.Login = app.LoginContext()
 		state := config.RandomSecret()
+		var destination string
+		if kind == "feishu" {
+			app, login, err := service.feishu.LoginSource(r.Context(), member.OrganizationID, r.PostForm.Get("provider"))
+			if err != nil {
+				service.renderAccount(w, r, request, session, member, "Feishu is not available for this organization.")
+				return
+			}
+			request.Feishu = &feishuAttempt{FeishuLoginContext: login, Verifier: oauth2.GenerateVerifier(), ExpiresAt: request.ExpiresAt}
+			destination = feishu.AuthorizationURL(app.ClientID, service.configuration.Issuer+feishuAccountCallbackPath, state, request.Feishu.Verifier)
+		} else {
+			app, err := service.dingtalk.ApplicationSource(r.Context(), member.OrganizationID, r.PostForm.Get("provider"))
+			if err != nil {
+				service.renderAccount(w, r, request, session, member, "DingTalk is not available for this organization.")
+				return
+			}
+			request.Login = app.LoginContext()
+			query := url.Values{"client_id": {app.ClientID}, "redirect_uri": {service.configuration.Issuer + "/account/dingtalk/callback"}, "state": {state}, "response_type": {"code"}, "prompt": {"consent"}, "scope": {"openid corpid"}, "corpId": {app.CorpID}}
+			destination = "https://login.dingtalk.com/oauth2/auth?" + query.Encode()
+		}
 		data, _ := json.Marshal(request.accountDetails)
 		err = pgx.BeginFunc(r.Context(), service.store.Database(), func(tx pgx.Tx) error {
 			current, err := service.accountSession(r, tx, true)
@@ -259,15 +277,14 @@ func (service *Service) accountDingTalkPost(w http.ResponseWriter, r *http.Reque
 			http.Error(w, "Account request expired. Reopen the account page.", 400)
 			return
 		}
-		query := url.Values{"client_id": {app.ClientID}, "redirect_uri": {service.configuration.Issuer + "/account/dingtalk/callback"}, "state": {state}, "response_type": {"code"}, "prompt": {"consent"}, "scope": {"openid corpid"}, "corpId": {app.CorpID}}
-		http.Redirect(w, r, "https://login.dingtalk.com/oauth2/auth?"+query.Encode(), http.StatusSeeOther)
+		http.Redirect(w, r, destination, http.StatusSeeOther)
 	default:
 		http.Error(w, "Invalid account action", 400)
 	}
 }
 
-func (service *Service) accountDingTalkCallback(w http.ResponseWriter, r *http.Request) {
-	if service.dingtalk == nil {
+func (service *Service) accountExternalCallback(w http.ResponseWriter, r *http.Request, kind string) {
+	if !service.accountProviderEnabled(kind) {
 		http.NotFound(w, r)
 		return
 	}
@@ -278,15 +295,18 @@ func (service *Service) accountDingTalkCallback(w http.ResponseWriter, r *http.R
 	}
 	event := authevent.Event{Purpose: "accountLinking"}
 	failure := errCallbackRejected
-	defer func() { service.recordVerification(r, event, "dingtalk", failure) }()
+	defer func() { service.recordVerification(r, event, kind, failure) }()
 	code, valid := dingTalkCallbackCode(r)
+	if kind == "feishu" {
+		code, valid = r.Form.Get("code"), accountFields(r, "state", "code", "error", "error_description")
+	}
 	if !valid || len(r.Form.Get("state")) != 43 {
 		http.Error(w, "Invalid account callback", 400)
 		return
 	}
 	request, err := service.readAccount(r, "state_hash", config.SecretHash(r.Form.Get("state")))
 	session, sessionErr := service.accountSession(r, service.store.Database(), false)
-	if err != nil || request.Kind != "dingtalk" || sessionErr != nil || request.SessionID != session.id || request.State != "pending" || !service.freshAccountSession(session) {
+	if err != nil || request.Kind != kind || sessionErr != nil || request.SessionID != session.id || request.State != "pending" || !service.freshAccountSession(session) {
 		if err != nil {
 			failure = err
 		} else if sessionErr != nil {
@@ -305,8 +325,16 @@ func (service *Service) accountDingTalkCallback(w http.ResponseWriter, r *http.R
 	}
 	event = accountEvent(request, session)
 	event.ProviderID = request.Login.Namespace
+	label := "DingTalk"
+	if kind == "feishu" {
+		if request.Feishu == nil || request.Feishu.OrganizationID != request.OrganizationID || request.Feishu.Verifier == "" {
+			http.Error(w, "Invalid account callback", 400)
+			return
+		}
+		event.ProviderID, label = request.Feishu.ProviderID, "Feishu"
+	}
 	event.FactorID, event.BindingID = "", ""
-	result, err := service.store.Database().Exec(r.Context(), "UPDATE account_link_requests SET state='consumed' WHERE id=$1 AND state='pending' AND expires_at>$2", request.ID, service.now())
+	result, err := service.store.Database().Exec(r.Context(), "UPDATE account_link_requests SET state='consumed',data=data #- '{feishu,verifier}' WHERE id=$1 AND state='pending' AND expires_at>$2", request.ID, service.now())
 	if err != nil || result.RowsAffected() != 1 {
 		if err != nil {
 			failure = err
@@ -319,13 +347,26 @@ func (service *Service) accountDingTalkCallback(w http.ResponseWriter, r *http.R
 		if r.Form.Get("error") != "" {
 			failure = callbackFailure(r.Form.Get("error"))
 		}
-		service.renderAccount(w, r, request, session, member, "DingTalk verification did not complete. Cancel verification to try again.")
+		service.renderAccount(w, r, request, session, member, label+" verification did not complete. Cancel verification to try again.")
 		return
 	}
-	proof, err := service.dingtalk.Verify(r.Context(), request.Login, code)
+	var link func(context.Context, pgx.Tx, identity.Principal) (identity.MemberAdmission, error)
+	if kind == "feishu" {
+		var proof identity.FeishuProof
+		proof, err = service.feishu.Verify(r.Context(), request.Feishu.FeishuLoginContext, service.configuration.Issuer+feishuAccountCallbackPath, code, request.Feishu.Verifier)
+		link = func(ctx context.Context, tx pgx.Tx, principal identity.Principal) (identity.MemberAdmission, error) {
+			return service.feishu.Link(ctx, tx, principal, proof, request.MemberID)
+		}
+	} else {
+		var proof identity.DingTalkLoginProof
+		proof, err = service.dingtalk.Verify(r.Context(), request.Login, code)
+		link = func(ctx context.Context, tx pgx.Tx, principal identity.Principal) (identity.MemberAdmission, error) {
+			return service.dingtalk.Link(ctx, tx, principal, proof, request.MemberID)
+		}
+	}
 	if err != nil {
 		failure = err
-		service.renderAccount(w, r, request, session, member, "Unable to verify DingTalk membership. Cancel verification to try again.")
+		service.renderAccount(w, r, request, session, member, "Unable to verify "+label+" membership. Cancel verification to try again.")
 		return
 	}
 	var admitted identity.MemberAdmission
@@ -348,7 +389,7 @@ func (service *Service) accountDingTalkCallback(w http.ResponseWriter, r *http.R
 			return identity.ErrIneligible
 		}
 		principal := identity.AccountPrincipal(current.id, request.MemberID, current.verified.Factor.ID, request.BindingID)
-		admitted, err = service.dingtalk.Link(r.Context(), tx, principal, proof, request.MemberID)
+		admitted, err = link(r.Context(), tx, principal)
 		if err != nil {
 			return err
 		}
@@ -357,20 +398,30 @@ func (service *Service) accountDingTalkCallback(w http.ResponseWriter, r *http.R
 	})
 	if err != nil {
 		failure = err
-		service.renderAccount(w, r, request, session, member, "Unable to link this identity. It may already belong to another Member or the request is no longer eligible. Cancel verification to try again.")
+		message := "Unable to link this identity. It may already belong to another Member or the request is no longer eligible. Cancel verification to try again."
+		if kind == "feishu" && errors.Is(err, identity.ErrConflict) {
+			message = "Unable to link this identity: a binding conflict exists. The identity is already linked, or the application's binding slot is occupied or revoked. Contact your organization administrator."
+		}
+		service.renderAccount(w, r, request, session, member, message)
 		return
 	}
 	failure = nil
 	event.FactorID, event.BindingID = admitted.Factor.ID, admitted.BindingID
 	request.State = "completed"
-	service.renderAccount(w, r, request, session, member, "DingTalk is linked to this Member. Your current session and existing grants keep their original authentication and expiry.")
+	service.renderAccount(w, r, request, session, member, label+" is linked to this Member. Your current session and existing grants keep their original authentication and expiry.")
+}
+
+func (service *Service) accountProviderEnabled(kind string) bool {
+	return kind == "dingtalk" && service.dingtalk != nil || kind == "feishu" && service.feishu != nil
 }
 
 type accountPageData struct {
+	ProviderLabel                                   string
 	Request                                         accountRequest
 	Member, Organization, Message, Nonce, ReopenURI string
 	CanLink, CanCancel                              bool
 	Providers                                       []identity.Provider
+	OccupiedProviders                               map[string]bool
 }
 
 func (service *Service) renderAccount(w http.ResponseWriter, r *http.Request, request accountRequest, session accountSession, member identity.Member, message string) {
@@ -380,22 +431,35 @@ func (service *Service) renderAccount(w http.ResponseWriter, r *http.Request, re
 		return
 	}
 	occupied := false
+	occupiedProviders := map[string]bool{}
 	for _, binding := range bindings {
-		if binding.FactorType == "dingtalk" {
-			occupied = true
+		if binding.FactorType == request.Kind {
+			if request.Kind == "dingtalk" {
+				occupied = true
+			}
+			if request.Kind == "feishu" {
+				factor, err := service.store.Factor(r.Context(), binding.FactorID)
+				if err != nil {
+					http.Error(w, "Account management temporarily unavailable", 503)
+					return
+				}
+				occupiedProviders[factor.Namespace] = true
+			}
 		}
+	}
+	label := "DingTalk"
+	if request.Kind == "feishu" {
+		label = "Feishu"
 	}
 	fresh := service.freshAccountSession(session)
 	if message == "" {
 		switch {
 		case occupied:
-			message = "This Member already has a DingTalk binding. Self-service cannot replace or restore a binding. Contact your organization administrator if needed."
+			message = "This Member already has a " + label + " binding. Self-service cannot replace or restore a binding. Contact your organization administrator if needed."
 		case request.State != "ready":
-			message = "DingTalk verification is pending. Complete it in DingTalk or cancel verification before starting again."
+			message = label + " verification is pending. Complete it with the provider or cancel verification before starting again."
 		case !fresh:
-			message = "Sign in again through your application, then reopen this page within five minutes to link DingTalk."
-		default:
-			message = "Confirm the Member below, then verify the DingTalk identity to link. Each organization keeps an independent Member identity."
+			message = "Sign in again through your application, then reopen this page within five minutes to link " + label + "."
 		}
 	}
 	organization, err := service.store.Organization(r.Context(), member.OrganizationID)
@@ -408,18 +472,23 @@ func (service *Service) renderAccount(w http.ResponseWriter, r *http.Request, re
 		request.ReturnURI = ""
 		request.ClientID = ""
 	}
-	data := accountPageData{Request: request, Member: member.DisplayName, Organization: organization.Name, Message: message, Nonce: config.RandomSecret(), ReopenURI: accountAddress(request.accountDetails), CanLink: available && request.State == "ready" && fresh && !occupied, CanCancel: available && (request.State == "pending" || request.State == "consumed")}
+	data := accountPageData{OccupiedProviders: occupiedProviders, ProviderLabel: label, Request: request, Member: member.DisplayName, Organization: organization.Name, Message: message, Nonce: config.RandomSecret(), ReopenURI: accountAddress(request.accountDetails), CanLink: available && request.State == "ready" && fresh && !occupied, CanCancel: available && (request.State == "pending" || request.State == "consumed")}
 	providers, err := service.store.Providers(r.Context(), member.OrganizationID)
 	if err != nil {
 		http.Error(w, "Account management temporarily unavailable", 503)
 		return
 	}
+	availableProvider := false
 	for _, provider := range providers {
-		if provider.Type == "dingtalk" && provider.Enabled && provider.AuthorizationStatus == "active" {
+		if provider.Type == request.Kind && provider.Enabled && provider.AuthorizationStatus == "active" {
 			data.Providers = append(data.Providers, provider)
+			availableProvider = availableProvider || !occupiedProviders[provider.ID]
 		}
 	}
-	data.CanLink = data.CanLink && len(data.Providers) > 0
+	data.CanLink = data.CanLink && availableProvider
+	if !availableProvider && message == "" {
+		data.Message = "No available application. Existing or revoked bindings require an administrator."
+	}
 	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'nonce-"+data.Nonce+"'; form-action 'self' https://login.dingtalk.com; base-uri 'none'; frame-ancestors 'none'")
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_ = accountPage.Execute(w, data)
