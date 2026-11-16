@@ -35,6 +35,7 @@ export function createConsumer({
   idpCert,
   idpIssuer,
   privateKey,
+  identifierFormat = "urn:oasis:names:tc:SAML:2.0:nameid-format:persistent",
 }) {
   const saml = new SAML({
     issuer,
@@ -44,7 +45,7 @@ export function createConsumer({
     idpIssuer,
     privateKey,
     signatureAlgorithm: "sha256",
-    identifierFormat: "urn:oasis:names:tc:SAML:2.0:nameid-format:persistent",
+    identifierFormat,
     disableRequestedAuthnContext: true,
     wantAuthnResponseSigned: true,
     wantAssertionsSigned: true,
@@ -110,7 +111,12 @@ export function createConsumer({
       ) {
         throw new Error("Recipient mismatch");
       }
-      return { nameID: profile.nameID, inResponseTo: profile.inResponseTo, email: profile.Email };
+      return {
+        nameID: profile.nameID,
+        nameIDFormat: profile.nameIDFormat,
+        inResponseTo: profile.inResponseTo,
+        email: profile.Email,
+      };
     },
   };
 }

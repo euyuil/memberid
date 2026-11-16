@@ -4,6 +4,7 @@ export type SAMLServiceProvider = {
   organizationId: string
   entityId: string
   acsUrl: string
+  nameIdFormat: "persistent" | "unspecified"
   enabled: boolean
   allowUnsignedRequests: boolean
   signingCertificates: string[] | null
@@ -42,6 +43,7 @@ export function registrationInput(item: SAMLServiceProvider) {
     displayName,
     entityId,
     acsUrl,
+    nameIdFormat,
     enabled,
     allowUnsignedRequests,
     signingCertificates,
@@ -54,6 +56,7 @@ export function registrationInput(item: SAMLServiceProvider) {
     displayName,
     entityId,
     acsUrl,
+    nameIdFormat,
     enabled,
     allowUnsignedRequests,
     signingCertificates: signingCertificates ?? [],

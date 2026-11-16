@@ -204,6 +204,7 @@ test(
     const idpKeys = certificate("idp");
     const spKeys = certificate("sp");
     const sessions = new Map();
+    let existingAccounts;
     let consumer;
     let issuer, spOrigin, acs;
     let upstreamPort;
@@ -258,6 +259,11 @@ test(
           if (form.RelayState !== "https://opaque.example.test/return")
             throw new Error("RelayState mismatch");
           const profile = await consumer.consume(form);
+          if (existingAccounts) {
+            const account = existingAccounts.get(profile.nameID);
+            if (!account) throw new Error("No existing application account");
+            profile.accountId = account.id;
+          }
           const session = randomBytes(24).toString("hex");
           sessions.set(session, profile);
           response.setHeader(
@@ -590,6 +596,101 @@ test(
           "missing email was not synthesized",
         );
         assert.equal(cleared.nameID, before.nameID);
+      },
+    );
+    await t.test(
+      "legacy NameID opens the existing account before and after restart",
+      async () => {
+        const legacyID = "old-account-42";
+        const account = {
+          id: "existing-account-7",
+          savedWork: "retained business data",
+        };
+        existingAccounts = new Map([[legacyID, account]]);
+        const file = path.join(directory, "legacy-sp.json");
+        writeFileSync(
+          file,
+          JSON.stringify({
+            id: "legacy-sp",
+            organizationId: organization.id,
+            entityId: `${spOrigin}/legacy-metadata`,
+            acsUrl: acs,
+            nameIdFormat: "unspecified",
+            enabled: true,
+            signingCertificates: [spKeys.cert],
+          }),
+        );
+        const registration = JSON.parse(
+          cli(
+            "saml",
+            "sp",
+            "apply",
+            "--directory",
+            installation,
+            "--file",
+            file,
+          ),
+        );
+        const args = [
+          "--directory",
+          installation,
+          "--organization",
+          organization.id,
+          "--sp",
+          "legacy-sp",
+          "--member",
+          member.id,
+        ];
+        const mapping = JSON.parse(
+          cli(
+            "saml",
+            "nameid",
+            "provision",
+            ...args,
+            "--value",
+            legacyID,
+            "--revision",
+            String(registration.revision),
+          ),
+        );
+        assert.equal(mapping.source, "legacy");
+        const identifierFormat =
+          "urn:oasis:names:tc:SAML:1.1:nameid-format:unspecified";
+        consumer = createConsumer({
+          ...consumerOptions,
+          issuer: `${spOrigin}/legacy-metadata`,
+          identifierFormat,
+        });
+        try {
+          for (const restart of [false, true]) {
+            if (restart) {
+              await stopProvider();
+              await startProvider();
+            }
+            assert.equal(
+              (await browser(acs, await responseForm())).status,
+              303,
+            );
+            const result = await browser(`${spOrigin}/session`);
+            assert.equal(result.status, 200);
+            const profile = JSON.parse(result.body);
+            assert.equal(profile.nameID, legacyID);
+            assert.equal(profile.nameIDFormat, identifierFormat);
+            assert.equal(profile.accountId, account.id);
+            assert.equal(existingAccounts.size, 1);
+            assert.equal(
+              existingAccounts.get(legacyID).savedWork,
+              "retained business data",
+            );
+            assert.deepEqual(
+              JSON.parse(cli("saml", "nameid", "inspect", ...args)),
+              mapping,
+            );
+          }
+        } finally {
+          existingAccounts = undefined;
+          consumer = createConsumer(consumerOptions);
+        }
       },
     );
     await t.test(

@@ -1867,9 +1867,18 @@
             "format": "int64",
             "minimum": 0,
             "description": "Zero on creation; the current positive revision on replacement."
+          },
+          "nameIdFormat": {
+            "type": "string",
+            "enum": [
+              "persistent",
+              "unspecified"
+            ],
+            "default": "persistent",
+            "description": "Fixed once any mapping exists. Omission selects persistent; preserve the inspected value on replacement."
           }
         },
-        "description": "Complete replacement; only the route selects ownership. Request size is limited to 32 KiB. Binding is fixed to Redirect input and POST output, NameID to persistent."
+        "description": "Complete replacement; only the route selects ownership. Request size is limited to 32 KiB. Binding is fixed to Redirect input and POST output. NameID format cannot change once allocated."
       },
       "SAMLServiceProvider": {
         "type": "object",
@@ -1885,7 +1894,8 @@
           "attributes",
           "revision",
           "organizationId",
-          "retired"
+          "retired",
+          "nameIdFormat"
         ],
         "properties": {
           "id": {
@@ -1961,6 +1971,15 @@
           },
           "retired": {
             "type": "boolean"
+          },
+          "nameIdFormat": {
+            "type": "string",
+            "enum": [
+              "persistent",
+              "unspecified"
+            ],
+            "default": "persistent",
+            "description": "Fixed once any mapping exists. Omission selects persistent; preserve the inspected value on replacement."
           }
         }
       },

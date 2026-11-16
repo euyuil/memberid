@@ -102,7 +102,7 @@ See [Feishu setup](feishu.md) and [DingTalk setup](dingtalk.md) for the required
 
 Choose an organization, then open **SAML 应用**. Platform administrators can select any organization; organization administrators remain in their own organization. Ordinary Members cannot access this directory or its API. The all-organization entry is an organization picker, not an aggregate of foreign trust policies.
 
-Add an application with its immutable registration ID and entity ID, exact HTTPS POST ACS, request-signature certificates and policy, allowed attributes, consent policy, and enabled state. The initial profile fixes the binding and persistent NameID format; the detail view displays them. The form accepts PEM public certificates, never private keys. Signed requests are required by default; the unsigned exception is explicit and does not bypass verification of a present signature. Registration does not enable the SAML listener or configure its signing identity.
+Add an application with its immutable registration ID and entity ID, exact HTTPS POST ACS, request-signature certificates and policy, allowed attributes, consent policy, and enabled state. The detail view displays the fixed binding and the configured NameID format. New console registrations use persistent; edits preserve the existing format. Use the operator CLI or private registration API to select unspecified before any mapping exists. [Legacy mapping administration](saml-nameid.md) is operator-only and has no console form. The form accepts PEM public certificates, never private keys. Signed requests are required by default; the unsigned exception is explicit and does not bypass verification of a present signature. Registration does not enable the SAML listener or configure its signing identity.
 
 The allowed attributes include independent `DisplayName` and `Email` checkboxes. Email is disabled by default, comes only from the managed Member record, and is omitted when unset. Allowing it does not assert mailbox ownership.
 
@@ -174,7 +174,7 @@ targets. Explicit console logout returns to `/`.
 
 Build with `sh scripts/check.sh` or `sh scripts/package.sh VERSION NEW_OUTPUT_DIRECTORY`. Both build the locked frontend before embedding it in Go. Node/npm are build dependencies; the resulting executable needs neither at runtime.
 
-Initialize a protected installation and a new database as described in [operator setup](operations.md). This increment uses fresh schema version **25**. Existing databases are not migrated or erased. Start the OIDC process before starting the console so its discovery and keys are reachable.
+Initialize a protected installation and a new database as described in [operator setup](operations.md). This increment uses fresh schema version **26**. Existing databases are not migrated or erased. Start the OIDC process before starting the console so its discovery and keys are reachable.
 
 Register a dedicated confidential Member client with no organization restriction:
 

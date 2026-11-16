@@ -14,10 +14,13 @@ import (
 
 func manageSAML(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	if len(args) < 2 {
-		return errors.New("usage: memberid saml sp <apply|list|inspect|disable|retire> or saml signing <inspect|export-certificate|activate>")
+		return errors.New("usage: memberid saml sp <apply|list|inspect|disable|retire> or saml signing <inspect|export-certificate|activate> or saml nameid <inspect|provision>")
 	}
 	if args[0] == "signing" {
 		return manageSAMLSigning(args[1:], stdout, stderr)
+	}
+	if args[0] == "nameid" {
+		return manageSAMLNameID(ctx, args[1:], stdout, stderr)
 	}
 	flags := flag.NewFlagSet("saml "+args[0]+" "+args[1], flag.ContinueOnError)
 	flags.SetOutput(stderr)

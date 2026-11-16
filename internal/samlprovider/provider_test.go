@@ -159,11 +159,38 @@ func TestRequestPolicyAndSignedResponse(t *testing.T) {
 	}
 	metadata := httptest.NewRecorder()
 	provider.Metadata(metadata, httptest.NewRequest("GET", MetadataPath, nil))
+	for _, format := range []saml.NameIDFormat{saml.PersistentNameIDFormat, saml.UnspecifiedNameIDFormat} {
+		if !strings.Contains(metadata.Body.String(), string(format)) {
+			t.Fatal("missing supported NameID format", format)
+		}
+	}
 	if strings.Contains(metadata.Body.String(), `use="encryption"`) || strings.Contains(metadata.Body.String(), "EncryptionMethod") {
 		t.Fatal("advertised unsupported encryption")
 	}
 	if strings.Contains(metadata.Body.String(), saml.HTTPPostBinding) || strings.Contains(metadata.Body.String(), "SingleLogoutService") {
 		t.Fatal("metadata advertised unsupported endpoint")
+	}
+}
+
+func TestNameIDPolicyMatchesRegistration(t *testing.T) {
+	provider, err := New("https://idp.example.test", signingFixture(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, format := range []string{"persistent", "unspecified"} {
+		sp := identity.SAMLServiceProvider{ID: "example", EntityID: "https://sp.example.test/metadata", ACSURL: "https://sp.example.test/acs", NameIDFormat: format, Enabled: true, AllowUnsignedRequests: true}
+		for _, requested := range []string{"", string(saml.UnspecifiedNameIDFormat), string(saml.PersistentNameIDFormat), "urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress"} {
+			t.Run(format+"/"+requested, func(t *testing.T) {
+				allow := true
+				input := saml.AuthnRequest{ID: "_request", Version: "2.0", IssueInstant: time.Now().UTC(), Destination: "https://idp.example.test/saml/sso", Issuer: &saml.Issuer{Value: sp.EntityID}, AssertionConsumerServiceURL: sp.ACSURL, ProtocolBinding: saml.HTTPPostBinding, NameIDPolicy: &saml.NameIDPolicy{Format: &requested, AllowCreate: &allow}}
+				document, _ := xml.Marshal(input)
+				txn, status, err := provider.Parse(redirectRequest(t, document, nil), sp, time.Now())
+				compatible := requested == "" || requested == string(saml.UnspecifiedNameIDFormat) || format == "persistent" && requested == string(saml.PersistentNameIDFormat)
+				if err != nil || compatible && (status != "" || !txn.AllowCreate) || !compatible && status != "InvalidNameIDPolicy" {
+					t.Fatal("incorrect NameIDPolicy negotiation", txn, status, err)
+				}
+			})
+		}
 	}
 }
 

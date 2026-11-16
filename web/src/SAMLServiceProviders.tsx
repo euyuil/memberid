@@ -219,7 +219,7 @@ export function SAMLServiceProviders({
               <dt>协议绑定</dt>
               <dd>HTTP-Redirect 请求 / HTTP-POST 响应</dd>
               <dt>NameID 格式</dt>
-              <dd>persistent</dd>
+              <dd>{viewing.nameIdFormat}</dd>
               <dt>用户授权确认</dt>
               <dd>{viewing.preauthorized ? "跳过" : "每次确认"}</dd>
               <dt>允许发送的属性</dt>
@@ -326,6 +326,7 @@ function RegistrationDialog({
         displayName: String(fields.get("displayName")).trim(),
         entityId: item?.entityId ?? String(fields.get("entityId")).trim(),
         acsUrl: String(fields.get("acsUrl")).trim(),
+        nameIdFormat: item?.nameIdFormat ?? "persistent",
         enabled: fields.has("enabled"),
         allowUnsignedRequests: unsigned,
         signingCertificates: certificates,

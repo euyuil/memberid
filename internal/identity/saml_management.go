@@ -9,6 +9,7 @@ type SAMLServiceProviderInput struct {
 	DisplayName           string   `json:"displayName"`
 	EntityID              string   `json:"entityId"`
 	ACSURL                string   `json:"acsUrl"`
+	NameIDFormat          string   `json:"nameIdFormat"`
 	Enabled               bool     `json:"enabled"`
 	AllowUnsignedRequests bool     `json:"allowUnsignedRequests"`
 	SigningCertificates   []string `json:"signingCertificates"`
@@ -20,7 +21,7 @@ type SAMLServiceProviderInput struct {
 func (input SAMLServiceProviderInput) Registration(organizationID string) SAMLServiceProvider {
 	return SAMLServiceProvider{
 		ID: input.ID, DisplayName: input.DisplayName, EntityID: input.EntityID,
-		OrganizationID: organizationID, ACSURL: input.ACSURL, Enabled: input.Enabled,
+		OrganizationID: organizationID, ACSURL: input.ACSURL, Enabled: input.Enabled, NameIDFormat: input.NameIDFormat,
 		AllowUnsignedRequests: input.AllowUnsignedRequests, SigningCertificates: input.SigningCertificates,
 		Preauthorized: input.Preauthorized, Attributes: input.Attributes, Revision: input.Revision,
 	}
