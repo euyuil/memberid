@@ -19,6 +19,52 @@ func requireAuthorizationError(t *testing.T, response reply, kind string) {
 	}
 }
 
+func TestMemberLoginHintRequiresCurrentBindingAndClientPolicy(t *testing.T) {
+	f := newFixture(t)
+	original := f.tokens()
+	f.service.configuration.Clients[0].OrganizationID = ""
+	f.service.configuration.Clients[0].Preauthorized = true
+	extra := url.Values{"prompt": {"none"}, "login_hint": {f.otherMember.ID}}
+	r, verifier := f.authorization("example-web", "openid", extra)
+	f.status(r, 302)
+	r = f.call(f.browser, "GET", r.header.Get("Location"), nil, nil)
+	f.status(r, 303)
+	r = f.call(f.browser, "GET", r.header.Get("Location"), nil, nil)
+	f.status(r, 302)
+	u, _ := url.Parse(r.header.Get("Location"))
+	r = f.exchange("example-web", u.Query().Get("code"), verifier)
+	f.status(r, 200)
+	claims := f.signedClaims(jsonObject(t, r)["id_token"].(string))
+	if claims["sub"] != f.otherMember.ID || claims["auth_time"] != f.signedClaims(original["id_token"].(string))["auth_time"] {
+		t.Fatal("hint did not retain selected Member and original authentication", claims)
+	}
+	for _, condition := range []string{"client restriction", "missing binding", "subject hint conflict", "missing authentication"} {
+		t.Run(condition, func(t *testing.T) {
+			f.service.configuration.Clients[0].OrganizationID = ""
+			extra.Del("id_token_hint")
+			extra.Set("login_hint", f.otherMember.ID)
+			want := "interaction_required"
+			switch condition {
+			case "client restriction":
+				f.service.configuration.Clients[0].OrganizationID = f.member.OrganizationID
+			case "missing binding":
+				id, _ := identity.NewID(identity.MemberKind)
+				extra.Set("login_hint", id)
+			case "subject hint conflict":
+				extra.Set("id_token_hint", original["id_token"].(string))
+				want = "login_required"
+			case "missing authentication":
+				f.browser = browserClient()
+				want = "login_required"
+			}
+			r, _ := f.authorization("example-web", "openid", extra)
+			f.status(r, 302)
+			r = f.call(f.browser, "GET", r.header.Get("Location"), nil, nil)
+			requireAuthorizationError(t, r, want)
+		})
+	}
+}
+
 func TestAuthorizationHintBindsSubject(t *testing.T) {
 	f := newFixture(t)
 	original := f.tokens()

@@ -4,6 +4,7 @@ import {
   ChevronRight,
   ChevronsUpDown,
   LogOut,
+  ArrowRightLeft,
   UserRound,
   type LucideIcon,
 } from "lucide-react"
@@ -82,6 +83,7 @@ type ConsoleLayoutProps = {
   scope: ReactNode
   children: ReactNode
   onSignOut: () => Promise<void>
+  onChooseIdentity: () => void
 }
 
 function Navigation({ groups }: { groups: NavigationGroup[] }) {
@@ -197,6 +199,7 @@ function ConsoleContents({
   scope,
   children,
   onSignOut,
+  onChooseIdentity,
 }: ConsoleLayoutProps) {
   const { isMobile, setOpenMobile } = useSidebar()
   const [signingOut, setSigningOut] = useState(false)
@@ -273,6 +276,10 @@ function ConsoleContents({
                   </DropdownMenuGroup>
                   <DropdownMenuSeparator />
                   <DropdownMenuGroup>
+                    <DropdownMenuItem onClick={onChooseIdentity}>
+                      <ArrowRightLeft aria-hidden="true" />
+                      切换身份
+                    </DropdownMenuItem>
                     <DropdownMenuItem
                       nativeButton={false}
                       render={

@@ -59,6 +59,8 @@ func New(ctx context.Context, store *identity.Store, installation *config.Loaded
 	s.routes.HandleFunc("GET /auth/login", s.login)
 	s.routes.HandleFunc("GET /auth/callback", s.callback)
 	s.routes.HandleFunc("POST /api/logout", s.logout)
+	s.routes.HandleFunc("GET /api/identities", s.identities)
+	s.routes.HandleFunc("POST /api/identity-switch", s.switchIdentity)
 	s.routes.HandleFunc("GET /api/session", func(w http.ResponseWriter, r *http.Request) {
 		v := r.Context().Value(sessionKey{}).(session)
 		actor, err := s.management.Actor(r.Context(), v.memberID, v.grantID)

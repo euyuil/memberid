@@ -94,6 +94,7 @@ import {
 import { Providers, type ProviderDirectory } from "@/Providers"
 import { SAMLServiceProviders } from "@/SAMLServiceProviders"
 import { MemberPassword } from "@/MemberPassword"
+import { IdentitySwitch } from "@/IdentitySwitch"
 import { OrganizationDetails, type Organization } from "@/OrganizationDetails"
 import {
   passwordUsernameError,
@@ -175,6 +176,8 @@ const messages: Record<string, string> = {
   sign_in_required: "登录已过期或管理员资格已失效，请重新登录。",
   not_administrator: "当前成员没有管理权限，请使用已授权的管理员身份登录。",
   login_failed: "登录未完成，请重新发起登录。",
+  identity_switch_failed:
+    "身份切换未完成。请刷新后重试，登录过期时请重新登录。",
 }
 class RequestError extends Error {
   readonly status: number
@@ -340,6 +343,7 @@ export default function App() {
   >()
   const [error, setError] = useState("")
   const [action, setAction] = useState<Action | null>(null)
+  const [choosingIdentity, setChoosingIdentity] = useState(false)
   const route = parseRoute(location)
   const params = route?.query ?? new URLSearchParams()
   const org = route?.org ?? ""
@@ -418,6 +422,30 @@ export default function App() {
       })
     return () => abort.abort()
   }, [sessionCheckRevision])
+
+  useEffect(() => {
+    if (!session) return
+    let checking = false
+    const check = async () => {
+      if (document.visibilityState !== "visible" || checking) return
+      checking = true
+      try {
+        const current = await request<Session>("/api/session")
+        if (current.csrf !== session.csrf) window.location.replace("/")
+      } catch (error) {
+        if (error instanceof RequestError && error.status === 401)
+          window.location.replace("/")
+      } finally {
+        checking = false
+      }
+    }
+    window.addEventListener("focus", check)
+    document.addEventListener("visibilitychange", check)
+    return () => {
+      window.removeEventListener("focus", check)
+      document.removeEventListener("visibilitychange", check)
+    }
+  }, [session])
 
   useEffect(() => {
     if (session && parseRoute(location)?.root) {
@@ -782,6 +810,7 @@ export default function App() {
           setError((e as Error).message)
         }
       }}
+      onChooseIdentity={() => setChoosingIdentity(true)}
       scope={
         <OrganizationSwitcher
           organizationId={org}
@@ -796,6 +825,19 @@ export default function App() {
         />
       }
     >
+      {choosingIdentity && (
+        <IdentitySwitch
+          memberId={actor.memberId}
+          csrf={session.csrf}
+          request={request}
+          onClose={() => setChoosingIdentity(false)}
+        />
+      )}
+      {params.get("error") === "identity_switch_failed" && (
+        <Alert variant="destructive">
+          <AlertDescription>{messages.identity_switch_failed}</AlertDescription>
+        </Alert>
+      )}
       <div className="page-heading">
         <div>
           <h1>
