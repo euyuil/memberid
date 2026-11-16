@@ -171,6 +171,11 @@ func Create(ctx context.Context, databaseURL, directory, destination, pgDump, sn
 	if err != nil || !strings.HasPrefix(string(version), "pg_dump (PostgreSQL) 18.") {
 		return receipt, errors.New("PostgreSQL 18 pg_dump is required")
 	}
+	environment, cleanup, err := dumpEnvironment(databaseURL)
+	if err != nil {
+		return receipt, err
+	}
+	defer cleanup()
 	if err := os.Mkdir(target, 0700); err != nil {
 		return receipt, err
 	}
@@ -182,14 +187,7 @@ func Create(ctx context.Context, databaseURL, directory, destination, pgDump, sn
 		return receipt, err
 	}
 	command := exec.CommandContext(ctx, pgDump, "--format=custom", "--no-owner", "--no-acl", "--no-password", "--lock-wait-timeout=5s", "--snapshot="+snapshot)
-	// libpq accepts a connection URI through PGDATABASE. Credentials never become
-	// command arguments, backup metadata, error output or ordinary service logs.
-	for _, value := range os.Environ() {
-		if !strings.HasPrefix(value, "PGDATABASE=") {
-			command.Env = append(command.Env, value)
-		}
-	}
-	command.Env = append(command.Env, "PGDATABASE="+databaseURL)
+	command.Env = environment
 	command.Stdout = dump
 	var diagnostics diagnosticCount
 	command.Stderr = &diagnostics
