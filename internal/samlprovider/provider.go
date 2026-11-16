@@ -306,8 +306,8 @@ func (provider *Provider) Parse(r *http.Request, sp identity.SAMLServiceProvider
 }
 
 type Authentication struct {
-	NameID, SessionID, DisplayName string
-	AuthenticatedAt, ExpiresAt     time.Time
+	NameID, SessionID, DisplayName, Email string
+	AuthenticatedAt, ExpiresAt            time.Time
 }
 
 // Response signs in memory; the host must commit transaction consumption before
@@ -336,8 +336,14 @@ func (provider *Provider) Response(r *http.Request, txn *Transaction, sp identit
 			return nil, ErrRequest
 		}
 		req.Assertion = &saml.Assertion{ID: "_" + rand.Text(), Version: "2.0", IssueInstant: now, Issuer: saml.Issuer{Value: idp.MetadataURL.String()}, Subject: &saml.Subject{NameID: &saml.NameID{Format: string(saml.PersistentNameIDFormat), NameQualifier: idp.MetadataURL.String(), SPNameQualifier: sp.EntityID, Value: auth.NameID}, SubjectConfirmations: []saml.SubjectConfirmation{{Method: "urn:oasis:names:tc:SAML:2.0:cm:bearer", SubjectConfirmationData: &saml.SubjectConfirmationData{InResponseTo: txn.RequestID, Recipient: sp.ACSURL, NotOnOrAfter: expires}}}}, Conditions: &saml.Conditions{NotBefore: now.Add(-ClockSkew), NotOnOrAfter: expires, AudienceRestrictions: []saml.AudienceRestriction{{Audience: saml.Audience{Value: sp.EntityID}}}}, AuthnStatements: []saml.AuthnStatement{{AuthnInstant: auth.AuthenticatedAt, SessionIndex: auth.SessionID, SessionNotOnOrAfter: &auth.ExpiresAt, AuthnContext: saml.AuthnContext{AuthnContextClassRef: &saml.AuthnContextClassRef{Value: ContextUnspecified}}}}}
-		if slices.Contains(sp.Attributes, "DisplayName") {
-			req.Assertion.AttributeStatements = []saml.AttributeStatement{{Attributes: []saml.Attribute{{Name: "DisplayName", NameFormat: "urn:oasis:names:tc:SAML:2.0:attrname-format:basic", Values: []saml.AttributeValue{{Type: "xs:string", Value: auth.DisplayName}}}}}}
+		attributes := []saml.Attribute{}
+		for _, claim := range []struct{ name, value string }{{"DisplayName", auth.DisplayName}, {"Email", auth.Email}} {
+			if slices.Contains(sp.Attributes, claim.name) && claim.value != "" {
+				attributes = append(attributes, saml.Attribute{Name: claim.name, NameFormat: "urn:oasis:names:tc:SAML:2.0:attrname-format:basic", Values: []saml.AttributeValue{{Type: "xs:string", Value: claim.value}}})
+			}
+		}
+		if len(attributes) > 0 {
+			req.Assertion.AttributeStatements = []saml.AttributeStatement{{Attributes: attributes}}
 		}
 		if err := req.MakeAssertionEl(); err != nil {
 			return nil, err

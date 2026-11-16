@@ -36,6 +36,7 @@ The [Member role definitions](roles.md) and [management scopes and actions](mana
 | Set or reset a Member password or change the password username | Any organization, including `org_system` | No |
 | List, configure and disable identity providers | Any organization | Own organization |
 | Create, inspect, update, disable and retire SAML applications | Any organization | Own organization |
+| Read, set or clear a Member's managed email | Any organization | Own organization |
 
 Platform administrators can switch organizations from the management scope in the header while retaining their original operator identity. The sidebar groups Organizations, Members, and Identity providers under Identity management; SAML applications under Application integrations; and Authentication events and Operation history under Activity. Switching between them keeps the selected organization. In the all-organization scope, platform administrators see members from every organization. Each row identifies its organization and opens the member detail in that organization. Organization administrators see their own organization in the header. These permissions belong exclusively to MemberID management and are not added to business application identity claims. There are no custom roles, invitations, deletion, bulk operations or OIDC client-registration pages in this version. Explicit operator binding and first-administrator recovery use the operator tools.
 
@@ -85,6 +86,10 @@ Member search and filters share a compact toolbar directly above the table, with
 
 Organization details show an editable name with an explicit Save action and reserved validation, request-error, and success feedback. A successful save updates the displayed organization name without reloading the page. The organization ID remains read-only. Enabled/disabled status and its separate confirmation action are grouped below the profile; only platform administrators can change ordinary organization status, and the disable confirmation retains its sign-in warning.
 
+## Managed Member email
+
+Member detail includes **受管邮箱** for administrators. Setting, changing or clearing an address uses the dedicated email resource and an expected revision. Conflicting addresses or stale revisions leave the dialog open with actionable feedback. The dialog warns that changes can affect downstream account association. Operation history records the administrator and the before/after values. Ordinary Members cannot edit this field through account self-service. See [managed email](member-email.md) for authority, validation and reassignment boundaries.
+
 ## Organization identity providers
 
 Choose an organization, then open **身份提供商** (Identity providers). This directory lists the configured DingTalk and Feishu applications. Add multiple applications of either type with distinct application IDs and recognizable display names. Edit the display name, rotate the application secret, or enable and disable a source independently. The provider type, application ID, and tenant or corporation ID identify the binding namespace and stay fixed after creation. A replacement application gets its own row.
@@ -98,6 +103,8 @@ See [Feishu setup](feishu.md) and [DingTalk setup](dingtalk.md) for the required
 Choose an organization, then open **SAML 应用**. Platform administrators can select any organization; organization administrators remain in their own organization. Ordinary Members cannot access this directory or its API. The all-organization entry is an organization picker, not an aggregate of foreign trust policies.
 
 Add an application with its immutable registration ID and entity ID, exact HTTPS POST ACS, request-signature certificates and policy, allowed attributes, consent policy, and enabled state. The initial profile fixes the binding and persistent NameID format; the detail view displays them. The form accepts PEM public certificates, never private keys. Signed requests are required by default; the unsigned exception is explicit and does not bypass verification of a present signature. Registration does not enable the SAML listener or configure its signing identity.
+
+The allowed attributes include independent `DisplayName` and `Email` checkboxes. Email is disabled by default, comes only from the managed Member record, and is omitted when unset. Allowing it does not assert mailbox ownership.
 
 Edit an application's enabled state to disable it reversibly. The detail dialog offers permanent retirement with a separate confirmation and a reversible disable alternative. Retirement preserves the entity ID and NameID mappings, cannot be undone, and does not sign out existing downstream sessions. Retired applications remain inspectable. A concurrent update returns a conflict without overwriting the other administrator's work; refresh and inspect before saving again. An uncertain response is not retried automatically.
 
@@ -167,7 +174,7 @@ targets. Explicit console logout returns to `/`.
 
 Build with `sh scripts/check.sh` or `sh scripts/package.sh VERSION NEW_OUTPUT_DIRECTORY`. Both build the locked frontend before embedding it in Go. Node/npm are build dependencies; the resulting executable needs neither at runtime.
 
-Initialize a protected installation and a new database as described in [operator setup](operations.md). This increment uses fresh schema version **24**. Existing databases are not migrated or erased. Start the OIDC process before starting the console so its discovery and keys are reachable.
+Initialize a protected installation and a new database as described in [operator setup](operations.md). This increment uses fresh schema version **25**. Existing databases are not migrated or erased. Start the OIDC process before starting the console so its discovery and keys are reachable.
 
 Register a dedicated confidential Member client with no organization restriction:
 

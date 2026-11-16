@@ -34,11 +34,14 @@ Acceptance covers:
 - Correctly signed negative responses for Audience, Recipient, Destination, response and subject InResponseTo, issuer, expired Conditions, future NotBefore, and expired bearer confirmation. Each must fail for the intended constraint and leave the caller unauthenticated.
 - Signature tampering, and checks that captured MemberID output excludes the tested assertion, NameID, and password. The fixture does not print raw protocol messages or credentials.
 - Blocking the Member through the ordinary operator CLI after starting another SAML login. The pending transaction cannot issue an assertion, while the SP's already established application session remains authenticated.
+- Administrator-managed email through the packaged CLI: default omission, explicit SP attribute authorization, current-value updates, clearing without synthesis, provenance without mailbox verification, and stable NameID throughout.
 - [Signing rollover](saml-signing.md) using the operator commands: public candidate export, failed candidate preservation, SP trust overlap, explicit process restart, old in-flight response acceptance, a missed SP trust update and rollback, and old-key rejection after trust removal. A consistent PostgreSQL/protected-file backup is restored into a new isolated database/directory, preserving NameID and OIDC keys. Measured single-process restart interruptions are reported; the fixture requires each restart to finish within 30 seconds, which is a test bound rather than a deployment guarantee.
 
 Only the negative-response driver receives the synthetic IdP private key to create valid signatures around invalid constraints. The SP receives the public certificate. This distinguishes semantic validation from simply rejecting a broken signature.
 
 ## Observed acceptance and limits
+
+On 2026-11-16, the Windows amd64 `0.0.0-email104-final` distribution with schema 25 passed all 15 scenarios (16 passing test results including the parent) with Go 1.27.4, Node 26.13.1, PostgreSQL 18.6 and Node-SAML 5.2.0. The added managed-email scenario exercised the packaged CLI and an authenticated SP session through omission, explicit release, update and clearing while preserving NameID.
 
 On 2026-11-16, the Windows amd64 `saml101` distribution built with Go 1.27.4 and Node.js 26.13.1 passed all 12 consumer scenarios (13 test results including the parent), using HTTPS port 19001 and the pinned PostgreSQL 18.6 image. Its executable SHA-256 was `4a27005b0b6e96962349f80201da2fba9aa12a12f9bd8c1e1682640d1674bdef`. The temporary fixture was removed after the run.
 

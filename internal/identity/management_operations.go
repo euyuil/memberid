@@ -27,6 +27,7 @@ const (
 	membersResource                          managementResource = organizationResource + "/members"
 	memberResource                           managementResource = membersResource + "/{memberId}"
 	memberPasswordResource                   managementResource = memberResource + "/password"
+	memberEmailResource                      managementResource = memberResource + "/email"
 	bindingsResource                         managementResource = memberResource + "/bindings"
 	bindingResource                          managementResource = bindingsResource + "/{bindingId}"
 	roleAssignmentsResource                  managementResource = organizationResource + "/roleAssignments"
@@ -54,6 +55,7 @@ var managementOperations = map[managementResource][]string{
 	membersResource:                          {actionCreate, actionList},
 	memberResource:                           {actionGet, actionUpdate, actionStatusUpdate},
 	memberPasswordResource:                   {actionCreate, actionUpdate},
+	memberEmailResource:                      {actionGet, actionUpdate},
 	bindingsResource:                         {actionList, actionCreate},
 	bindingResource:                          {actionDelete},
 	roleAssignmentsResource:                  {actionCreate, actionList},

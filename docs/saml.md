@@ -4,7 +4,7 @@ MemberID implements a restricted, SP-initiated SAML 2.0 Web Browser SSO profile 
 
 ## Enable signing and register an SP
 
-Use a fresh schema version 24 database. Existing demo databases are rejected; no upgrade migration or data reset is performed. Follow [operator setup](operations.md) to create the installation, organization, Member, and authentication source.
+Use a fresh schema version 25 database. Existing demo databases are rejected; no upgrade migration or data reset is performed. Follow [operator setup](operations.md) to create the installation, organization, Member, and authentication source.
 
 Provision a dedicated RSA private key of at least 2048 bits and its matching X.509 signing certificate in the protected installation directory. The certificate must be currently valid and permit digital signatures if it declares key usage. Use separate key material from TLS and OIDC. MemberID rejects an OIDC key found in its retained public key set. The SAML certificate is an explicitly distributed signing trust anchor; a publicly trusted TLS certificate is not required.
 
@@ -65,7 +65,7 @@ An enabled SAML installation can start without OIDC clients if it has at least o
 | Time limits | Request at most five minutes old or one minute in the future; interaction expires after ten minutes; assertion valid for at most two minutes, capped by the original session expiry |
 | Replay | Durable `(SP, request ID)` reservation; issuance and transaction consumption commit atomically; only one concurrent completion emits a response |
 | Subject | Random, persistent, pairwise `(SP, Member)` NameID; stable across authentication methods, restarts, and profile changes; never derived from phone, email, display name, or provider subject |
-| Claims | No email, phone, organization roles, or business permissions; optional explicitly registered `DisplayName` only |
+| Claims | Explicitly registered `DisplayName` and administrator-managed `Email`; missing email is omitted. No mailbox-verification claim, phone, organization roles, or business permissions. See [managed email](member-email.md). |
 | Authentication context | `urn:oasis:names:tc:SAML:2.0:ac:classes:unspecified`; original authentication time and session limit retained |
 
 The query is limited to 32 KiB, inflated XML to 256 KiB, nesting to 32 levels, XML elements to 2,048, request IDs to 256 bytes, and RelayState to 80 decoded bytes. A nonempty request ID is required. RelayState is returned as opaque text, never used as a redirect target. DTDs, directives, duplicate parameters/elements, ambiguous XML, unsupported extensions, and unsupported algorithms are rejected. No external XML resources are resolved.
@@ -100,11 +100,11 @@ The initial profile in [issue #99](https://github.com/euyuil/memberid/issues/99)
 
 The [dependency inventory](third-party-components.md#saml-idp-and-xml-signatures) records the pinned upstream SAML implementation, XML dependencies, reviewed licenses, retained notices, and advisory reachability limits. [Startup tests](../cmd/memberid/saml_integration_test.go) and HTTP admission tests cover configuration gating. Shared SAML/OIDC tests retain separate protocol transactions and the existing OIDC identity/session contract.
 
-Legacy identifier administration and additional NameID formats ([#103](https://github.com/euyuil/memberid/issues/103)), trusted email attributes ([#104](https://github.com/euyuil/memberid/issues/104)), and production database upgrades ([#106](https://github.com/euyuil/memberid/issues/106)) remain separate work. Persistent pairwise NameID allocation is part of this initial profile; those additional features are not prerequisites for its acceptance.
+Legacy identifier administration and additional NameID formats ([#103](https://github.com/euyuil/memberid/issues/103)) and production database upgrades ([#106](https://github.com/euyuil/memberid/issues/106)) remain separate work. Persistent pairwise NameID allocation is part of this initial profile. [Administrator-managed email](member-email.md) is an optional extension with its own authority and release rules.
 
 ## Boundaries and validation
 
-This profile does not implement IdP-initiated SSO, Artifact/SOAP bindings, encrypted assertions, SLO, SCIM, trusted email release, legacy subject mapping, or automatic signing-key rotation. These remain separate work. Shared authentication tables are protocol-neutral; OIDC grants, codes, and token endpoints remain OIDC-only.
+This profile does not implement IdP-initiated SSO, Artifact/SOAP bindings, encrypted assertions, SLO, SCIM, mailbox verification, legacy subject mapping, or automatic signing-key rotation. These remain separate work. Shared authentication tables are protocol-neutral; OIDC grants, codes, and token endpoints remain OIDC-only.
 
 Run `go test ./internal/samlprovider ./internal/config` for parsing, signing, metadata, and key configuration. Run the [disposable PostgreSQL tests](../CONTRIBUTING.md#postgresql-integration-tests) for registry authority, revisions, persistent NameID allocation, HTTP login through each synthetic provider, concurrent completion, policy invalidation, shared OIDC SSO, and protocol separation. Real DingTalk/Feishu/SMS calls are not made by these tests. Actual GitLab SAML compatibility and complete SAML conformance are not established by a simulated SP or by the existing GitLab OIDC acceptance check.
 

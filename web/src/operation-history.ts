@@ -70,6 +70,12 @@ export function describeEvent(event: ManagementEvent) {
     case "password.create":
       label = "创建密码凭据"
       break
+    case "member.email.update":
+      label = "更新受管邮箱"
+      field("address", "修改邮箱", (value) =>
+        typeof value === "string" ? value || "未设置" : undefined
+      )
+      break
     case "password.reset":
       label = "重置密码"
       break

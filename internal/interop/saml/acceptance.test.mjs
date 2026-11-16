@@ -517,6 +517,82 @@ test(
       },
     );
     await t.test(
+      "managed email requires release permission and retains the subject",
+      async () => {
+        const emailArgs = [
+          "--organization",
+          organization.id,
+          "--member",
+          member.id,
+        ];
+        const setEmail = (address, revision) =>
+          JSON.parse(
+            cli(
+              "member",
+              "email",
+              "set",
+              ...emailArgs,
+              "--address",
+              address,
+              "--revision",
+              String(revision),
+            ),
+          );
+        const missing = JSON.parse(
+          cli("member", "email", "inspect", ...emailArgs),
+        );
+        assert.equal(missing.address, "");
+        assert.equal(missing.mailboxVerified, false);
+        const saved = setEmail("managed@example.test", 0);
+        assert.equal(saved.source, "administrator");
+        assert.equal(saved.updatedBy, "installation-operator");
+        assert.equal(saved.mailboxVerified, false);
+        const session = async () => {
+          assert.equal((await browser(acs, await responseForm())).status, 303);
+          return JSON.parse((await browser(`${spOrigin}/session`)).body);
+        };
+        const before = await session();
+        assert.equal(before.email, undefined, "unapproved email was omitted");
+        const registration = JSON.parse(
+          cli(
+            "saml",
+            "sp",
+            "inspect",
+            "--directory",
+            installation,
+            "--id",
+            "independent-sp",
+          ),
+        );
+        registration.attributes = ["Email"];
+        writeFileSync(spFile, JSON.stringify(registration));
+        cli(
+          "saml",
+          "sp",
+          "apply",
+          "--directory",
+          installation,
+          "--file",
+          spFile,
+        );
+        const released = await session();
+        assert.equal(released.email, "managed@example.test");
+        assert.equal(released.nameID, before.nameID);
+        setEmail("changed@example.test", 1);
+        const changed = await session();
+        assert.equal(changed.email, "changed@example.test");
+        assert.equal(changed.nameID, before.nameID);
+        setEmail("", 2);
+        const cleared = await session();
+        assert.equal(
+          cleared.email,
+          undefined,
+          "missing email was not synthesized",
+        );
+        assert.equal(cleared.nameID, before.nameID);
+      },
+    );
+    await t.test(
       "concurrent responses create only one SP session",
       async () => {
         const form = await responseForm();

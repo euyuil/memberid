@@ -10,7 +10,7 @@ memberid database init --initial-root-password-file /path/to/protected/initial-r
 
 This is an explicit installation operation. It refuses existing user relations and never resets, replaces, or migrates an existing database. Normal startup does not initialize schema.
 
-This command installs schema version 24 and provisions `org_system/root` with a generated password. The password output file must be new and in a protected directory. Running `database init` without the file option initializes only the schema and the reserved system organization. See [first-time setup](administration.md#first-time-setup) for password delivery and recovery.
+This command installs schema version 25 and provisions `org_system/root` with a generated password. The password output file must be new and in a protected directory. Running `database init` without the file option initializes only the schema and the reserved system organization. See [first-time setup](administration.md#first-time-setup) for password delivery and recovery.
 
 ## Check an existing database
 
@@ -44,6 +44,8 @@ memberid member unblock --organization ORGANIZATION_ID --member MEMBER_ID
 Commands return JSON containing the affected identity. Use the identifiers returned by creation in subsequent commands. Names do not establish identity or verified contact ownership.
 
 These commands use the operator's explicit database access. They do not create an end-user password, bypass an authentication provider, or grant permissions in another application. Manual unblocking preserves any external-departure block.
+
+Administrators can maintain [Member email](member-email.md) through the console, private API, or `memberid member email inspect|set`. These attributes do not change authentication factors or stable subjects. Include `member_emails` and its atomic management audit records in normal database backups.
 
 The executable can run the [OIDC web-client profile](oidc.md) and optional [native SAML IdP](saml.md) with `serve --directory`. Run the separate protected [HTTP management interface](management-api.md) with `serve-management --directory` for organization and Member administration and current eligibility queries. Optional phone-provider configuration is documented in [phone authentication](phone-authentication.md).
 

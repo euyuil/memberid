@@ -393,6 +393,16 @@ func (s *Service) events(w http.ResponseWriter, r *http.Request) {
 	items, err := s.management.History(r.Context(), v.principal(), org, q.Get("memberId"), before)
 	respond(w, map[string]any{"items": items}, err)
 }
+
+func (s *Service) putMemberEmail(w http.ResponseWriter, r *http.Request) {
+	input, ok := management.DecodeMemberEmail(w, r)
+	if !ok {
+		return
+	}
+	value, err := s.management.PutMemberEmail(r.Context(), r.Context().Value(sessionKey{}).(session).principal(), r.PathValue("organizationId"), r.PathValue("memberId"), input)
+	respond(w, value, err)
+}
+
 func problem(w http.ResponseWriter, status int, code string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
@@ -415,6 +425,8 @@ func respond(w http.ResponseWriter, value any, err error) {
 			problem(w, 400, "invalid_request")
 		case errors.Is(err, identity.ErrPasswordUsernameTaken):
 			problem(w, 409, "username_taken")
+		case errors.Is(err, identity.ErrMemberEmailTaken):
+			problem(w, 409, "email_taken")
 		case errors.Is(err, identity.ErrConflict):
 			problem(w, 409, "conflict")
 		default:

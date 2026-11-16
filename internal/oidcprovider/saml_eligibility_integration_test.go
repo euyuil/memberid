@@ -157,6 +157,15 @@ func (s *samlIdentityFixture) invalidate(kind, method string) {
 
 func TestSAMLSharedIdentityAndAuthenticationTime(t *testing.T) {
 	s := newSAMLIdentityFixture(t)
+	s.sp.Attributes = []string{"Email"}
+	var err error
+	s.sp, err = s.store.PutSAMLServiceProvider(t.Context(), identity.OperatorPrincipal(), s.sp, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.store.PutMemberEmail(t.Context(), identity.OperatorPrincipal(), s.member.OrganizationID, s.member.ID, identity.MemberEmailInput{Address: "managed@example.test"}); err != nil {
+		t.Fatal(err)
+	}
 	var elapsed atomic.Int64
 	s.service.now = func() time.Time { return time.Now().Add(time.Duration(elapsed.Load())) }
 	recorder := enableAuthenticationEvents(t, s.fixture)
@@ -165,6 +174,7 @@ func TestSAMLSharedIdentityAndAuthenticationTime(t *testing.T) {
 		t.Run(method, func(t *testing.T) {
 			page := s.authenticate(method)
 			first := verifySAMLResponse(t, s.fixture, s.sp, s.completeSAML(page))
+			assertSAMLEmail(t, first, "managed@example.test")
 			if nameID == "" {
 				nameID = first.Assertion.Subject.NameID.Value
 			}
@@ -175,10 +185,14 @@ func TestSAMLSharedIdentityAndAuthenticationTime(t *testing.T) {
 			// Advance the issuance clock so an accidental authentication-time
 			// reset cannot pass just because requests completed in one second.
 			elapsed.Store(int64(2 * time.Minute))
-			oidcPage, verifier := s.loginPage("example-web", "openid offline_access")
+			oidcPage, verifier := s.loginPage("example-web", "openid email offline_access")
 			tokens := s.exchange("example-web", s.complete(oidcPage, s.member.ID), verifier)
 			s.status(tokens, 200)
 			claims := s.signedClaims(jsonObject(t, tokens)["id_token"].(string))
+			userinfo := jsonObject(t, s.userinfo(jsonObject(t, tokens)["access_token"].(string)))
+			if claims["email"] != nil || claims["email_verified"] != nil || userinfo["email"] != nil || userinfo["email_verified"] != nil {
+				t.Fatal("administrator email leaked into OIDC claims")
+			}
 			if claims["sub"] != s.member.ID || int64(claims["auth_time"].(float64)) != auth.AuthnInstant.Unix() {
 				t.Fatal("OIDC changed the authenticated Member or original time")
 			}
@@ -191,6 +205,7 @@ func TestSAMLSharedIdentityAndAuthenticationTime(t *testing.T) {
 			}
 			elapsed.Store(0)
 			second := verifySAMLResponse(t, s.fixture, s.sp, s.completeSAML(samlPage(t, s.fixture, s.sp)))
+			assertSAMLEmail(t, second, "managed@example.test")
 			if second.Assertion.Subject.NameID.Value != nameID || !second.Assertion.AuthnStatements[0].AuthnInstant.Equal(auth.AuthnInstant) || second.Assertion.AuthnStatements[0].SessionIndex != auth.SessionIndex {
 				t.Fatal("SAML did not retain shared session evidence")
 			}

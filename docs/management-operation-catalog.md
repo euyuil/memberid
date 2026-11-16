@@ -41,6 +41,7 @@ operation requires extending that matrix and this catalog as well as the code.
 | --- | --- |
 | O5-O6: organization updates | Shared scope/action checks at the existing transactional authorization point, including explicitly submitted unchanged status fields. Private/CLI updates retain their installation-only entry contract. |
 | O4, M4-M6, A2-A3: organization/Member creation, Member changes and administrator assignments | Shared checks for collection create, field-specific update/status.update, and assignment create/delete. Private/CLI Member writes and new update receipts use the same operation mappings under installation-only admission. |
+| M10: managed email writes | Transactional `update` authority on `M/email`, expected revision, organization-local uniqueness and atomic audit. Private/CLI writes retain installation-only admission. |
 | M7-M9: Member password and username writes | Member-only console admission and transactional create/update authority on the target Member's password. |
 | O1-O3, M1-M3, A1, B1 (console), E1-E2: management reads | Shared service checks before querying any response contents. Composite Member responses require all listed pairs; navigation and event defaults select only a view permitted by current authority. |
 | P1-P4 and I2: provider management | Shared directory and typed create/update/status checks. The authoritative save check follows upstream verification; private/CLI credential configuration retains installation-only admission. |
@@ -104,6 +105,7 @@ comes from stored relationships, not caller-supplied path strings.
 | `O` | One organization; ordinary properties and status share this target. |
 | `O/members`, `M` | Member collection and individual Member. |
 | `M/password` | One Member's local password credential. |
+| `M/email` | One Member's administrator-managed email and provenance; supported actions are `get` and `update`. |
 | `M/bindings`, `M/bindings/{bindingId}` | Explicit Member bindings; no authority over the shared factor or its other bindings. |
 | `O/roleAssignments`, `O/roleAssignments/{roleAssignmentId}` | Administrator assignments. The current store keys them by Member; the Member ID is the internal logical assignment key used for deletion, not a new public ID format or API. |
 | `O/providers` | Combined directory of configured provider applications. |
@@ -140,6 +142,7 @@ Member. All administrative entries require current identity/session eligibility.
 | Set or reset a Member password or change its username | `create` / `update` on any `M/password`, including the system organization | No | No |
 | Grant/revoke administrator | `create` / `delete` for assignments in any organization | `create` / `delete` for assignments in own ordinary organization | No |
 | List/create/configure providers | Any supported organization: `list`, `create`, `update`, `status.update` on the relevant targets | Same operations within own organization | No |
+| Manage Member email | `get` / `update` on any `M/email` | Same operations within own organization | No |
 | Manage SAML registrations | Any organization: collection `list`/`create`; item `get`/`update`/`status.update`/`delete` | Same operations within own organization | No |
 | Read management events | Global view or any organization's collection | Own organization's collection | No |
 | Self-service phone/DingTalk binding | As Self, with the same verification requirements | As Self, with the same verification requirements | `create` on selected Self's binding collection, through the account flow |
@@ -177,13 +180,14 @@ and `M`. Source and test references are indexed by row ID below.
 | O6 | Same PATCH with `status` | `O` | `status.update` | Platform | Console write; cannot disable system organization. Combined `name` and `status` require O5 and O6. |
 | M1 | `GET /api/O/members`: Member directory | `O/members`; `O/roleAssignments` | `list` on both | Platform; own organization admin | Console read; filter before pagination; current response includes a separate organization-wide `administratorIds` list. |
 | M2 | `GET /api/members`: global Member directory | `memberDirectory` | `list` | Platform | Console read; defined rows include organization name and administrator flag, not arbitrary related objects. |
-| M3 | `GET /api/M`: composite Member detail | `M`; `M/bindings`; `O/roleAssignments` | `get`; `list`; `list` | Platform; own organization admin | Console read; returns the Member, bindings, local username when configured, and administrator IDs. Require all pairs before fetching the composite response. |
+| M3 | `GET /api/M`: composite Member detail | `M`; `M/bindings`; `O/roleAssignments`; `M/email` | `get`; `list`; `list`; `get` | Platform; own organization admin | Console read; returns the Member, bindings, local username when configured, administrator IDs, and managed email with provenance. Require all pairs before fetching the composite response. |
 | M4 | `POST /api/O/members`: create Member | `O/members` | `create` | Platform; own organization admin | Console write; no administrator assignment or verified binding is created. System Members require platform access. |
 | M5 | `PATCH /api/M` with `displayName` | `M` | `update` | Platform; own organization admin | Console write; organization-bound Member lookup and valid display name. |
 | M6 | Same PATCH with `manualBlocked` | `M` | `status.update` | Platform; own organization admin | Console write; preserve administrator availability. Clearing manual block does not clear external departure. Combined fields require M5 and M6. |
 | M7 | `POST /api/M/password` with `username` | `M/password` | `create` | Platform | Console write; unique username within the organization and one password credential per Member. |
 | M8 | `POST /api/M/password/reset` with an empty JSON object | `M/password` | `update` | Platform | Console write; retain the username and revoke the Member's grants and password-authenticated SSO sessions. |
 | M9 | `PATCH /api/M/password` with `expectedUsername` and `username` | `M/password` | `update` | Platform | Console write; reject a stale or occupied name. Preserve the credential, binding and active sessions. Returns the current username on success. |
+| M10 | `PUT /api/M/email`; `GET`/`PUT /v1/M/email`; `memberid member email inspect/set` | `M/email` | `get` on read; `update` on write | Console: Platform or own organization admin; private: Manager; CLI: operator | Console write or installation checkpoint; expected revision, address uniqueness within the organization and atomic audit. Self-service is denied. |
 
 Both password operations return the username and generated password in a
 non-cacheable response after commit. Member detail and operation history do
@@ -208,7 +212,7 @@ with the following response differences:
 | `POST /v1/organizations` | O4 | `create` on `organizations`. |
 | `PATCH /v1/O` | O5/O6 | `update`, `status.update`, or both, according to submitted fields. |
 | `GET /v1/O/members` | M1 without assignment bundle | `list` on `O/members`; no assignment-list requirement. |
-| `GET /v1/M` | M3 without binding/assignment bundles | `get` on `M`; no binding-list or assignment-list requirement. |
+| `GET /v1/M` | M3 without binding/assignment/email bundles | `get` on `M`; no binding-list, assignment-list or email-get requirement. |
 | `POST /v1/O/members` | M4 | `create` on `O/members`. |
 | `PATCH /v1/M` | M5/M6 | `update`, `status.update`, or both, according to submitted fields. |
 
@@ -220,7 +224,7 @@ interfaces do not acquire console authentication or delegated Member permissions
 
 | ID | Existing entry and business operation | Target | Action | Authority | Conditions and checkpoint |
 | --- | --- | --- | --- | --- | --- |
-| A1 | Assignment IDs embedded in console Member list/detail | `O/roleAssignments` | `list` | Platform; own organization admin | Console read; this is the explicit second/third requirement in M1/M3. No standalone role-assignment API exists. |
+| A1 | Assignment IDs embedded in console Member list/detail | `O/roleAssignments` | `list` | Platform; own organization admin | Console read; this is an explicit requirement in M1/M3. No standalone role-assignment API exists. |
 | A2 | `PUT /api/M/administrator`, `enabled=true`; `administrator grant` CLI | `O/roleAssignments` | `create` | Platform; own organization admin; Operator via CLI | Console write or operator checkpoint; eligible recipient belongs to O; assigned role/scope cannot escape that organization or grant platform authority from an ordinary organization. Existing assignment is an idempotent no-op. |
 | A3 | Same PUT with `enabled=false`; `administrator revoke` CLI | Resolved assignment in `O/roleAssignments/{roleAssignmentId}` | `delete` | Same as A2 | Same checkpoints; preserve last available administrator. Resolve the assignment by organization and Member; retain current no-op behavior if absent. No in-place assignment `update` is defined. |
 | P1 | `GET /api/O/providers`: combined provider directory | `O/providers` | `list` | Platform; own organization admin | Console read; metadata and callback URLs, never client secrets. |
