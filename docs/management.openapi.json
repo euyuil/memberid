@@ -1046,6 +1046,90 @@
         },
         "description": "Irreversible retirement preserves entity ID and subject mappings. Current revision required. Audit and change commit atomically."
       }
+    },
+    "/v1/organizations/{organizationId}/members/{memberId}/email": {
+      "get": {
+        "operationId": "getMemberEmail",
+        "parameters": [
+          {
+            "name": "organizationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/OrganizationID"
+            }
+          },
+          {
+            "name": "memberId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/MemberID"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current administrator-managed email record",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberEmail"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "put": {
+        "operationId": "putMemberEmail",
+        "parameters": [
+          {
+            "name": "organizationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/OrganizationID"
+            }
+          },
+          {
+            "name": "memberId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/MemberID"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current administrator-managed email record",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberEmail"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MemberEmailInput"
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1058,7 +1142,7 @@
     },
     "responses": {
       "Error": {
-        "description": "400 invalid request; 401 missing or invalid management credential; 403 browser access denied or ineligible factor; 404 record not found; 409 identifier or binding conflict; 415 JSON required; 422 candidate Member identifier collision; 500 internal error; 503 provider verification unavailable. Unknown routes and unsupported methods may use ordinary HTTP errors.",
+        "description": "400 invalid request; 401 missing or invalid management credential; 403 browser access denied or ineligible factor; 404 record not found; 409 identifier, binding, email uniqueness or revision conflict; 415 JSON required; 422 candidate Member identifier collision; 500 internal error; 503 provider verification unavailable. Unknown routes and unsupported methods may use ordinary HTTP errors.",
         "content": {
           "application/json": {
             "schema": {
@@ -1767,14 +1851,16 @@
           },
           "attributes": {
             "type": "array",
-            "maxItems": 1,
+            "maxItems": 2,
             "items": {
               "type": "string",
               "enum": [
-                "DisplayName"
+                "DisplayName",
+                "Email"
               ]
             },
-            "default": []
+            "default": [],
+            "uniqueItems": true
           },
           "revision": {
             "type": "integer",
@@ -1853,14 +1939,16 @@
               "array",
               "null"
             ],
-            "maxItems": 1,
+            "maxItems": 2,
             "items": {
               "type": "string",
               "enum": [
-                "DisplayName"
+                "DisplayName",
+                "Email"
               ]
             },
-            "default": []
+            "default": [],
+            "uniqueItems": true
           },
           "revision": {
             "type": "integer",
@@ -1905,6 +1993,75 @@
             "type": "integer",
             "format": "int64",
             "minimum": 1
+          }
+        }
+      },
+      "MemberEmail": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "address",
+          "source",
+          "mailboxVerified",
+          "revision",
+          "updatedBy",
+          "updatedAt"
+        ],
+        "properties": {
+          "address": {
+            "type": "string",
+            "maxLength": 254,
+            "description": "Empty when unset or cleared; otherwise a single ASCII mailbox."
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "administrator"
+            ]
+          },
+          "mailboxVerified": {
+            "type": "boolean",
+            "enum": [
+              false
+            ],
+            "description": "Administrative provenance never verifies control of a mailbox."
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "updatedBy": {
+            "type": "string",
+            "description": "Empty before first assignment; otherwise the authenticated Member ID or installation actor."
+          },
+          "updatedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
+      "MemberEmailInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "address",
+          "revision"
+        ],
+        "properties": {
+          "address": {
+            "type": "string",
+            "maxLength": 254,
+            "description": "Single ASCII mailbox; empty clears. Case-insensitive uniqueness within the organization. See member-email.md for the accepted profile."
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "description": "Expected current revision, including zero before first assignment. Stale writes return 409."
           }
         }
       }

@@ -2,6 +2,8 @@
 
 An organization owns its Members. Each Member has a stable identifier that is independent of display names, contact attributes, and authentication-factor changes. A person who participates in two organizations has two Members. There is no global User record.
 
+[Administrator-managed email](member-email.md) is a separate, revisioned attribute. It is not a verified authentication factor or account-binding key. Matching addresses never merge Members; equal addresses in different organizations remain separate identities.
+
 ## Identifiers
 
 Generated organization, Member, and authentication-factor identifiers use the `org_`, `mbr_`, and `af_` prefixes followed by a fixed-width opaque encoding of a UUIDv7. Clients retain the complete identifier and do not derive identity from its timestamp, prefix, or contact data. Ordinary OIDC subjects identify Members within an issuer.

@@ -45,8 +45,13 @@ func (sp SAMLServiceProvider) Validate(loopback bool) error {
 	if err != nil || acs.Hostname() == "" || acs.User != nil || acs.Fragment != "" || len(sp.ACSURL) > 2048 || strings.ContainsAny(sp.ACSURL, "*#\\\r\n\t ") || strings.ContainsAny(acs.Host, "\"'<>;") || acs.Scheme != "https" && !(loopback && acs.Scheme == "http" && acs.Hostname() == "127.0.0.1") {
 		return ErrInvalid
 	}
-	if len(sp.Attributes) > 1 || len(sp.Attributes) == 1 && sp.Attributes[0] != "DisplayName" || len(sp.SigningCertificates) > 4 || !sp.AllowUnsignedRequests && len(sp.SigningCertificates) == 0 {
+	if len(sp.Attributes) > 2 || len(sp.SigningCertificates) > 4 || !sp.AllowUnsignedRequests && len(sp.SigningCertificates) == 0 {
 		return ErrInvalid
+	}
+	for index, attribute := range sp.Attributes {
+		if attribute != "DisplayName" && attribute != "Email" || slices.Contains(sp.Attributes[:index], attribute) {
+			return ErrInvalid
+		}
 	}
 	for _, encoded := range sp.SigningCertificates {
 		if len(encoded) > 32<<10 {

@@ -1,7 +1,7 @@
 CREATE TABLE memberid_schema (
-    version integer PRIMARY KEY CHECK (version = 23)
+    version integer PRIMARY KEY CHECK (version = 24)
 );
-INSERT INTO memberid_schema(version) VALUES (23);
+INSERT INTO memberid_schema(version) VALUES (24);
 
 CREATE TABLE organizations (
     id text COLLATE "C" PRIMARY KEY CHECK (id = 'org_system' OR id ~ '^org_[0-9bcdfghjkmnpqrstvwxz]{27}$'),
@@ -27,6 +27,17 @@ CREATE TABLE members (
     CHECK (id <> 'mbr_root' OR organization_id = 'org_system')
 );
 CREATE INDEX member_directory ON members (organization_id, created_at, id);
+
+CREATE TABLE member_emails (
+    member_id text COLLATE "C" PRIMARY KEY,
+    organization_id text COLLATE "C" NOT NULL,
+    address text COLLATE "C" NOT NULL CHECK (octet_length(address) <= 254),
+    revision bigint NOT NULL CHECK (revision > 0),
+    updated_by text NOT NULL,
+    updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+    FOREIGN KEY (member_id, organization_id) REFERENCES members(id, organization_id)
+);
+CREATE UNIQUE INDEX member_email_organization_address ON member_emails (organization_id, lower(address)) WHERE address <> '';
 
 CREATE TABLE authentication_factors (
     id text COLLATE "C" PRIMARY KEY CHECK (id ~ '^af_[0-9bcdfghjkmnpqrstvwxz]{27}$'),

@@ -22,6 +22,7 @@ func managementPermissions(actor ManagementActor) []authorization.Permission {
 		permission(organizationResource.pattern(organizationID), actionGet, actionUpdate),
 		permission(membersResource.pattern(organizationID), actionList, actionCreate),
 		permission(memberResource.pattern(organizationID, "?"), actionGet, actionUpdate, actionStatusUpdate),
+		permission(memberEmailResource.pattern(organizationID, "?"), actionGet, actionUpdate),
 		permission(bindingsResource.pattern(organizationID, "?"), actionList),
 		permission(roleAssignmentsResource.pattern(organizationID), actionList, actionCreate),
 		permission(roleAssignmentResource.pattern(organizationID, "?"), actionDelete),

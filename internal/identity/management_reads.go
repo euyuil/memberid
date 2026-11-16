@@ -72,6 +72,7 @@ func memberReadRequirements(organizationID, memberID string) []authorization.Req
 	return []authorization.Requirement{
 		memberResource.require(actionGet, organizationID, memberID),
 		bindingsResource.require(actionList, organizationID, memberID),
+		memberEmailResource.require(actionGet, organizationID, memberID),
 		roleAssignmentsResource.require(actionList, organizationID),
 	}
 }
@@ -93,10 +94,11 @@ func (service *ManagementService) Members(ctx context.Context, principal Princip
 }
 
 type ManagementMemberDetail struct {
-	Member           Member    `json:"member"`
-	Bindings         []Binding `json:"bindings"`
-	AdministratorIDs []string  `json:"administratorIds"`
-	PasswordUsername string    `json:"passwordUsername,omitempty"`
+	Member           Member      `json:"member"`
+	Bindings         []Binding   `json:"bindings"`
+	AdministratorIDs []string    `json:"administratorIds"`
+	PasswordUsername string      `json:"passwordUsername,omitempty"`
+	Email            MemberEmail `json:"email"`
 }
 
 func (service *ManagementService) Member(ctx context.Context, principal Principal, organizationID, memberID string) (ManagementMemberDetail, error) {
@@ -124,7 +126,11 @@ func (service *ManagementService) Member(ctx context.Context, principal Principa
 	if err != nil {
 		return ManagementMemberDetail{}, err
 	}
-	return ManagementMemberDetail{Member: member, Bindings: bindings, AdministratorIDs: ids, PasswordUsername: username}, nil
+	email, err := readMemberEmail(ctx, store.pool, organizationID, memberID)
+	if err != nil {
+		return ManagementMemberDetail{}, err
+	}
+	return ManagementMemberDetail{Member: member, Bindings: bindings, AdministratorIDs: ids, PasswordUsername: username, Email: email}, nil
 }
 
 func (service *ManagementService) MemberDirectory(ctx context.Context, principal Principal, after string, limit int, filter MemberDirectoryFilter) (Page[MemberDirectoryEntry], error) {

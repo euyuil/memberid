@@ -110,7 +110,7 @@ export function createConsumer({
       ) {
         throw new Error("Recipient mismatch");
       }
-      return { nameID: profile.nameID, inResponseTo: profile.inResponseTo };
+      return { nameID: profile.nameID, inResponseTo: profile.inResponseTo, email: profile.Email };
     },
   };
 }

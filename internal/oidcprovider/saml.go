@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+	"slices"
 	"time"
 
 	"github.com/euyuil/memberid/internal/authevent"
@@ -155,6 +156,12 @@ func (service *Service) finishSAML(w http.ResponseWriter, r *http.Request, reque
 			}
 			if err := tx.QueryRow(r.Context(), "SELECT display_name FROM members WHERE id=$1", request.MemberID).Scan(&auth.DisplayName); err != nil {
 				return err
+			}
+			if slices.Contains(sp.Attributes, "Email") {
+				auth.Email, err = identity.SAMLMemberEmail(r.Context(), tx, sp.OrganizationID, request.MemberID)
+				if err != nil {
+					return err
+				}
 			}
 		}
 		// External observations and row-lock waits must not freeze the validity

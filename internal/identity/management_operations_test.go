@@ -29,6 +29,7 @@ func TestManagementOperationMatrix(t *testing.T) {
 			{membersResource, []string{targetOrganization}, base + "/members", []string{"create", "list"}, []string{"create", "list"}, nil},
 			{memberResource, []string{targetOrganization, memberID}, base + "/members/" + memberID, []string{"get", "update", "status.update"}, []string{"get", "update", "status.update"}, []string{"get"}},
 			{memberPasswordResource, []string{targetOrganization, memberID}, base + "/members/" + memberID + "/password", []string{"create", "update"}, nil, nil},
+			{memberEmailResource, []string{targetOrganization, memberID}, base + "/members/" + memberID + "/email", []string{"get", "update"}, []string{"get", "update"}, nil},
 			{bindingsResource, []string{targetOrganization, memberID}, base + "/members/" + memberID + "/bindings", []string{"create", "list"}, []string{"list"}, []string{"create"}},
 			{bindingResource, []string{targetOrganization, memberID, bindingID}, base + "/members/" + memberID + "/bindings/" + bindingID, []string{"delete"}, nil, nil},
 			{roleAssignmentsResource, []string{targetOrganization}, base + "/roleAssignments", []string{"create", "list"}, []string{"create", "list"}, nil},

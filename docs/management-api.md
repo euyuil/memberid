@@ -53,6 +53,12 @@ Every Member lookup or mutation is constrained by its organization. A Member in 
 
 Binding requires an existing verified factor ID. This API does not create a factor from a phone number, verify a contact attribute, create a login session, or infer that two Members represent the same person. Repeating an active identical binding preserves its identity. A conflicting or revoked relationship remains reserved and returns 409 instead of transferring access. One factor can be explicitly bound to independent Members in different organizations, but cannot be shared by different Members in the same organization.
 
+## Administrator-managed email
+
+`GET /v1/organizations/{organizationId}/members/{memberId}/email` returns the current email record, including an unset record at revision zero. `PUT` at the same resource accepts required `address` and expected `revision`; empty address clears. The [managed email contract](member-email.md) defines its authority, provenance and validation rules.
+
+Email writes commit with their audit event and reject an address already assigned to another Member in that organization with 409 `email_taken`. Stale revisions return 409 `conflict`. Same-value writes at the current revision are no-ops. Missing or cleared addresses are omitted from SAML assertions. These values are administrator assertions, not mailbox-control verification, login identifiers, or automatic account links. Clients cannot submit provenance or verification fields.
+
 ## SAML service provider registration
 
 Use `/v1/organizations/{organizationId}/saml-service-providers` for the organization-owned [SAML registry](saml.md). Registration is available even when protocol serving is disabled; adding a registration does not enable SAML or provision IdP signing keys.
@@ -67,7 +73,7 @@ Use `/v1/organizations/{organizationId}/saml-service-providers` for the organiza
 
 POST and PUT accept `id`, optional `displayName`, `entityId`, `acsUrl`, `enabled`, `allowUnsignedRequests`, `signingCertificates`, `preauthorized`, `attributes`, and `revision`. The shape is flat JSON, limited to 32 KiB, with exact, unique field names. Missing booleans default to false and missing arrays to empty policy sets; PUT is a complete replacement, not a patch. The path supplies `organizationId`; a body ownership, actor, retirement, binding, or NameID-format override is rejected. PUT requires `id` to match the path. The returned registration also includes `organizationId` and `retired`.
 
-Registration IDs contain 1–64 ASCII letters, digits, underscores, or hyphens and are installation-wide. Entity IDs are absolute URIs. Both remain reserved after retirement. Organization and entity ID cannot change on an existing registration. The implemented profile fixes input to HTTP-Redirect, output to one exact HTTPS HTTP-POST ACS, and NameID to persistent. Only `DisplayName` is available in the attribute allowlist. At least one RSA signing certificate is required unless `allowUnsignedRequests` explicitly permits unsigned requests. Up to four PEM public certificates are accepted; private-key material is rejected. See the protocol guide for trust and signing constraints.
+Registration IDs contain 1–64 ASCII letters, digits, underscores, or hyphens and are installation-wide. Entity IDs are absolute URIs. Both remain reserved after retirement. Organization and entity ID cannot change on an existing registration. The implemented profile fixes input to HTTP-Redirect, output to one exact HTTPS HTTP-POST ACS, and NameID to persistent. The attribute allowlist supports independent `DisplayName` and `Email` entries; duplicates and unknown attributes are rejected. Email comes only from the administrator-managed record and is omitted when missing or cleared. At least one RSA signing certificate is required unless `allowUnsignedRequests` explicitly permits unsigned requests. Up to four PEM public certificates are accepted; private-key material is rejected. See the protocol guide for trust and signing constraints.
 
 Malformed policy returns 400, foreign-organization item lookup returns 404, and duplicate entity IDs, stale revisions, or changes to a retired registration return 409. Every successful write increments revision and invalidates in-flight requests that hold the prior revision. Retirement does not delete mappings or terminate an SP's existing application session. Inspect the latest registration after a conflict or uncertain response; do not retry writes automatically. Audit records use `installation-manager`, preserve public before/after policy, and commit with the change. The browser console uses a separate Member-scoped service boundary and never impersonates this credential.
 
@@ -81,7 +87,7 @@ The receipt contains `id`, `organizationId`, `memberId`, the resulting `member` 
 
 Receipts persist across restarts and have no automatic expiry or deletion endpoint. Include them in database backups and capacity planning. Deleting receipts directly would destroy the safe-retry guarantee. A new intentional update uses a new ID. Ordinary PATCH remains available, but repeating PATCH after an uncertain result can overwrite an intervening update; it does not provide an immutable receipt.
 
-Updates use the same installation management credential and organization-bound lookup as other management operations. They do not impersonate an initiating Member or assign application permissions. The fresh-install schema is version 23; startup rejects older schemas without resetting or migrating existing data.
+Updates use the same installation management credential and organization-bound lookup as other management operations. They do not impersonate an initiating Member or assign application permissions. The fresh-install schema is version 24; startup rejects older schemas without resetting or migrating existing data.
 
 ## Directory pagination
 

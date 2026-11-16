@@ -95,6 +95,7 @@ func TestCompositeMemberReadRequiresEveryComponent(t *testing.T) {
 	permissions := []authorization.Permission{
 		permission(base+"/members/"+member, "get"),
 		permission(base+"/members/"+member+"/bindings", "list"),
+		permission(base+"/members/"+member+"/email", "get"),
 		permission(base+"/roleAssignments", "list"),
 	}
 	if err := checkManagementPermissions(permissions, requirements...); err != nil {

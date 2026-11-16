@@ -94,6 +94,7 @@ import {
 import { Providers, type ProviderDirectory } from "@/Providers"
 import { SAMLServiceProviders } from "@/SAMLServiceProviders"
 import { MemberPassword } from "@/MemberPassword"
+import { MemberEmail, type ManagedEmail } from "@/MemberEmail"
 import {
   passwordUsernameError,
   passwordUsernamePattern,
@@ -139,6 +140,7 @@ type Detail = {
   bindings: Binding[]
   administratorIds: string[]
   passwordUsername?: string
+  email: ManagedEmail
 }
 type Data = {
   organizations?: Page<Organization>
@@ -171,6 +173,7 @@ const messages: Record<string, string> = {
   not_found: "记录不存在，请返回列表刷新。",
   conflict: "当前状态发生冲突，请刷新后重新检查。",
   username_taken: "该用户名已被本组织中的其他成员使用。",
+  email_taken: "该邮箱已被本组织中的其他成员使用。请核对邮箱及成员身份。",
   invalid_csrf: "页面验证已失效，请刷新后重试。",
   sign_in_required: "登录已过期或管理员资格已失效，请重新登录。",
   not_administrator: "当前成员没有管理权限，请使用已授权的管理员身份登录。",
@@ -1357,6 +1360,21 @@ export default function App() {
                   </CardFooter>
                 </Card>
                 <div className="grid gap-4">
+                  <MemberEmail
+                    key={member}
+                    email={data.detail.email}
+                    save={(input) =>
+                      request(`${base}/members/${member}/email`, {
+                        method: "PUT",
+                        headers: {
+                          "Content-Type": "application/json",
+                          "X-CSRF-Token": session.csrf,
+                        },
+                        body: JSON.stringify(input),
+                      })
+                    }
+                    onComplete={refresh}
+                  />
                   <Card>
                     <CardHeader>
                       <CardTitle role="heading" aria-level={2}>

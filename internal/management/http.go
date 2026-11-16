@@ -72,6 +72,7 @@ func New(store *identity.Store, secretSHA256 string, applications *identity.Ding
 	h.routes.HandleFunc("POST /v1/eligibility", h.eligibility)
 	h.routes.HandleFunc("POST /v1/organizations/{organizationId}/member-eligibility", h.memberEligibility)
 	h.samlRoutes()
+	h.memberEmailRoutes()
 	if applications != nil {
 		h.dingTalkRoutes(applications)
 	}
@@ -130,6 +131,8 @@ func respond(w http.ResponseWriter, status int, value any, err error) {
 			problem(w, http.StatusUnprocessableEntity, "member_id_conflict")
 		case errors.Is(err, identity.ErrConflict):
 			problem(w, http.StatusConflict, "conflict")
+		case errors.Is(err, identity.ErrMemberEmailTaken):
+			problem(w, http.StatusConflict, "email_taken")
 		case errors.Is(err, identity.ErrProviderUnavailable):
 			problem(w, http.StatusServiceUnavailable, "provider_unavailable")
 		case errors.Is(err, identity.ErrIneligible):

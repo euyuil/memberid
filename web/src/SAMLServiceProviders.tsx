@@ -330,7 +330,10 @@ function RegistrationDialog({
         allowUnsignedRequests: unsigned,
         signingCertificates: certificates,
         preauthorized: fields.has("preauthorized"),
-        attributes: fields.has("displayNameAttribute") ? ["DisplayName"] : [],
+        attributes: [
+          ...(fields.has("displayNameAttribute") ? ["DisplayName"] : []),
+          ...(fields.has("emailAttribute") ? ["Email"] : []),
+        ],
         revision: item?.revision ?? 0,
       }
       await save(base + (item ? `/${encodeURIComponent(item.id)}` : ""), {
@@ -472,6 +475,19 @@ function RegistrationDialog({
                 />
                 <FieldLabel htmlFor="saml-display-attribute">
                   向应用发送成员显示名称（DisplayName）
+                </FieldLabel>
+              </Field>
+              <Field orientation="horizontal" data-disabled={pending}>
+                <Checkbox
+                  id="saml-email-attribute"
+                  name="emailAttribute"
+                  nativeButton
+                  render={<button type="button" />}
+                  defaultChecked={item?.attributes?.includes("Email") ?? false}
+                  disabled={pending}
+                />
+                <FieldLabel htmlFor="saml-email-attribute">
+                  向应用发送受管邮箱（Email）
                 </FieldLabel>
               </Field>
               <Field orientation="horizontal" data-disabled={pending}>
