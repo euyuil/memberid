@@ -527,3 +527,26 @@ func TestFeishuDepartureWaitsForIssuanceCommit(t *testing.T) {
 	assertFeishuDeparture(t, f, true)
 	f.status(f.userinfo(jsonObject(t, result)["access_token"].(string)), 401)
 }
+
+func TestFeishuDepartureBeforeAuthorizationCodePersistence(t *testing.T) {
+	f, provider, _ := admittedFeishuFixture(t)
+	page, _ := f.loginPage("example-web", "openid offline_access")
+	confirmed := f.submit(page.body, "continue", url.Values{"member": {f.member.ID}, "consent": {"yes"}})
+	f.status(confirmed, 303)
+	provider.membershipDeparted.Store(true)
+	if _, err := f.service.feishu.ReconcileMemberships(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	response := f.call(f.browser, "GET", confirmed.header.Get("Location"), nil, nil)
+	location, err := url.Parse(response.header.Get("Location"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if location.Query().Get("code") != "" {
+		t.Fatal("departed identity received an authorization code")
+	}
+	var issued bool
+	if err := f.store.Database().QueryRow(t.Context(), "SELECT code_hash IS NOT NULL FROM authentication_requests WHERE id=$1", hidden(t, page.body, "request")).Scan(&issued); err != nil || issued {
+		t.Fatal("departure bypassed final code persistence check", err)
+	}
+}

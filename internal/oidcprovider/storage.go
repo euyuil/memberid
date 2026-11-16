@@ -113,14 +113,33 @@ func (s *storage) AuthRequestByCode(ctx context.Context, code string) (op.AuthRe
 	return request, nil
 }
 func (s *storage) SaveAuthCode(ctx context.Context, id, code string) error {
-	result, err := s.service.store.Database().Exec(ctx, "UPDATE authentication_requests SET code_hash=$2,expires_at=LEAST(expires_at,$3) WHERE id=$1 AND protocol='oidc' AND code_hash IS NULL AND consumed_at IS NULL AND expires_at>$4", id, config.SecretHash(code), s.service.now().Add(time.Minute), s.service.now())
-	if err != nil {
-		return err
-	}
-	if result.RowsAffected() != 1 {
-		return oidc.ErrInvalidGrant()
-	}
-	return nil
+	return pgx.BeginFunc(ctx, s.service.store.Database(), func(tx pgx.Tx) error {
+		var data []byte
+		if err := tx.QueryRow(ctx, "SELECT data FROM authentication_requests WHERE id=$1 AND protocol='oidc' AND code_hash IS NULL AND consumed_at IS NULL AND expires_at>$2 FOR UPDATE", id, s.service.now()).Scan(&data); err != nil {
+			return grantEligibilityError(err)
+		}
+		var request authorizationRequest
+		if err := json.Unmarshal(data, &request); err != nil {
+			return err
+		}
+		if !request.Complete {
+			return oidc.ErrInvalidGrant()
+		}
+		if err := s.lockMemberOrganization(ctx, tx, &request.grant); err != nil {
+			return err
+		}
+		if err := s.eligible(ctx, tx, &request.grant); err != nil {
+			return err
+		}
+		result, err := tx.Exec(ctx, "UPDATE authentication_requests SET code_hash=$2,expires_at=LEAST(expires_at,$3) WHERE id=$1 AND code_hash IS NULL AND consumed_at IS NULL AND expires_at>$4", id, config.SecretHash(code), s.service.now().Add(time.Minute), s.service.now())
+		if err != nil {
+			return err
+		}
+		if result.RowsAffected() != 1 {
+			return oidc.ErrInvalidGrant()
+		}
+		return nil
+	})
 }
 func (s *storage) DeleteAuthRequest(context.Context, string) error { return nil }
 
