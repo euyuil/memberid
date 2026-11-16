@@ -43,7 +43,7 @@ memberid database upgrade --directory ./installation \
   --maintenance-confirmed
 ```
 
-`--pg-dump /path/to/pg_dump` selects an installed PostgreSQL 18 client if it is not on PATH. Database credentials are passed through the child process environment, never command arguments or backup metadata. The confirmation flag attests to the maintenance procedure; it does not stop services for the operator. Active or idle database clients cause a refusal. The installation files and source database remain in place.
+`--pg-dump /path/to/pg_dump` selects an installed PostgreSQL 18 client if it is not on PATH. The upgrader supplies libpq connection settings and credentials through temporary service and password files. Keep the operator's temporary directory protected, especially on Windows where Unix permission modes do not establish ACLs. The files are removed when the command returns. The confirmation flag attests to the maintenance procedure; it does not stop services for the operator. Active or idle database clients cause a refusal. The installation files and source database remain in place.
 
 The backup destination must be new and outside the installation. Existing destinations are never overwritten or removed. A successful recovery set contains:
 
