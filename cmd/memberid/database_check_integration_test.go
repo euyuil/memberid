@@ -90,7 +90,7 @@ func TestDatabaseCheckUsesReadOnlyStartupValidation(t *testing.T) {
 		t.Fatal("incompatible schema check did not fail without success output", err)
 	}
 	var version int
-	if err := connection.QueryRow(t.Context(), "SELECT version FROM memberid_schema").Scan(&version); err != nil || version != 25 {
+	if err := connection.QueryRow(t.Context(), "SELECT version FROM memberid_schema").Scan(&version); err != nil || version != 26 {
 		t.Fatal("incompatible schema was changed", err)
 	}
 }
@@ -99,7 +99,7 @@ func TestDatabaseCheckRejectsArgumentsBeforeConnecting(t *testing.T) {
 	t.Setenv("MEMBERID_DATABASE_URL", "invalid-database-url")
 	for _, args := range [][]string{{"database", "check", "extra"}, {"database", "check", "--directory", "unused"}, {"database", "unknown"}} {
 		var output, diagnostic bytes.Buffer
-		if err := run(t.Context(), args, &output, &diagnostic); err == nil || !strings.Contains(err.Error(), "usage: memberid database <init|check>") {
+		if err := run(t.Context(), args, &output, &diagnostic); err == nil || !strings.Contains(err.Error(), "usage: memberid database <init|check|upgrade-plan|upgrade|backup-check>") {
 			t.Fatal("unsupported database arguments were not rejected", err)
 		}
 		if output.Len() != 0 || diagnostic.Len() != 0 {

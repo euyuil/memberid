@@ -15,4 +15,4 @@ go run ./cmd/memberid serve --listen 127.0.0.1:8080
 
 `GET http://127.0.0.1:8080/healthz` reports process availability only.
 
-See [operator setup](docs/operations.md), [administration console setup](docs/console.md), the [OIDC profile](docs/oidc.md), the optional [SAML IdP profile](docs/saml.md), the [identity model](docs/identity-model.md), and [third-party component review](docs/third-party-components.md). The project's license has not been selected.
+See [operator setup](docs/operations.md), [database upgrades and recovery](docs/database-upgrades.md), [administration console setup](docs/console.md), the [OIDC profile](docs/oidc.md), the optional [SAML IdP profile](docs/saml.md), the [identity model](docs/identity-model.md), and [third-party component review](docs/third-party-components.md). The project's license has not been selected.

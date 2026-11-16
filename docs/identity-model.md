@@ -30,4 +30,4 @@ Confirmed DingTalk or Feishu application revocation makes that source ineligible
 
 MemberID uses a dedicated PostgreSQL database. Schema initialization is an explicit transaction, serialized against concurrent initialization. It refuses a database containing existing user relations. Normal store startup checks the schema version and never applies DDL.
 
-The initial schema and its tests are scoped to new installations. No data migration is performed. Tests create uniquely named databases on a separately configured disposable PostgreSQL server and remove only the databases they created.
+Fresh installations and explicit forward upgrades from schema 26 are supported. [Upgrade and recovery acceptance](database-upgrades.md) verifies populated installations; reverse migration and earlier demo schemas are unsupported. Tests create uniquely named databases on a separately configured disposable PostgreSQL server and remove only the databases they created.

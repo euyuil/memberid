@@ -1,7 +1,16 @@
 CREATE TABLE memberid_schema (
-    version integer PRIMARY KEY CHECK (version = 26)
+    version integer PRIMARY KEY CHECK (version = 27)
 );
-INSERT INTO memberid_schema(version) VALUES (26);
+INSERT INTO memberid_schema(version) VALUES (27);
+
+CREATE TABLE database_upgrades (
+    to_version integer PRIMARY KEY,
+    from_version integer NOT NULL CHECK (from_version < to_version),
+    migration_sha256 text NOT NULL CHECK (migration_sha256 ~ '^[0-9a-f]{64}$'),
+    backup_id text NOT NULL,
+    backup_sha256 text NOT NULL CHECK (backup_sha256 ~ '^[0-9a-f]{64}$'),
+    completed_at timestamptz NOT NULL DEFAULT clock_timestamp()
+);
 
 CREATE TABLE organizations (
     id text COLLATE "C" PRIMARY KEY CHECK (id = 'org_system' OR id ~ '^org_[0-9bcdfghjkmnpqrstvwxz]{27}$'),

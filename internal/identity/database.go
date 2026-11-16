@@ -78,6 +78,16 @@ func Open(ctx context.Context, databaseURL string) (*Store, error) {
 		return nil, ErrDatabaseConfiguration
 	}
 	config.ConnConfig.RuntimeParams["search_path"] = "public"
+	config.AfterConnect = func(ctx context.Context, connection *pgx.Conn) error {
+		var locked bool
+		if err := connection.QueryRow(ctx, "SELECT pg_try_advisory_lock_shared($1,$2)", databaseMaintenanceNamespace, databaseMaintenanceLock).Scan(&locked); err != nil {
+			return err
+		}
+		if !locked {
+			return ErrDatabaseBusy
+		}
+		return nil
+	}
 	if config.ConnConfig.ConnectTimeout == 0 {
 		config.ConnConfig.ConnectTimeout = 5 * time.Second
 	}
@@ -86,7 +96,7 @@ func Open(ctx context.Context, databaseURL string) (*Store, error) {
 		return nil, err
 	}
 	var version int
-	if err = pool.QueryRow(ctx, "SELECT version FROM memberid_schema").Scan(&version); err != nil || version != 26 {
+	if err = pool.QueryRow(ctx, "SELECT version FROM memberid_schema").Scan(&version); err != nil || version != SchemaVersion {
 		pool.Close()
 		var postgresError *pgconn.PgError
 		if err == nil || errors.Is(err, pgx.ErrNoRows) || errors.As(err, &postgresError) && postgresError.Code == "42P01" {

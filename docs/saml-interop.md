@@ -14,6 +14,18 @@ export MEMBERID_SAML_PACKAGE="$(node -e 'console.log(require("node:path").resolv
 npm --prefix internal/interop/saml test
 ```
 
+To include the schema 26 forward-upgrade and recovery rehearsal, also build the pinned baseline into a new destination and set its absolute package path:
+
+```sh
+mkdir .local/schema26-source
+git archive a7c3ebed19d4cfb7196108f80c6360fc9449f882 | tar -x -C .local/schema26-source
+(cd .local/schema26-source && sh scripts/package.sh baseline26 ../../dist/baseline26)
+export MEMBERID_UPGRADE_BASELINE_PACKAGE="$(node -e 'console.log(require("node:path").resolve("dist/baseline26"))')"
+npm --prefix internal/interop/saml test
+```
+
+Without the baseline variable the upgrade subtest is explicitly skipped. Linux CI supplies both ordinary packages. The fixture's small test-only Go adapter invokes the real `pg_dump` in its owned PostgreSQL container; installed PostgreSQL clients are needed by operators outside this fixture. See [database upgrade acceptance](database-upgrades.md#validation).
+
 Use a new package destination. The executable must match the host (Linux or Windows amd64); the fixture checks `BUILDINFO` and its SHA-256 entry before starting it. In PowerShell, set `$env:MEMBERID_SAML_PACKAGE` to the absolute package directory. Without this variable, the test reports a skip, not acceptance. The Linux build job supplies its native package and runs the test in CI.
 
 The fixture binds a free HTTPS port from 19001 through 19009, uses distinct random `auth-saml-*.memberid.localhost` and `sp-saml-*.memberid.localhost` names, and creates a labelled, disposable PostgreSQL 18.6 container with loopback-only database access and tmpfs data. The native executable listens on an additional ephemeral loopback HTTP port behind the fixture's HTTPS proxy. Port 19000 and the persistent development preview are not used.

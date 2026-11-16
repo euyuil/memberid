@@ -57,10 +57,23 @@ jobs:
           trap 'docker rm "$container"' EXIT
           docker cp "$container:/usr/local/bin/memberid" dist/from-container
           cmp dist/package/memberid dist/from-container
+      - name: Check out the supported schema 26 baseline
+        if: runner.os == 'Linux'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: a7c3ebed19d4cfb7196108f80c6360fc9449f882
+          path: .local/schema26-source
+          persist-credentials: false
+      - name: Package the supported schema 26 baseline
+        if: runner.os == 'Linux'
+        run: |
+          cd .local/schema26-source
+          sh scripts/package.sh baseline26 ../../dist/baseline26
       - name: Independent SAML consumer acceptance
         if: runner.os == 'Linux'
         env:
           MEMBERID_SAML_PACKAGE: ${{ github.workspace }}/dist/package
+          MEMBERID_UPGRADE_BASELINE_PACKAGE: ${{ github.workspace }}/dist/baseline26
         run: |
           npm --prefix internal/interop/saml ci --ignore-scripts
           npm --prefix internal/interop/saml test
