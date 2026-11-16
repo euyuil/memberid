@@ -42,6 +42,16 @@ Interactive consent is required unless the operator explicitly marks the registe
 
 When an authorization request supplies `id_token_hint`, the provider library validates it and MemberID retains its subject for that transaction. Completing authentication as a different Member or factor returns `login_required` to the registered callback instead of issuing a code for the other identity. This also applies to silent authorization.
 
+For ordinary Member clients, a `login_hint` containing a complete valid Member ID
+narrows selection to that Member among the current authentication factor's
+eligible bindings and registered client organization policy. It supplies no
+authentication or membership evidence and cannot override `id_token_hint`.
+Unrecognized hint formats are ignored. With `prompt=none`, an unavailable hinted
+Member returns `interaction_required`; missing or expired authentication returns
+`login_required`. A preauthorized client can reuse valid SSO to select that one
+Member without another SMS challenge. The [console identity switch](console.md#switch-the-signed-in-member)
+uses this standard authorization flow and separately checks management access.
+
 A separately registered `subjectKind=factor` client may receive a verified phone-factor subject before membership exists. This policy requires an operator-selected evidence scope and fixed audience. It does not create a Member or grant access to an organization. Ordinary clients cannot request this subject mode themselves.
 
 ## Token validation and eligibility
@@ -115,7 +125,7 @@ memberid serve --directory .local/memberid --listen 127.0.0.1:8080
 
 Member clients can authenticate with an [organization-scoped password](administration.md#organization-scoped-passwords) and receive `amr=["pwd"]`. The username belongs to the password credential; subject and profile claims retain their existing Member semantics. The password form is part of the browser authorization flow. Token requests continue to use the documented Authorization Code and Refresh Token grants.
 
-Phone, DingTalk, and Feishu can be enabled independently of password login. Omitting `--directory` starts health-only mode. File configuration and client-policy changes take effect after a restart; organization provider credentials are loaded with explicit revision checks. This initial schema is version 24. Startup refuses older schemas and preserves existing database contents.
+Phone, DingTalk, and Feishu can be enabled independently of password login. Omitting `--directory` starts health-only mode. File configuration and client-policy changes take effect after a restart; organization provider credentials are loaded with explicit revision checks. This initial schema is version 25. Startup refuses older schemas and preserves existing database contents.
 
 For the first Member, create its organization and Member through the operator CLI, then let the person verify their phone in an application login. Verification creates only the factor. An authorized operator can inspect that existing factor and explicitly bind it:
 

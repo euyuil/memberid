@@ -52,7 +52,7 @@ OIDC continues to accept `email` scope without issuing `email` or `email_verifie
 
 ## Validation and installation boundary
 
-Fresh schema version 24 stores email separately from Members and authentication factors. Older schemas are rejected without migration or data deletion. [Database upgrades](https://github.com/euyuil/memberid/issues/106) remain separate work.
+Fresh schema version 25 stores email separately from Members and authentication factors. Older schemas are rejected without migration or data deletion. [Database upgrades](https://github.com/euyuil/memberid/issues/106) remain separate work.
 
 Focused checks cover mailbox input, management and self-service boundaries, organization isolation, duplicate/stale/concurrent writes, audit rollback, and issuance locking. HTTP tests cover current-value release, missing attributes, stable NameID after edits, equal addresses on independent Members, and phone/password/DingTalk/Feishu reuse without OIDC email claims. [Independent consumer acceptance](saml-interop.md) exercises the packaged CLI and checks omitted, released, changed, and cleared email at the SP. Upstreams are synthetic; mailbox delivery, real-provider email authority, and automatic downstream account association are not claimed.
 

@@ -40,6 +40,42 @@ The [Member role definitions](roles.md) and [management scopes and actions](mana
 
 Platform administrators can switch organizations from the management scope in the header while retaining their original operator identity. The sidebar groups Organizations, Members, and Identity providers under Identity management; SAML applications under Application integrations; and Authentication events and Operation history under Activity. Switching between them keeps the selected organization. In the all-organization scope, platform administrators see members from every organization. Each row identifies its organization and opens the member detail in that organization. Organization administrators see their own organization in the header. These permissions belong exclusively to MemberID management and are not added to business application identity claims. There are no custom roles, invitations, deletion, bulk operations or OIDC client-registration pages in this version. Explicit operator binding and first-administrator recovery use the operator tools.
 
+## Switch the signed-in Member
+
+The account menu's **切换身份** action selects a different administrator Member.
+This is separate from the platform administrator's management-scope selector.
+Candidates are limited to explicit, currently eligible bindings of the phone
+factor used by the current console grant, with a current administrator assignment
+on each Member. Membership, contact attributes, another login method, or platform
+administrator privileges do not add candidates. Password and external-provider
+sessions show no phone-switch candidates; authenticate with phone to use this flow.
+
+`GET /api/identities` returns this self-service list in pages of 50, with `after`
+and `nextAfter` Member cursors. `POST /api/identity-switch` accepts `memberId` and a
+local `returnTo` page, and requires the current console cookie, exact Origin and
+CSRF value. It returns an authorization URL, not an authentication credential.
+The browser navigates to the normal OIDC Authorization Code flow with PKCE S256,
+`login_hint` identifying the selected Member, `prompt=none`, and the existing
+eight-hour authentication-age limit. The console client must be preauthorized
+for this silent flow, as in the documented setup. Missing SSO, required consent,
+or expired authentication fails the switch without silently authenticating again.
+
+The single-use login state retains the selected Member and initiating console
+session hash. The callback validates the returned subject, source session, current
+source and target eligibility and administrator assignments, and identical phone
+factor and SSO-session provenance. It creates a separate grant for the selected
+Member and atomically replaces only the initiating console session, rotating its
+CSRF value. Permissions are resolved independently for the new Member on each
+management operation. Switching does not merge roles, revoke other applications'
+grants, reset authentication time, or extend the original authentication deadline.
+
+Success returns to the new Member's console home with a full page load, clearing
+the previous identity's forms and cached data. Failure does not replace the previous
+session and returns to its stored page with an error. Browser tabs share the
+console cookie: a tab checks the current session on focus or becoming visible
+and reloads at the new identity's home when the session changed. Old forms cannot
+write with the previous CSRF value, and the replaced session is no longer usable.
+
 ## Console navigation and directories
 
 The console follows the shadcn Base Nova [Sidebar-07 example](https://ui.shadcn.com/blocks/sidebar#sidebar-07), with collapsible first-level menus and nested page links. The menu containing the current page starts open; each menu can be toggled independently. The header trigger and clickable sidebar edge toggle the desktop navigation; Ctrl+B or Command+B provides the same shortcut. Collapsing retains only first-level icons and shows menu names in tooltips on hover or keyboard focus. Clicking a parent icon opens its page links in a Dropdown Menu to the right, with a check beside the current page. Selecting a page closes the menu and keeps the sidebar collapsed. Arrow keys navigate the popup, Escape dismisses it and returns focus to the parent icon, and outside interaction also dismisses it. This popup extends the official example; the expanded sidebar and mobile Sheet continue to use inline collapsible menus. The selected page highlights its nested link and parent menu; collapsing the sidebar preserves each menu's open state. The sidebar starts expanded on page load. Below 768 CSS pixels, the same navigation becomes a modal Sheet that closes on navigation, Escape, or outside interaction. Both navigation modes preserve the selected organization. The organization selector sits at the top of the sidebar; the header contains the navigation toggle and page breadcrumbs. Breadcrumbs link back to parent pages; Member detail and filtered history retain the originating Member directory and its filters. Long names truncate without exposing entity IDs. Narrow screens retain a single-line breadcrumb, preserving the current page label in three-level paths. Clicking the current administrator's name or avatar opens an account menu beside the desktop sidebar, or within the viewport on mobile, with their name, management role, Member details, and console sign-out. The Member details link always targets the signed-in identity, independently of the selected management scope.
@@ -138,7 +174,7 @@ targets. Explicit console logout returns to `/`.
 
 Build with `sh scripts/check.sh` or `sh scripts/package.sh VERSION NEW_OUTPUT_DIRECTORY`. Both build the locked frontend before embedding it in Go. Node/npm are build dependencies; the resulting executable needs neither at runtime.
 
-Initialize a protected installation and a new database as described in [operator setup](operations.md). This increment uses fresh schema version **24**. Existing databases are not migrated or erased. Start the OIDC process before starting the console so its discovery and keys are reachable.
+Initialize a protected installation and a new database as described in [operator setup](operations.md). This increment uses fresh schema version **25**. Existing databases are not migrated or erased. Start the OIDC process before starting the console so its discovery and keys are reachable.
 
 Register a dedicated confidential Member client with no organization restriction:
 
@@ -234,6 +270,24 @@ navigation entries.
 ## Validation
 
 Database/HTTP integration tests cover scoped access, ordinary-member rejection, explicit system admission, browser-bound callbacks, replay rejection, CSRF, current eligibility, audit attribution, and last-administrator concurrency. They use synthetic phone/provider fixtures. They do not establish real SMS delivery, live DingTalk behavior, or a deployed HTTPS/proxy configuration.
+
+Identity-switch HTTP tests additionally cover a single SMS verification reused
+across independent organization and platform Members, candidate filtering and
+cursors, independent read/write permissions, preserved authentication deadlines,
+source-session consumption, concurrent callbacks, stale CSRF, callback replay,
+subject/provenance mismatches, logout, revocation, and transactional insert failure.
+OIDC hint tests require the current binding and registered client policy and
+preserve the independent `id_token_hint` subject constraint.
+
+A separate temporary HTTPS deployment on 2026-11-16 exercised the packaged
+implementation with synthetic seeded phone-session evidence. Desktop and
+390-pixel browser inspection covered the account menu, identity dialog, completed
+organization/platform switches, foreign-organization denial and stale-CSRF
+rejection. The other-tab session handler was exercised by dispatching a focus
+event because the headless browser reports both pages as visible and focused.
+The isolated browser context ignored local certificate errors; separate HTTPS
+requests verified both endpoints against the generated development CA. This
+establishes UI behavior, not browser trust-store acceptance or real SMS delivery.
 
 For targeted browser inspection, build the frontend and run the opt-in fixture against a disposable PostgreSQL server:
 

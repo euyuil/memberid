@@ -125,15 +125,23 @@ func (s *Service) login(w http.ResponseWriter, r *http.Request) {
 		problem(w, 400, "invalid_request")
 		return
 	}
-	state, browser, nonce, verifier := config.RandomSecret(), config.RandomSecret(), config.RandomSecret(), oauth2.GenerateVerifier()
-	err = s.sessions.BeginLogin(r.Context(), state, browser, consolestate.Login{Verifier: verifier, Nonce: nonce, ReturnTo: returnTo})
+	address, err := s.beginLogin(w, r, consolestate.Login{ReturnTo: returnTo})
 	if err != nil {
 		problem(w, 503, "login_unavailable")
 		return
 	}
+	http.Redirect(w, r, address, http.StatusSeeOther)
+}
+
+func (s *Service) beginLogin(w http.ResponseWriter, r *http.Request, login consolestate.Login, options ...oauth2.AuthCodeOption) (string, error) {
+	state, browser := config.RandomSecret(), config.RandomSecret()
+	login.Nonce, login.Verifier = config.RandomSecret(), oauth2.GenerateVerifier()
+	if err := s.sessions.BeginLogin(r.Context(), state, browser, login); err != nil {
+		return "", err
+	}
 	s.cookie(w, "login", browser, 300)
-	http.Redirect(w, r, s.party.OAuthConfig().AuthCodeURL(state, oauth2.S256ChallengeOption(verifier),
-		oauth2.SetAuthURLParam("nonce", nonce), oauth2.SetAuthURLParam("max_age", "28800")), http.StatusSeeOther)
+	options = append(options, oauth2.S256ChallengeOption(login.Verifier), oauth2.SetAuthURLParam("nonce", login.Nonce), oauth2.SetAuthURLParam("max_age", "28800"))
+	return s.party.OAuthConfig().AuthCodeURL(state, options...), nil
 }
 
 func (s *Service) callback(w http.ResponseWriter, r *http.Request) {
@@ -156,52 +164,87 @@ func (s *Service) callback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.cookie(w, "login", "", -1)
+	failure := "login_failed"
+	var source session
+	if login.SwitchMemberID != "" {
+		failure = "identity_switch_failed"
+		if config.SecretHash(s.cookieValue(r, "session")) != login.SourceSessionHash {
+			loginFailure(w, r, returnTo, failure)
+			return
+		}
+		source, err = s.session(r)
+		if err != nil {
+			loginFailure(w, r, returnTo, failure)
+			return
+		}
+	}
 	if q.Get("error") != "" || q.Get("code") == "" {
-		loginFailure(w, r, returnTo, "login_failed")
+		loginFailure(w, r, returnTo, failure)
 		return
 	}
 	tokens, err := rp.CodeExchange[*oidc.IDTokenClaims](context.WithValue(r.Context(), nonceKey{}, nonce), q.Get("code"), s.party, rp.WithCodeVerifier(verifier))
 	if err != nil {
-		loginFailure(w, r, returnTo, "login_failed")
+		loginFailure(w, r, returnTo, failure)
 		return
 	}
 	claims := tokens.IDTokenClaims
+	if login.SwitchMemberID != "" && claims.Subject != login.SwitchMemberID {
+		loginFailure(w, r, returnTo, failure)
+		return
+	}
 	// CodeExchange verifies the signed ID Token and its at_hash. Require that
 	// binding before using the access token's identifier to select the exact grant.
 	var access oidc.AccessTokenClaims
 	if claims.AccessTokenHash == "" {
-		loginFailure(w, r, returnTo, "login_failed")
+		loginFailure(w, r, returnTo, failure)
 		return
 	}
 	if _, err = oidc.ParseToken(tokens.AccessToken, &access); err != nil {
-		loginFailure(w, r, returnTo, "login_failed")
+		loginFailure(w, r, returnTo, failure)
 		return
 	}
 	grantID, err := s.sessions.Grant(r.Context(), claims.SessionID, s.clientID, claims.Subject, access.JWTID)
 	if err != nil {
-		loginFailure(w, r, returnTo, "login_failed")
+		loginFailure(w, r, returnTo, failure)
 		return
 	}
-	if _, err = s.management.Actor(r.Context(), claims.Subject, grantID); err != nil {
+	if login.SwitchMemberID != "" {
+		if err := s.management.CheckConsoleIdentity(r.Context(), source.principal(), claims.Subject, grantID); err != nil {
+			loginFailure(w, r, returnTo, failure)
+			return
+		}
+	} else if _, err = s.management.Actor(r.Context(), claims.Subject, grantID); err != nil {
 		loginFailure(w, r, returnTo, "not_administrator")
 		return
 	}
 	absolute := claims.AuthTime.AsTime().Add(8 * time.Hour)
 	if !absolute.After(time.Now()) {
-		loginFailure(w, r, returnTo, "login_failed")
+		loginFailure(w, r, returnTo, failure)
 		return
 	}
 	secret, csrf := config.RandomSecret(), config.RandomSecret()
-	err = s.sessions.CreateSession(r.Context(), secret, consolestate.Session{MemberID: claims.Subject, GrantID: grantID, CSRF: csrf}, absolute)
+	next := consolestate.Session{MemberID: claims.Subject, GrantID: grantID, CSRF: csrf}
+	if login.SwitchMemberID != "" {
+		err = s.sessions.SwitchSession(r.Context(), source.secret, secret, next, absolute)
+	} else {
+		err = s.sessions.CreateSession(r.Context(), secret, next, absolute)
+	}
 	if err != nil {
-		problem(w, 503, "login_unavailable")
+		if login.SwitchMemberID != "" {
+			loginFailure(w, r, returnTo, failure)
+		} else {
+			problem(w, 503, "login_unavailable")
+		}
 		return
 	}
 	// Rotate the browser's console session without retaining bearer tokens.
-	if old := s.cookieValue(r, "session"); old != "" {
+	if old := s.cookieValue(r, "session"); old != "" && login.SwitchMemberID == "" {
 		_ = s.sessions.DeleteSession(r.Context(), old)
 	}
 	s.cookie(w, "session", secret, int(time.Until(absolute).Seconds()))
+	if login.SwitchMemberID != "" {
+		returnTo = "/"
+	}
 	http.Redirect(w, r, returnTo, 303)
 }
 

@@ -41,7 +41,7 @@ Only the negative-response driver receives the synthetic IdP private key to crea
 
 ## Observed acceptance and limits
 
-On 2026-11-16, the Windows amd64 `0.0.0-email104` distribution passed all 15 scenarios (16 passing test results including the parent) with Go 1.27.4, Node 26.13.1, PostgreSQL 18.6 and Node-SAML 5.2.0. The added managed-email scenario exercised the packaged CLI and an authenticated SP session through omission, explicit release, update and clearing while preserving NameID.
+On 2026-11-16, the Windows amd64 `0.0.0-email104-final` distribution with schema 25 passed all 15 scenarios (16 passing test results including the parent) with Go 1.27.4, Node 26.13.1, PostgreSQL 18.6 and Node-SAML 5.2.0. The added managed-email scenario exercised the packaged CLI and an authenticated SP session through omission, explicit release, update and clearing while preserving NameID.
 
 On 2026-11-16, the Windows amd64 `saml101` distribution built with Go 1.27.4 and Node.js 26.13.1 passed all 12 consumer scenarios (13 test results including the parent), using HTTPS port 19001 and the pinned PostgreSQL 18.6 image. Its executable SHA-256 was `4a27005b0b6e96962349f80201da2fba9aa12a12f9bd8c1e1682640d1674bdef`. The temporary fixture was removed after the run.
 
