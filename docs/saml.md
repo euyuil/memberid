@@ -18,7 +18,7 @@ Add to `memberid.json`:
 }
 ```
 
-Paths must be local to the installation directory. Private-file protections match the existing signing-key loader. Missing, mismatched, expired, or not-yet-valid material prevents startup. Live metadata and issuance also check certificate usability. Configuration is loaded at startup; restart after changes. There is no automated certificate issuance, renewal, rollover, or overlapping IdP-key publication yet. Expiry monitoring and coordinated replacement are operator responsibilities.
+Paths must be local to the installation directory. Private-file protections match the existing signing-key loader. Missing, mismatched, expired, or not-yet-valid material prevents startup. Live metadata and issuance also check certificate usability. Configuration is loaded at startup; restart after changes. [SAML signing operations](saml-signing.md) provide expiry inspection, public certificate export, guarded manual activation, rollback, and a consistent backup/restore procedure. Certificate issuance, automatic renewal, and overlapping IdP-key publication are not implemented; SP trust updates and process restarts remain explicit operator responsibilities.
 
 Register one organization-scoped SP using a JSON file:
 
@@ -88,7 +88,7 @@ Upstream callbacks recheck current organization, Member, binding, factor, and pr
 
 ## Boundaries and validation
 
-This profile does not implement IdP-initiated SSO, Artifact/SOAP bindings, encrypted assertions, SLO, SCIM, trusted email release, legacy subject mapping, or managed signing-key rotation. These remain separate work. Shared authentication tables are protocol-neutral; OIDC grants, codes, and token endpoints remain OIDC-only.
+This profile does not implement IdP-initiated SSO, Artifact/SOAP bindings, encrypted assertions, SLO, SCIM, trusted email release, legacy subject mapping, or automatic signing-key rotation. These remain separate work. Shared authentication tables are protocol-neutral; OIDC grants, codes, and token endpoints remain OIDC-only.
 
 Run `go test ./internal/samlprovider ./internal/config` for parsing, signing, metadata, and key configuration. Run the [disposable PostgreSQL tests](../CONTRIBUTING.md#postgresql-integration-tests) for registry authority, revisions, persistent NameID allocation, HTTP login through each synthetic provider, concurrent completion, policy invalidation, shared OIDC SSO, and protocol separation. Real DingTalk/Feishu/SMS calls are not made by these tests. Actual GitLab SAML compatibility and complete SAML conformance are not established by a simulated SP or by the existing GitLab OIDC acceptance check.
 

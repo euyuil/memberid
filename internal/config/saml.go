@@ -23,6 +23,16 @@ type SAMLSigning struct {
 }
 
 func (signing *SAMLSigning) Validate(now time.Time) error {
+	if err := signing.validateKeyPair(); err != nil {
+		return err
+	}
+	if now.Before(signing.Certificate.NotBefore) || !now.Before(signing.Certificate.NotAfter) {
+		return errors.New("SAML signing certificate is not currently usable")
+	}
+	return nil
+}
+
+func (signing *SAMLSigning) validateKeyPair() error {
 	if signing == nil || signing.Key == nil || signing.Certificate == nil {
 		return errors.New("SAML signing key and certificate are required")
 	}
@@ -31,13 +41,21 @@ func (signing *SAMLSigning) Validate(now time.Time) error {
 	if !ok || signing.Key.N.BitLen() < 2048 || !signing.Key.PublicKey.Equal(public) || signing.Key.Validate() != nil {
 		return errors.New("SAML requires a matching RSA key and certificate of at least 2048 bits")
 	}
-	if now.Before(certificate.NotBefore) || !now.Before(certificate.NotAfter) || certificate.KeyUsage != 0 && certificate.KeyUsage&x509.KeyUsageDigitalSignature == 0 {
-		return errors.New("SAML signing certificate is not currently usable")
+	if certificate.KeyUsage != 0 && certificate.KeyUsage&x509.KeyUsageDigitalSignature == 0 {
+		return errors.New("SAML signing certificate does not permit digital signatures")
 	}
 	return nil
 }
 
 func LoadSAMLSigning(directory string, settings *SAML) (*SAMLSigning, error) {
+	result, err := readSAMLSigning(directory, settings)
+	if err != nil || result == nil {
+		return result, err
+	}
+	return result, result.Validate(time.Now())
+}
+
+func readSAMLSigning(directory string, settings *SAML) (*SAMLSigning, error) {
 	if settings == nil || !settings.Enabled {
 		return nil, nil
 	}
@@ -55,7 +73,7 @@ func LoadSAMLSigning(directory string, settings *SAML) (*SAMLSigning, error) {
 		return nil, errors.New("cannot load SAML signing certificate")
 	}
 	block, rest := pem.Decode(data)
-	if block == nil || block.Type != "CERTIFICATE" || len(bytes.TrimSpace(rest)) != 0 {
+	if block == nil || block.Type != "CERTIFICATE" || len(block.Headers) != 0 || len(bytes.TrimSpace(rest)) != 0 {
 		return nil, errors.New("SAML requires exactly one PEM certificate")
 	}
 	certificate, err := x509.ParseCertificate(block.Bytes)
@@ -63,5 +81,5 @@ func LoadSAMLSigning(directory string, settings *SAML) (*SAMLSigning, error) {
 		return nil, errors.New("invalid SAML signing certificate")
 	}
 	result := &SAMLSigning{Key: key, Certificate: certificate}
-	return result, result.Validate(time.Now())
+	return result, result.validateKeyPair()
 }

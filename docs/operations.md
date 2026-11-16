@@ -108,6 +108,8 @@ Registry edits acquire an exclusive `.clients.lock`, validate the whole configur
 
 ## Signing-key material
 
+This section covers OIDC signing keys. For SAML certificate inspection, public export, manual activation and recovery, see [SAML signing operations](saml-signing.md).
+
 Private keys may be PKCS#8 or PKCS#1 PEM, with RSA keys of at least 2048 bits. Newly generated keys use 3072 bits. The public bundle contains one or more PKIX `PUBLIC KEY` PEM blocks, including the active signing key. Key identifiers are derived from the public key, so changing a filename does not change its identity. Validation rejects missing, malformed, duplicate, or mismatched keys.
 
 Retain old public keys when preparing a rollover, and retain old private material only in protected backups if operationally required. Do not remove verification keys while issued tokens can still be accepted. The configured public bundle is published through JWKS. Coordinate private-key replacement, retained public keys, and server restarts; deployed rollover acceptance remains pending.

@@ -2,8 +2,6 @@ package main
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -16,7 +14,10 @@ import (
 
 func manageSAML(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	if len(args) < 2 {
-		return errors.New("usage: memberid saml sp <apply|list|inspect|disable|retire> or saml signing inspect")
+		return errors.New("usage: memberid saml sp <apply|list|inspect|disable|retire> or saml signing <inspect|export-certificate|activate>")
+	}
+	if args[0] == "signing" {
+		return manageSAMLSigning(args[1:], stdout, stderr)
 	}
 	flags := flag.NewFlagSet("saml "+args[0]+" "+args[1], flag.ContinueOnError)
 	flags.SetOutput(stderr)
@@ -36,7 +37,7 @@ func manageSAML(ctx context.Context, args []string, stdout, stderr io.Writer) er
 		default:
 			return errors.New("unknown SAML SP operation")
 		}
-	} else if args[0] != "signing" || args[1] != "inspect" {
+	} else {
 		return errors.New("unknown SAML operation")
 	}
 	if err := flags.Parse(args[2:]); err != nil {
@@ -51,14 +52,6 @@ func manageSAML(ctx context.Context, args []string, stdout, stderr io.Writer) er
 	loaded, err := config.Load(*directory)
 	if err != nil {
 		return err
-	}
-	if args[0] == "signing" {
-		if loaded.SAMLSigning == nil {
-			return errors.New("SAML signing is not enabled")
-		}
-		cert := loaded.SAMLSigning.Certificate
-		fingerprint := sha256.Sum256(cert.Raw)
-		return json.NewEncoder(stdout).Encode(map[string]any{"sha256": hex.EncodeToString(fingerprint[:]), "notBefore": cert.NotBefore, "notAfter": cert.NotAfter})
 	}
 	store, err := identity.Open(ctx, os.Getenv("MEMBERID_DATABASE_URL"))
 	if err != nil {
