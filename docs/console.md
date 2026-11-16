@@ -47,6 +47,8 @@ Organization, Member, identity-provider, and operation-history lists share a dir
 
 Member search and filters share a compact toolbar directly above the table, without a second directory title. Search continues to accept a complete Member ID even though IDs are not displayed in rows. Opening a Member from a filtered directory and returning preserves the original scope and filters. Page errors appear in a persistent, dismissible notification without moving the directory controls. Dialog validation continues to use its reserved feedback area.
 
+Organization details show an editable name with an explicit Save action and reserved validation, request-error, and success feedback. A successful save updates the displayed organization name without reloading the page. The organization ID remains read-only. Enabled/disabled status and its separate confirmation action are grouped below the profile; only platform administrators can change ordinary organization status, and the disable confirmation retains its sign-in warning.
+
 ## Organization identity providers
 
 Choose an organization, then open **身份提供商** (Identity providers). This directory lists the configured DingTalk and Feishu applications. Add multiple applications of either type with distinct application IDs and recognizable display names. Edit the display name, rotate the application secret, or enable and disable a source independently. The provider type, application ID, and tenant or corporation ID identify the binding namespace and stay fixed after creation. A replacement application gets its own row.
