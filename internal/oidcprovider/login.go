@@ -92,7 +92,8 @@ func (service *Service) members(r *http.Request, request *authorizationRequest, 
 	}
 	filtered := members[:0]
 	for _, member := range members {
-		if client.registration.OrganizationID == "" || member.OrganizationID == client.registration.OrganizationID {
+		if (client.registration.OrganizationID == "" || member.OrganizationID == client.registration.OrganizationID) &&
+			(request.SAML != nil || !identity.ValidID(request.Input.LoginHint, identity.MemberKind) || member.ID == request.Input.LoginHint) {
 			filtered = append(filtered, member)
 		}
 	}

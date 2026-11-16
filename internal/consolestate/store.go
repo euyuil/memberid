@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/euyuil/memberid/internal/config"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -17,7 +18,8 @@ type Store struct {
 func New(pool *pgxpool.Pool) *Store { return &Store{pool: pool} }
 
 type Login struct {
-	Verifier, Nonce, ReturnTo string
+	Verifier, Nonce, ReturnTo         string
+	SwitchMemberID, SourceSessionHash string
 }
 
 type Session struct {
@@ -30,14 +32,14 @@ func (store *Store) BeginLogin(ctx context.Context, state, browser string, login
 		_, err = store.pool.Exec(ctx, "DELETE FROM console_sessions WHERE expires_at<clock_timestamp() OR absolute_expires_at<clock_timestamp()")
 	}
 	if err == nil {
-		_, err = store.pool.Exec(ctx, "INSERT INTO console_logins(state_hash,browser_hash,verifier,nonce,return_to,expires_at) VALUES($1,$2,$3,$4,$5,clock_timestamp()+interval '5 minutes')", config.SecretHash(state), config.SecretHash(browser), login.Verifier, login.Nonce, login.ReturnTo)
+		_, err = store.pool.Exec(ctx, "INSERT INTO console_logins(state_hash,browser_hash,verifier,nonce,return_to,switch_member_id,source_session_hash,expires_at) VALUES($1,$2,$3,$4,$5,$6,$7,clock_timestamp()+interval '5 minutes')", config.SecretHash(state), config.SecretHash(browser), login.Verifier, login.Nonce, login.ReturnTo, login.SwitchMemberID, login.SourceSessionHash)
 	}
 	return err
 }
 
 func (store *Store) ConsumeLogin(ctx context.Context, state, browser string) (Login, error) {
 	var login Login
-	err := store.pool.QueryRow(ctx, "DELETE FROM console_logins WHERE state_hash=$1 AND browser_hash=$2 AND expires_at>clock_timestamp() RETURNING verifier,nonce,return_to", config.SecretHash(state), config.SecretHash(browser)).Scan(&login.Verifier, &login.Nonce, &login.ReturnTo)
+	err := store.pool.QueryRow(ctx, "DELETE FROM console_logins WHERE state_hash=$1 AND browser_hash=$2 AND expires_at>clock_timestamp() RETURNING verifier,nonce,return_to,switch_member_id,source_session_hash", config.SecretHash(state), config.SecretHash(browser)).Scan(&login.Verifier, &login.Nonce, &login.ReturnTo, &login.SwitchMemberID, &login.SourceSessionHash)
 	return login, err
 }
 
@@ -67,4 +69,22 @@ func (store *Store) Session(ctx context.Context, secret string) (Session, error)
 func (store *Store) DeleteSession(ctx context.Context, secret string) error {
 	_, err := store.pool.Exec(ctx, "DELETE FROM console_sessions WHERE secret_hash=$1", config.SecretHash(secret))
 	return err
+}
+
+// SwitchSession replaces only the initiating console session. Competing switches
+// and a logout invalidate that source, while a failed insert preserves it.
+func (store *Store) SwitchSession(ctx context.Context, previous, secret string, session Session, absolute time.Time) error {
+	return pgx.BeginFunc(ctx, store.pool, func(tx pgx.Tx) error {
+		result, err := tx.Exec(ctx, `DELETE FROM console_sessions WHERE secret_hash=$1
+ AND expires_at>clock_timestamp() AND absolute_expires_at>clock_timestamp()`, config.SecretHash(previous))
+		if err != nil {
+			return err
+		}
+		if result.RowsAffected() != 1 {
+			return pgx.ErrNoRows
+		}
+		_, err = tx.Exec(ctx, `INSERT INTO console_sessions(secret_hash,grant_id,member_id,csrf,expires_at,absolute_expires_at)
+ VALUES($1,$2,$3,$4,LEAST($5,clock_timestamp()+interval '30 minutes'),$5)`, config.SecretHash(secret), session.GrantID, session.MemberID, session.CSRF, absolute)
+		return err
+	})
 }

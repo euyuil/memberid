@@ -15,6 +15,8 @@ func TestManagementServiceRejectsOtherEntryContexts(t *testing.T) {
 	account := AccountPrincipal("session", member, factor, "00000000-0000-4000-8000-000000000001")
 	for _, principal := range []Principal{{}, OperatorPrincipal(), InstallationManagerPrincipal(), account} {
 		operations := []func() error{
+			func() error { _, err := service.ConsoleIdentities(t.Context(), principal, "", 50); return err },
+			func() error { return service.CheckConsoleIdentity(t.Context(), principal, member, "") },
 			func() error { _, err := service.SAMLServiceProviders(t.Context(), principal, org, "", 50); return err },
 			func() error {
 				_, err := service.SAMLServiceProvider(t.Context(), principal, org, "example-sp")
