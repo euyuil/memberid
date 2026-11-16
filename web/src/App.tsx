@@ -94,6 +94,7 @@ import {
 import { Providers, type ProviderDirectory } from "@/Providers"
 import { SAMLServiceProviders } from "@/SAMLServiceProviders"
 import { MemberPassword } from "@/MemberPassword"
+import { OrganizationDetails, type Organization } from "@/OrganizationDetails"
 import {
   passwordUsernameError,
   passwordUsernamePattern,
@@ -113,7 +114,6 @@ type Actor = {
   platform: boolean
 }
 type Session = { actor: Actor; csrf: string }
-type Organization = { id: string; name: string; status: string }
 type Member = {
   id: string
   organizationId: string
@@ -1101,72 +1101,49 @@ export default function App() {
               !membersView &&
               !saml &&
               !providers && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle role="heading" aria-level={2}>
-                      组织资料
-                    </CardTitle>
-                    <CardAction>
-                      <Status active={data.organization.status === "enabled"} />
-                    </CardAction>
-                  </CardHeader>
-                  <CardContent>
-                    <dl className="max-w-xl">
-                      <dt>组织 ID</dt>
-                      <dd>
-                        <RecordIdentifier value={org} label="组织 ID" />
-                      </dd>
-                    </dl>
-                  </CardContent>
-                  <CardFooter className="flex-wrap gap-2">
-                    <Button
-                      variant="outline"
-                      onClick={() =>
-                        rename(
-                          "name",
-                          data.organization!.name,
-                          base,
-                          "修改组织名称"
-                        )
-                      }
-                    >
-                      修改名称
-                    </Button>
-                    {actor.platform && org !== "org_system" && (
-                      <Button
-                        variant={
-                          data.organization.status === "enabled"
-                            ? "destructive"
-                            : "outline"
-                        }
-                        onClick={() =>
-                          setAction({
-                            title:
-                              data.organization!.status === "enabled"
-                                ? "停用组织"
-                                : "恢复组织",
-                            description:
-                              "停用后，该组织成员无法通过后续登录和身份有效性检查。已有业务系统会话由各应用管理。",
-                            path: base,
-                            method: "PATCH",
-                            body: {
-                              status:
-                                data.organization!.status === "enabled"
-                                  ? "disabled"
-                                  : "enabled",
-                            },
-                            destructive:
-                              data.organization!.status === "enabled",
-                          })
-                        }
-                      >
-                        {data.organization.status === "enabled"
+                <OrganizationDetails
+                  key={data.organization.id}
+                  organization={data.organization}
+                  canChangeStatus={actor.platform && org !== "org_system"}
+                  save={(name) =>
+                    request<Organization>(base, {
+                      method: "PATCH",
+                      headers: {
+                        "Content-Type": "application/json",
+                        "X-CSRF-Token": session.csrf,
+                      },
+                      body: JSON.stringify({ name }),
+                    })
+                  }
+                  onSaved={(organization) =>
+                    setData((current) =>
+                      current.organization?.id === organization.id
+                        ? { ...current, organization }
+                        : current
+                    )
+                  }
+                  onStatusChange={() =>
+                    setAction({
+                      title:
+                        data.organization!.status === "enabled"
                           ? "停用组织"
-                          : "恢复组织"}
-                      </Button>
-                    )}
-                  </CardFooter>
-                </Card>
+                          : "启用组织",
+                      description:
+                        data.organization!.status === "enabled"
+                          ? "停用后，该组织成员无法通过后续登录和身份有效性检查。已有业务系统会话由各应用管理。"
+                          : undefined,
+                      path: base,
+                      method: "PATCH",
+                      body: {
+                        status:
+                          data.organization!.status === "enabled"
+                            ? "disabled"
+                            : "enabled",
+                      },
+                      destructive: data.organization!.status === "enabled",
+                    })
+                  }
+                />
               )}
             {data.members && (
               <section aria-label="成员列表">
