@@ -1,6 +1,10 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
-import { signingCertificates } from "../src/saml-service-providers.ts"
+import {
+  registrationInput,
+  signingCertificates,
+} from "../src/saml-service-providers.ts"
+import type { SAMLServiceProvider } from "../src/saml-service-providers.ts"
 import { routeURL, parseRoute } from "../src/routes.ts"
 import { describeEvent } from "../src/operation-history.ts"
 
@@ -18,6 +22,25 @@ test("certificate input preserves complete blocks and rejects extra material", (
     Array(5).fill(certificate).join("\n"),
   ])
     assert.throws(() => signingCertificates(invalid))
+})
+
+test("registration edits preserve an explicit legacy NameID format", () => {
+  const item: SAMLServiceProvider = {
+    id: "legacy-sp",
+    displayName: "Legacy app",
+    organizationId: "org_example",
+    entityId: "https://sp.example.test/metadata",
+    acsUrl: "https://sp.example.test/acs",
+    nameIdFormat: "unspecified",
+    enabled: false,
+    allowUnsignedRequests: true,
+    signingCertificates: null,
+    preauthorized: false,
+    attributes: null,
+    revision: 2,
+    retired: false,
+  }
+  assert.equal(registrationInput(item).nameIdFormat, "unspecified")
 })
 
 test("SAML directory links retain scope, cursor and selected registration", () => {

@@ -44,6 +44,9 @@ func TestSAMLRegistryAuthorityRevisionsAndPermanentSubjects(t *testing.T) {
 	for range 4 {
 		group.Go(func() {
 			err := pgx.BeginFunc(t.Context(), store.pool, func(tx pgx.Tx) error {
+				if _, err := LockSAMLServiceProvider(t.Context(), tx, sp.ID); err != nil {
+					return err
+				}
 				value, err := SAMLNameID(t.Context(), tx, sp, member.ID, true)
 				if err == nil {
 					values <- value

@@ -107,6 +107,9 @@ export function describeEvent(event: ManagementEvent) {
     case "binding.revoke":
       label = "撤销绑定"
       break
+    case "saml.nameId.provision":
+      label = "预设 SAML NameID"
+      break
     case "saml.serviceProvider.configure":
       label =
         changes.retired === true
@@ -117,6 +120,7 @@ export function describeEvent(event: ManagementEvent) {
       if (changes.retired === true || changes.revision === 1) break
       field("displayName", "重命名 SAML 应用", name)
       field("acsUrl", "更新 ACS", name)
+      field("nameIdFormat", "更新 NameID 格式", name)
       field(
         "enabled",
         changes.enabled ? "启用 SAML 应用" : "停用 SAML 应用",

@@ -119,7 +119,11 @@ func verifySAMLResponse(t *testing.T, f *fixture, sp identity.SAMLServiceProvide
 			t.Fatal("assertion signature", err)
 		}
 		a := response.Assertion
-		if a == nil || a.Issuer.Value != response.Issuer.Value || a.Subject.NameID.Format != string(saml.PersistentNameIDFormat) || a.Subject.NameID.SPNameQualifier != sp.EntityID {
+		format := saml.PersistentNameIDFormat
+		if sp.NameIDFormat == "unspecified" {
+			format = saml.UnspecifiedNameIDFormat
+		}
+		if a == nil || a.Issuer.Value != response.Issuer.Value || a.Subject.NameID.Format != string(format) || a.Subject.NameID.NameQualifier != response.Issuer.Value || a.Subject.NameID.SPNameQualifier != sp.EntityID {
 			t.Fatal("incorrect subject")
 		}
 		now := time.Now()

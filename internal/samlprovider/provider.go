@@ -77,7 +77,7 @@ func New(issuer string, signing *config.SAMLSigning) (*Provider, error) {
 	}
 	metadataURL, _ := url.Parse(issuer + MetadataPath)
 	ssoURL, _ := url.Parse(issuer + SSOPath)
-	return &Provider{signing: signing, idp: saml.IdentityProvider{Key: signing.Key, Certificate: signing.Certificate, MetadataURL: *metadataURL, SSOURL: *ssoURL, SignatureMethod: dsig.RSASHA256SignatureMethod, RejectSHA1Signatures: true, StrictACSBinding: true, NameIDFormats: []saml.NameIDFormat{saml.PersistentNameIDFormat}, Logger: log.New(io.Discard, "", 0)}}, nil
+	return &Provider{signing: signing, idp: saml.IdentityProvider{Key: signing.Key, Certificate: signing.Certificate, MetadataURL: *metadataURL, SSOURL: *ssoURL, SignatureMethod: dsig.RSASHA256SignatureMethod, RejectSHA1Signatures: true, StrictACSBinding: true, NameIDFormats: []saml.NameIDFormat{saml.PersistentNameIDFormat, saml.UnspecifiedNameIDFormat}, Logger: log.New(io.Discard, "", 0)}}, nil
 }
 
 func (provider *Provider) Metadata(w http.ResponseWriter, r *http.Request) {
@@ -240,7 +240,11 @@ func (provider *Provider) Parse(r *http.Request, sp identity.SAMLServiceProvider
 	if input.NameIDPolicy != nil {
 		policy := input.NameIDPolicy
 		txn.AllowCreate = policy.AllowCreate != nil && *policy.AllowCreate
-		if policy.Format != nil && *policy.Format != "" && *policy.Format != string(saml.PersistentNameIDFormat) || policy.SPNameQualifier != nil && *policy.SPNameQualifier != "" && *policy.SPNameQualifier != sp.EntityID {
+		format, err := nameIDFormat(sp)
+		if err != nil {
+			return nil, "", err
+		}
+		if policy.Format != nil && *policy.Format != "" && *policy.Format != string(saml.UnspecifiedNameIDFormat) && *policy.Format != string(format) || policy.SPNameQualifier != nil && *policy.SPNameQualifier != "" && *policy.SPNameQualifier != sp.EntityID {
 			return txn, "InvalidNameIDPolicy", nil
 		}
 	}
@@ -310,10 +314,25 @@ type Authentication struct {
 	AuthenticatedAt, ExpiresAt            time.Time
 }
 
+func nameIDFormat(sp identity.SAMLServiceProvider) (saml.NameIDFormat, error) {
+	switch sp.NameIDFormat {
+	case "", "persistent":
+		return saml.PersistentNameIDFormat, nil
+	case "unspecified":
+		return saml.UnspecifiedNameIDFormat, nil
+	default:
+		return "", ErrRequest
+	}
+}
+
 // Response signs in memory; the host must commit transaction consumption before
 // exposing the returned form to the browser.
 func (provider *Provider) Response(r *http.Request, txn *Transaction, sp identity.SAMLServiceProvider, auth Authentication, status string, now time.Time) ([]byte, error) {
 	if err := provider.signing.Validate(now); err != nil {
+		return nil, err
+	}
+	format, err := nameIDFormat(sp)
+	if err != nil {
 		return nil, err
 	}
 	md := metadata(sp)
@@ -335,7 +354,7 @@ func (provider *Provider) Response(r *http.Request, txn *Transaction, sp identit
 		if !expires.After(now) || auth.NameID == "" {
 			return nil, ErrRequest
 		}
-		req.Assertion = &saml.Assertion{ID: "_" + rand.Text(), Version: "2.0", IssueInstant: now, Issuer: saml.Issuer{Value: idp.MetadataURL.String()}, Subject: &saml.Subject{NameID: &saml.NameID{Format: string(saml.PersistentNameIDFormat), NameQualifier: idp.MetadataURL.String(), SPNameQualifier: sp.EntityID, Value: auth.NameID}, SubjectConfirmations: []saml.SubjectConfirmation{{Method: "urn:oasis:names:tc:SAML:2.0:cm:bearer", SubjectConfirmationData: &saml.SubjectConfirmationData{InResponseTo: txn.RequestID, Recipient: sp.ACSURL, NotOnOrAfter: expires}}}}, Conditions: &saml.Conditions{NotBefore: now.Add(-ClockSkew), NotOnOrAfter: expires, AudienceRestrictions: []saml.AudienceRestriction{{Audience: saml.Audience{Value: sp.EntityID}}}}, AuthnStatements: []saml.AuthnStatement{{AuthnInstant: auth.AuthenticatedAt, SessionIndex: auth.SessionID, SessionNotOnOrAfter: &auth.ExpiresAt, AuthnContext: saml.AuthnContext{AuthnContextClassRef: &saml.AuthnContextClassRef{Value: ContextUnspecified}}}}}
+		req.Assertion = &saml.Assertion{ID: "_" + rand.Text(), Version: "2.0", IssueInstant: now, Issuer: saml.Issuer{Value: idp.MetadataURL.String()}, Subject: &saml.Subject{NameID: &saml.NameID{Format: string(format), NameQualifier: idp.MetadataURL.String(), SPNameQualifier: sp.EntityID, Value: auth.NameID}, SubjectConfirmations: []saml.SubjectConfirmation{{Method: "urn:oasis:names:tc:SAML:2.0:cm:bearer", SubjectConfirmationData: &saml.SubjectConfirmationData{InResponseTo: txn.RequestID, Recipient: sp.ACSURL, NotOnOrAfter: expires}}}}, Conditions: &saml.Conditions{NotBefore: now.Add(-ClockSkew), NotOnOrAfter: expires, AudienceRestrictions: []saml.AudienceRestriction{{Audience: saml.Audience{Value: sp.EntityID}}}}, AuthnStatements: []saml.AuthnStatement{{AuthnInstant: auth.AuthenticatedAt, SessionIndex: auth.SessionID, SessionNotOnOrAfter: &auth.ExpiresAt, AuthnContext: saml.AuthnContext{AuthnContextClassRef: &saml.AuthnContextClassRef{Value: ContextUnspecified}}}}}
 		attributes := []saml.Attribute{}
 		for _, claim := range []struct{ name, value string }{{"DisplayName", auth.DisplayName}, {"Email", auth.Email}} {
 			if slices.Contains(sp.Attributes, claim.name) && claim.value != "" {

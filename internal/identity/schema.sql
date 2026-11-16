@@ -1,7 +1,7 @@
 CREATE TABLE memberid_schema (
-    version integer PRIMARY KEY CHECK (version = 25)
+    version integer PRIMARY KEY CHECK (version = 26)
 );
-INSERT INTO memberid_schema(version) VALUES (25);
+INSERT INTO memberid_schema(version) VALUES (26);
 
 CREATE TABLE organizations (
     id text COLLATE "C" PRIMARY KEY CHECK (id = 'org_system' OR id ~ '^org_[0-9bcdfghjkmnpqrstvwxz]{27}$'),
@@ -114,7 +114,10 @@ CREATE TABLE saml_service_providers (
 CREATE TABLE saml_name_ids (
     service_provider_id text COLLATE "C" NOT NULL REFERENCES saml_service_providers(id),
     member_id text COLLATE "C" NOT NULL REFERENCES members(id),
-    value text COLLATE "C" NOT NULL,
+    value text COLLATE "C" NOT NULL CHECK (char_length(value) BETWEEN 1 AND 256),
+    source text NOT NULL DEFAULT 'generated' CHECK (source IN ('generated', 'legacy')),
+    created_by text NOT NULL DEFAULT 'protocol',
+    created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
     PRIMARY KEY (service_provider_id, member_id),
     UNIQUE (service_provider_id, value)
 );

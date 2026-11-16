@@ -34,12 +34,15 @@ Acceptance covers:
 - Correctly signed negative responses for Audience, Recipient, Destination, response and subject InResponseTo, issuer, expired Conditions, future NotBefore, and expired bearer confirmation. Each must fail for the intended constraint and leave the caller unauthenticated.
 - Signature tampering, and checks that captured MemberID output excludes the tested assertion, NameID, and password. The fixture does not print raw protocol messages or credentials.
 - Blocking the Member through the ordinary operator CLI after starting another SAML login. The pending transaction cannot issue an assertion, while the SP's already established application session remains authenticated.
+- Operator-provisioned legacy NameID: an explicit unspecified registration opens a pre-existing application account, retains its business data without another account, and reuses the same mapping after a process restart.
 - Administrator-managed email through the packaged CLI: default omission, explicit SP attribute authorization, current-value updates, clearing without synthesis, provenance without mailbox verification, and stable NameID throughout.
 - [Signing rollover](saml-signing.md) using the operator commands: public candidate export, failed candidate preservation, SP trust overlap, explicit process restart, old in-flight response acceptance, a missed SP trust update and rollback, and old-key rejection after trust removal. A consistent PostgreSQL/protected-file backup is restored into a new isolated database/directory, preserving NameID and OIDC keys. Measured single-process restart interruptions are reported; the fixture requires each restart to finish within 30 seconds, which is a test bound rather than a deployment guarantee.
 
 Only the negative-response driver receives the synthetic IdP private key to create valid signatures around invalid constraints. The SP receives the public certificate. This distinguishes semantic validation from simply rejecting a broken signature.
 
 ## Observed acceptance and limits
+
+On 2026-11-16, the Windows amd64 `0.0.0-nameid103` distribution with schema 26 passed all 16 scenarios (17 passing test results including the parent), using Go 1.27.4, Node 26.13.1, PostgreSQL 18.6, Node-SAML 5.2.0 and HTTPS port 19001. Its executable SHA-256 was `4598f5b6325a2c639fc85b79be2f16b205f721c846e563dfe41eb2fc077fa289`. The added legacy scenario provisioned an unspecified NameID through the packaged CLI and entered a pre-existing application account before and after a MemberID restart, retaining its account ID and business data without creating another account. The fixture removed its temporary environments and data after the run.
 
 On 2026-11-16, the Windows amd64 `0.0.0-email104-final` distribution with schema 25 passed all 15 scenarios (16 passing test results including the parent) with Go 1.27.4, Node 26.13.1, PostgreSQL 18.6 and Node-SAML 5.2.0. The added managed-email scenario exercised the packaged CLI and an authenticated SP session through omission, explicit release, update and clearing while preserving NameID.
 

@@ -5,6 +5,7 @@ package oidcprovider
 import (
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"net/url"
 	"strings"
 	"sync/atomic"
@@ -156,8 +157,19 @@ func (s *samlIdentityFixture) invalidate(kind, method string) {
 }
 
 func TestSAMLSharedIdentityAndAuthenticationTime(t *testing.T) {
+	for _, legacy := range []bool{false, true} {
+		t.Run(fmt.Sprintf("legacy=%t", legacy), func(t *testing.T) {
+			testSAMLSharedIdentityAndAuthenticationTime(t, legacy)
+		})
+	}
+}
+
+func testSAMLSharedIdentityAndAuthenticationTime(t *testing.T, legacy bool) {
 	s := newSAMLIdentityFixture(t)
 	s.sp.Attributes = []string{"Email"}
+	if legacy {
+		s.sp.NameIDFormat = "unspecified"
+	}
 	var err error
 	s.sp, err = s.store.PutSAMLServiceProvider(t.Context(), identity.OperatorPrincipal(), s.sp, false)
 	if err != nil {
@@ -170,6 +182,12 @@ func TestSAMLSharedIdentityAndAuthenticationTime(t *testing.T) {
 	s.service.now = func() time.Time { return time.Now().Add(time.Duration(elapsed.Load())) }
 	recorder := enableAuthenticationEvents(t, s.fixture)
 	nameID := ""
+	if legacy {
+		nameID = "legacy-account-42"
+		if _, err := s.store.ProvisionSAMLNameID(t.Context(), identity.OperatorPrincipal(), s.sp.OrganizationID, s.sp.ID, s.member.ID, nameID, s.sp.Revision); err != nil {
+			t.Fatal(err)
+		}
+	}
 	for _, method := range []string{"phone", "dingtalk", "feishu", "password"} {
 		t.Run(method, func(t *testing.T) {
 			page := s.authenticate(method)

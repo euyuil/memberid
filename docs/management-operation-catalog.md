@@ -350,3 +350,7 @@ in-flight interleaving. Public role-assignment API/ID representation, persistent
 permission storage, and new capabilities remain separate design work. No deletion of organizations,
 Members, or provider applications, custom roles, deny rules, or external policy
 service is introduced here.
+
+## Operator-only SAML NameID provisioning
+
+`memberid saml nameid inspect` and `provision` require trusted installation operator access; they are not Member management actions or private API operations. Provisioning checks organization ownership, current SP revision, nonretired registration, explicit unspecified format and permanent mapping uniqueness. Its `saml.nameId.provision` audit event commits with the mapping. Console administrators and installation API credentials cannot invoke this boundary. See [NameID mapping operations](saml-nameid.md).

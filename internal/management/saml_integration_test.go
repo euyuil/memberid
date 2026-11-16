@@ -40,15 +40,19 @@ func TestSAMLRegistrationManagementHTTP(t *testing.T) {
 		f.call(t, "GET", base+query, "", 400, nil)
 	}
 	input.Revision = 1
+	input.NameIDFormat = "unspecified"
 	input.Enabled = false
 	input.ACSURL = "https://sp.example.test/new-acs"
 	f.call(t, "PUT", base+"/"+input.ID, body(), 200, &sp)
-	if sp.Enabled || sp.ACSURL != input.ACSURL || sp.Revision != 2 {
+	if sp.Enabled || sp.ACSURL != input.ACSURL || sp.Revision != 2 || sp.NameIDFormat != "unspecified" {
 		t.Fatal(sp)
 	}
 	f.call(t, "PUT", base+"/"+input.ID, body(), 409, nil)
 	f.call(t, "PUT", base+"/wrong-id", body(), 400, nil)
 	input.Revision = 2
+	input.NameIDFormat = "emailAddress"
+	f.call(t, "PUT", base+"/"+input.ID, body(), 400, nil)
+	input.NameIDFormat = "unspecified"
 	for _, extra := range []string{`"organizationId":"` + other.ID + `"`, `"retired":true`, `"actor":"installation-operator"`, `"nameIdFormat":"emailAddress"`, `"enabled":true`} {
 		f.call(t, "PUT", base+"/"+input.ID, strings.TrimSuffix(body(), "}")+","+extra+"}", 400, nil)
 	}

@@ -24,6 +24,7 @@ type SAMLServiceProvider struct {
 	EntityID              string   `json:"entityId"`
 	OrganizationID        string   `json:"organizationId"`
 	ACSURL                string   `json:"acsUrl"`
+	NameIDFormat          string   `json:"nameIdFormat"`
 	Enabled               bool     `json:"enabled"`
 	AllowUnsignedRequests bool     `json:"allowUnsignedRequests"`
 	SigningCertificates   []string `json:"signingCertificates"`
@@ -34,6 +35,9 @@ type SAMLServiceProvider struct {
 }
 
 func (sp SAMLServiceProvider) Validate(loopback bool) error {
+	if sp.NameIDFormat != "" && sp.NameIDFormat != "persistent" && sp.NameIDFormat != "unspecified" {
+		return ErrInvalid
+	}
 	if !validSAMLServiceProviderID(sp.ID) || !ValidID(sp.OrganizationID, OrganizationKind) || sp.DisplayName != "" && !validText(sp.DisplayName, 128) {
 		return ErrInvalid
 	}
@@ -135,6 +139,9 @@ func (store *Store) putSAMLServiceProvider(ctx context.Context, principal Princi
 	if err := sp.Validate(loopback); err != nil || sp.Revision < 0 {
 		return SAMLServiceProvider{}, ErrInvalid
 	}
+	if sp.NameIDFormat == "" {
+		sp.NameIDFormat = "persistent"
+	}
 	return store.mutateSAMLServiceProvider(ctx, principal, sp.OrganizationID, sp.ID, sp.Revision, &sp)
 }
 
@@ -170,6 +177,15 @@ func (store *Store) mutateSAMLServiceProvider(ctx context.Context, principal Pri
 			}
 			if current.Retired || current.Revision != revision || update != nil && current.EntityID != update.EntityID {
 				return ErrConflict
+			}
+			if update != nil && current.NameIDFormat != update.NameIDFormat {
+				var allocated bool
+				if err := tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM saml_name_ids WHERE service_provider_id=$1)", id).Scan(&allocated); err != nil {
+					return err
+				}
+				if allocated {
+					return ErrConflict
+				}
 			}
 			data, err := json.Marshal(current)
 			if err != nil {
@@ -215,8 +231,10 @@ func (store *Store) mutateSAMLServiceProvider(ctx context.Context, principal Pri
 	return result, nil
 }
 
-// SAMLNameID never uses profile attributes, provider subjects, or an operator-
-// supplied identifier. Retired registrations retain their mappings permanently.
+// SAMLNameID reuses a permanent mapping or allocates an opaque random value.
+// The caller must hold LockSAMLServiceProvider before allocation. This serializes
+// issuance with format changes and operator provisioning, including absent rows.
+// Retired registrations retain their mappings permanently.
 func SAMLNameID(ctx context.Context, tx pgx.Tx, sp SAMLServiceProvider, memberID string, allowCreate bool) (string, error) {
 	var value string
 	err := tx.QueryRow(ctx, "SELECT value FROM saml_name_ids WHERE service_provider_id=$1 AND member_id=$2", sp.ID, memberID).Scan(&value)
