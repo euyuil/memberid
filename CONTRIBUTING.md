@@ -37,7 +37,7 @@ Select focused checks for the affected behavior and preserve the required PR CI 
 
 After the checks, run `sh scripts/package.sh VERSION NEW_OUTPUT_DIRECTORY` from the repository root. The output parent must exist. Packaging supports Linux and Windows amd64, includes notices and file checksums, and refuses existing destinations. The Linux package includes a container recipe that uses the same executable. See [distribution and deployment](docs/distribution.md) for cross-building, trust-store mounts, runtime configuration, and verification. These commands create local artifacts only.
 
-CI builds each native package, verifies its checksums and version, and checks that an existing destination cannot be overwritten. On Linux it also runs the minimal image and compares its executable with the native package. Runtime secrets, CA bundles, and databases are supplied separately.
+CI builds each native package, verifies its checksums and version, and checks that an existing destination cannot be overwritten. On Linux it also runs the minimal image and compares its executable with the native package. Runtime secrets, CA bundles, and databases are supplied separately. After all checks pass on a `main` push, CI publishes that tested Linux image to GitHub Container Registry. Pull requests never publish, and CI never deploys. See [published images](docs/distribution.md#automatically-published-images) for tags, digests, package visibility, and manual rollout.
 
 ## Pull requests
 

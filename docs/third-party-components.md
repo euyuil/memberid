@@ -16,10 +16,14 @@ The toolchain includes build-only third-party material, including its Go module 
 | --- | --- | --- |
 | actions/checkout | v7.0.1, `3d3c42e5aac5ba805825da76410c181273ba90b1` | MIT action, executed unmodified in CI; not bundled into MemberID. |
 | actions/setup-go | v7.0.0, `b7ad1dad31e06c5925ef5d2fc7ad053ef454303e` | MIT action, executed unmodified in CI; not bundled into MemberID. |
+| actions/upload-artifact | v7.0.2, `cf430e030ddbb5b0abf93d22962f4752f3646cd9` | MIT action; transfers the tested image within CI, not bundled into MemberID. |
+| actions/download-artifact | v8.0.2, `9000827ccba6bdab643e8b6fd33ac0654aef8333` | MIT action; downloads the same run's image for publication, not bundled into MemberID. |
 | Gitleaks | v8.30.1 | MIT CLI, executed unmodified locally and in CI; not bundled into MemberID. |
 | Git and POSIX shell | Host or runner installation | Development tools, not copied or redistributed by MemberID. Git and GNU Bash have GPL terms governing their own distributions; invoking them does not incorporate their code into this executable. |
 
-The action releases' actual `LICENSE` and `.licenses/npm/` files were reviewed, including their bundled dependencies. The resolved action inventory is in [CI components](ci-components.md). It includes MIT, Apache-2.0, ISC, 0BSD, and Blue Oak Model License 1.0.0 material. These dependencies remain in the upstream action distributions and are not delivered to MemberID users.
+The container publication actions have a separate [resolved inventory and license provenance review](container-ci-components.md), including package archives missing their own notices. Their dependencies remain external CI tools.
+
+The checkout and setup-go action releases' actual `LICENSE` and `.licenses/npm/` files were reviewed, including their bundled dependencies. The resolved action inventory is in [CI components](ci-components.md). It includes MIT, Apache-2.0, ISC, 0BSD, and Blue Oak Model License 1.0.0 material. These dependencies remain in the upstream action distributions and are not delivered to MemberID users.
 
 Upstream records labelled `other` were inspected individually: the reviewed `@actions/http-client`, `balanced-match`, `brace-expansion`, and `concat-map` texts contain MIT grants. This is a finding about those exact bundled versions, not a blanket acceptance of unknown licenses. Blue Oak's notice/link obligation and patent grant apply to the reviewed minimatch package; Apache-2.0 notice and patent conditions apply to the reviewed Apache components. Preserve those terms if any action material is later redistributed.
 

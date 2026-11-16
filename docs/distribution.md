@@ -20,6 +20,43 @@ The script disables parent workspaces and cgo, uses the existing module lockfile
 
 The destination must not exist and its parent must already exist. Failed builds may leave an incomplete directory; inspect it and choose another new destination. The script never removes an existing directory or overwrites an earlier distribution. Packaging does not create Git tags, publish releases, or push images. MemberID's project license remains undecided.
 
+## Automatically published images
+
+A successful `main` push publishes the Linux amd64 image to
+`ghcr.io/euyuil/memberid:sha-<full-commit-sha>`. Pull requests run validation without
+publishing. Publication waits for both platform builds, repository security, and
+PostgreSQL integration. The Linux job exports the same image whose executable was
+compared with the native package; the publishing job verifies its archive checksum
+and version before pushing it. It does not rebuild the executable or image.
+
+The workflow uses GitHub's short-lived `GITHUB_TOKEN` with `packages: write` only
+in the publishing job. It requires no custom registry credential or deployment
+secret. The first package is private by default: the repository owner must select
+public visibility in the package settings once to allow anonymous pulls. See
+[GitHub's container registry documentation](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry).
+
+The image contains generic MemberID code, build metadata, and notices only.
+Deployment hostnames, addresses, credentials, configuration, and CA bundles stay
+outside the repository and workflow. Do not supply them through CI secrets,
+variables, build arguments, artifacts, or logs. CI has no deployment step or
+cluster access; a publication never updates a running installation.
+
+Select a successful commit and copy its `ghcr.io/euyuil/memberid@sha256:...`
+reference from the publication job summary. Use that digest for manual deployment,
+including a Kubernetes or k3s Pod's `image` field. SHA tags identify the source
+revision, but are not registry-enforced immutable references; a rerun may replace
+the tag. The digest pins the exact published image. Only Linux amd64 is currently
+published; there is no `latest` tag or multi-architecture image.
+
+Before a manual rollout, back up the database, configuration, keys, and current
+image digest; follow the [explicit database upgrade procedure](database-upgrades.md)
+if required. Configure the installation and trust mounts separately, then verify
+the deployed issuer, console, and an actual login. Rolling back an image alone
+cannot undo a database migration: recovery requires the matching recovery set.
+The temporary Actions archive expires after seven days; the pushed image is a
+separate registry artifact. These CI snapshots do not create Git tags or GitHub
+Releases, and do not select MemberID's project license.
+
 ## Run natively
 
 Keep the entire `third_party/` directory with the executable. On Linux, run `./memberid`; on Windows PowerShell, use `.\memberid.exe`. The commands below assume the executable is on the operator's PATH.
