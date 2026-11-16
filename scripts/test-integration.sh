@@ -35,5 +35,7 @@ export MEMBERID_TEST_DATABASE_URL="postgres://postgres@127.0.0.1:$port/postgres?
 if [ "${MEMBERID_TEST_QUERY_PROFILE:-}" = 1 ]; then
   go test -tags=integration -timeout=5m -run '^TestConsoleQueryProfile$' -count=1 -v ./internal/oidcprovider
 else
-  go test -race -tags=integration -timeout=5m ./...
+  # The combined OIDC/SAML suite includes real password hashing under -race.
+  # Allow the full package to finish while keeping a finite hang deadline.
+  go test -race -tags=integration -timeout=10m ./...
 fi
