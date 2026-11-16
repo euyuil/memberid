@@ -104,6 +104,9 @@ func TestSystemOrganizationAndAdministratorGuards(t *testing.T) {
 	if _, e := s.CreateOrganization(t.Context(), OperatorPrincipal(), SystemOrganizationID, "Reserved"); !errors.Is(e, ErrInvalid) {
 		t.Fatal(e)
 	}
+	if _, e := s.CreateMember(t.Context(), OperatorPrincipal(), SystemOrganizationID, RootMemberID, "Reserved"); !errors.Is(e, ErrInvalid) {
+		t.Fatal("ordinary creation claimed the reserved Member ID", e)
+	}
 	disabled := "disabled"
 	if _, e := s.UpdateOrganization(t.Context(), OperatorPrincipal(), SystemOrganizationID, OrganizationChange{Status: &disabled}); !errors.Is(e, ErrForbidden) {
 		t.Fatal(e)

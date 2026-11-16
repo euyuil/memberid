@@ -109,7 +109,7 @@ func (store *Store) CreateMember(ctx context.Context, principal Principal, organ
 			return Member{}, err
 		}
 	}
-	if !ValidID(id, MemberKind) {
+	if id == RootMemberID || !ValidID(id, MemberKind) {
 		return Member{}, ErrInvalid
 	}
 	if err := authorizeAll(ctx, store.pool, principal, membersResource.require(actionCreate, organizationID)); err != nil {

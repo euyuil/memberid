@@ -47,6 +47,8 @@ Creation generates an identifier when `id` is omitted. An explicitly supplied id
 
 Fresh initialization includes the reserved organization `org_system`. It is returned by organization queries and accepted as an existing organization ID, but rejected for creation or enrollment and cannot be disabled (403). Member blocking and binding revocation preserve the last currently available administrator (409); the same guard applies to immutable Member updates. This credential does not impersonate a platform Member.
 
+Password-based installation bootstrap reserves `mbr_root` for its first Member in `org_system`. Member lookup accepts that ID. Member creation and organization enrollment reject an attempt to supply it (400).
+
 Every Member lookup or mutation is constrained by its organization. A Member in another organization returns 404. Disabling an organization prevents its Members from passing current eligibility without deleting their identities. Manual unblock preserves an independent external-departure block. An organization's enabled status and the Member's own status are separate facts; inspect eligibility for the complete binding decision.
 
 Binding requires an existing verified factor ID. This API does not create a factor from a phone number, verify a contact attribute, create a login session, or infer that two Members represent the same person. Repeating an active identical binding preserves its identity. A conflicting or revoked relationship remains reserved and returns 409 instead of transferring access. One factor can be explicitly bound to independent Members in different organizations, but cannot be shared by different Members in the same organization.
@@ -79,7 +81,7 @@ The receipt contains `id`, `organizationId`, `memberId`, the resulting `member` 
 
 Receipts persist across restarts and have no automatic expiry or deletion endpoint. Include them in database backups and capacity planning. Deleting receipts directly would destroy the safe-retry guarantee. A new intentional update uses a new ID. Ordinary PATCH remains available, but repeating PATCH after an uncertain result can overwrite an intervening update; it does not provide an immutable receipt.
 
-Updates use the same installation management credential and organization-bound lookup as other management operations. They do not impersonate an initiating Member or assign application permissions. The fresh-install schema is version 22; startup rejects older schemas without resetting or migrating existing data.
+Updates use the same installation management credential and organization-bound lookup as other management operations. They do not impersonate an initiating Member or assign application permissions. The fresh-install schema is version 23; startup rejects older schemas without resetting or migrating existing data.
 
 ## Directory pagination
 

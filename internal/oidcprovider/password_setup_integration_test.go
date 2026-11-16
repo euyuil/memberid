@@ -50,7 +50,8 @@ func TestConsoleFirstLoginAndMemberPasswordManagement(t *testing.T) {
 	finishLogin(f.submit(login.body, "password", fields))
 	session := consoleJSON(t, f, server, "GET", "/api/session", "", "", 200)
 	who := session["actor"].(map[string]any)
-	if who["displayName"] != "root" || who["organizationId"] != "org_system" || who["platform"] != true {
+	if who["memberId"] != identity.RootMemberID || who["displayName"] != "root" ||
+		who["organizationId"] != "org_system" || who["platform"] != true {
 		t.Fatal("root did not reach the console as platform administrator")
 	}
 

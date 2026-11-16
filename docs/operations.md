@@ -10,7 +10,7 @@ memberid database init --initial-root-password-file /path/to/protected/initial-r
 
 This is an explicit installation operation. It refuses existing user relations and never resets, replaces, or migrates an existing database. Normal startup does not initialize schema.
 
-This command installs schema version 22 and provisions `org_system/root` with a generated password. The password output file must be new and in a protected directory. Running `database init` without the file option initializes only the schema and the reserved system organization. See [first-time setup](administration.md#first-time-setup) for password delivery and recovery.
+This command installs schema version 23 and provisions `org_system/root` with a generated password. The password output file must be new and in a protected directory. Running `database init` without the file option initializes only the schema and the reserved system organization. See [first-time setup](administration.md#first-time-setup) for password delivery and recovery.
 
 ## Check an existing database
 

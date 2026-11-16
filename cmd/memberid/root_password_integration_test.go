@@ -80,7 +80,7 @@ func TestDatabaseInitSavesInitialRootPasswordExclusively(t *testing.T) {
 	}
 	defer store.Close()
 	admins, err := store.AdministratorIDs(t.Context(), identity.SystemOrganizationID)
-	if err != nil || len(admins) != 1 {
+	if err != nil || len(admins) != 1 || admins[0] != identity.RootMemberID {
 		t.Fatal("fresh installation did not create exactly one platform administrator", err)
 	}
 	root, err := store.Member(t.Context(), identity.SystemOrganizationID, admins[0])
