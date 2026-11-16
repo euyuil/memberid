@@ -23,6 +23,9 @@ func provisionRoot(ctx context.Context, tx pgx.Tx, savePassword func(string) err
 	if err = insertMemberPassword(ctx, tx, OperatorPrincipal(), SystemOrganizationID, memberID, RootUsername, hash); err != nil {
 		return err
 	}
+	if _, err = tx.Exec(ctx, "INSERT INTO installation_root_members(organization_id,member_id) VALUES($1,$2)", SystemOrganizationID, memberID); err != nil {
+		return err
+	}
 	if _, err = tx.Exec(ctx, "INSERT INTO administrators(organization_id,member_id) VALUES($1,$2)", SystemOrganizationID, memberID); err != nil {
 		return err
 	}
@@ -32,29 +35,30 @@ func provisionRoot(ctx context.Context, tx pgx.Tx, savePassword func(string) err
 	return savePassword(password)
 }
 
-func (store *Store) ResetRootPassword(ctx context.Context, principal Principal) (string, error) {
+func (store *Store) ResetRootPassword(ctx context.Context, principal Principal) (GeneratedMemberPassword, error) {
 	if principal.kind != operatorPrincipal {
-		return "", ErrForbidden
+		return GeneratedMemberPassword{}, ErrForbidden
 	}
 	password, hash, err := randomPassword()
 	if err != nil {
-		return "", err
+		return GeneratedMemberPassword{}, err
 	}
+	var username string
 	err = pgx.BeginFunc(ctx, store.pool, func(tx pgx.Tx) error {
 		if err := managementLock(ctx, tx); err != nil {
 			return err
 		}
-		var memberID string
-		err := tx.QueryRow(ctx, `SELECT b.member_id FROM member_auth_factor_bindings b
-			JOIN authentication_factors f ON f.id=b.authentication_factor_id
-			WHERE b.organization_id=$1 AND f.namespace=$1 AND f.type='password' AND f.subject=$2`, SystemOrganizationID, RootUsername).Scan(&memberID)
+		var memberID, factorID string
+		err := tx.QueryRow(ctx, `SELECT m.id,f.id,f.subject`+eligibleBindings+`
+			AND m.id=(SELECT member_id FROM installation_root_members WHERE organization_id=$1)
+			AND m.organization_id=$1 AND f.type='password'`, SystemOrganizationID).Scan(&memberID, &factorID, &username)
 		if err != nil {
 			return storageError(err)
 		}
-		return rotateMemberPassword(ctx, tx, SystemOrganizationID, memberID, RootUsername, hash)
+		return rotatePassword(ctx, tx, principal, SystemOrganizationID, memberID, factorID, username, hash)
 	})
 	if err != nil {
-		return "", err
+		return GeneratedMemberPassword{}, err
 	}
-	return password, nil
+	return GeneratedMemberPassword{Username: username, Password: password}, nil
 }

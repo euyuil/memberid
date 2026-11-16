@@ -11,6 +11,10 @@ import {
 } from "@/components/ui/dialog"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import {
+  passwordUsernameError,
+  passwordUsernamePattern,
+} from "@/member-password"
 
 type GeneratedPassword = { username: string; password: string }
 
@@ -49,10 +53,8 @@ export function MemberPassword({
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (pending) return
-    if (!configured && !/^[a-z0-9][a-z0-9._-]{0,63}$/.test(username)) {
-      setError(
-        "用户名需以小写字母或数字开头，最多 64 位，可包含点、下划线和连字符。"
-      )
+    if (!configured && !passwordUsernamePattern.test(username)) {
+      setError(passwordUsernameError)
       return
     }
     setError("")

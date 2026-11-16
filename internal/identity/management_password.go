@@ -2,9 +2,17 @@ package identity
 
 import (
 	"context"
+	"errors"
 
 	"github.com/jackc/pgx/v5"
 )
+
+var ErrPasswordUsernameTaken = errors.New("password username already in use")
+
+const memberPasswordBinding = ` FROM member_auth_factor_bindings b
+	JOIN authentication_factors f ON f.id=b.authentication_factor_id
+	JOIN password_credentials c ON c.authentication_factor_id=f.id
+	WHERE b.organization_id=$1 AND b.member_id=$2 AND b.factor_type='password' AND f.namespace=$1`
 
 type GeneratedMemberPassword struct {
 	Username string `json:"username"`
@@ -19,7 +27,7 @@ func (service *ManagementService) GenerateMemberPassword(ctx context.Context, pr
 		return GeneratedMemberPassword{}, ErrForbidden
 	}
 	if !ValidID(organizationID, OrganizationKind) || !ValidID(memberID, MemberKind) ||
-		username != nil && !validNewPasswordUsername(organizationID, *username) {
+		username != nil && !passwordUsername.MatchString(*username) {
 		return GeneratedMemberPassword{}, ErrInvalid
 	}
 	action := actionUpdate
@@ -41,10 +49,7 @@ func (service *ManagementService) GenerateMemberPassword(ctx context.Context, pr
 				return err
 			}
 		} else {
-			err := tx.QueryRow(ctx, `SELECT f.id,f.subject FROM member_auth_factor_bindings b
-				JOIN authentication_factors f ON f.id=b.authentication_factor_id
-				JOIN password_credentials c ON c.authentication_factor_id=f.id
-				WHERE b.organization_id=$1 AND b.member_id=$2 AND b.factor_type='password' AND f.namespace=$1`,
+			err := tx.QueryRow(ctx, "SELECT f.id,f.subject"+memberPasswordBinding,
 				organizationID, memberID).Scan(&factorID, &result.Username)
 			if err != nil {
 				return storageError(err)
@@ -64,4 +69,44 @@ func (service *ManagementService) GenerateMemberPassword(ctx context.Context, pr
 		return GeneratedMemberPassword{}, err
 	}
 	return result, nil
+}
+
+// RenameMemberPassword updates the login name while keeping the credential,
+// binding, and Member identity. expectedUsername protects stale forms.
+func (service *ManagementService) RenameMemberPassword(ctx context.Context, principal Principal, organizationID, memberID, expectedUsername, username string) error {
+	if principal.kind != memberPrincipal {
+		return ErrForbidden
+	}
+	if !ValidID(organizationID, OrganizationKind) || !ValidID(memberID, MemberKind) ||
+		!passwordUsername.MatchString(expectedUsername) || !passwordUsername.MatchString(username) {
+		return ErrInvalid
+	}
+	return pgx.BeginFunc(ctx, service.store.pool, func(tx pgx.Tx) error {
+		if err := managementLock(ctx, tx); err != nil {
+			return err
+		}
+		if err := authorizeAll(ctx, tx, principal, memberPasswordResource.require(actionUpdate, organizationID, memberID)); err != nil {
+			return err
+		}
+		var factorID, currentUsername string
+		// Serialize the name change with final password verification.
+		err := tx.QueryRow(ctx, "SELECT f.id,f.subject"+memberPasswordBinding+" FOR UPDATE OF c", organizationID, memberID).
+			Scan(&factorID, &currentUsername)
+		if err != nil {
+			return storageError(err)
+		}
+		if currentUsername == username {
+			return nil
+		}
+		if currentUsername != expectedUsername {
+			return ErrConflict
+		}
+		if _, err := tx.Exec(ctx, "UPDATE authentication_factors SET subject=$2,updated_at=clock_timestamp() WHERE id=$1", factorID, username); err != nil {
+			if errors.Is(storageError(err), ErrConflict) {
+				return ErrPasswordUsernameTaken
+			}
+			return storageError(err)
+		}
+		return managementEvent(ctx, tx, principal, organizationID, memberID, "password.username.update", struct{}{}, nil)
+	})
 }

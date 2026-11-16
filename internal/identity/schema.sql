@@ -1,7 +1,7 @@
 CREATE TABLE memberid_schema (
-    version integer PRIMARY KEY CHECK (version = 21)
+    version integer PRIMARY KEY CHECK (version = 22)
 );
-INSERT INTO memberid_schema(version) VALUES (21);
+INSERT INTO memberid_schema(version) VALUES (22);
 
 CREATE TABLE organizations (
     id text COLLATE "C" PRIMARY KEY CHECK (id = 'org_system' OR id ~ '^org_[0-9bcdfghjkmnpqrstvwxz]{27}$'),
@@ -26,6 +26,12 @@ CREATE TABLE members (
     UNIQUE (id, organization_id)
 );
 CREATE INDEX member_directory ON members (organization_id, created_at, id);
+
+CREATE TABLE installation_root_members (
+    organization_id text COLLATE "C" PRIMARY KEY CHECK (organization_id = 'org_system'),
+    member_id text COLLATE "C" NOT NULL,
+    FOREIGN KEY (member_id, organization_id) REFERENCES members(id, organization_id)
+);
 
 CREATE TABLE authentication_factors (
     id text COLLATE "C" PRIMARY KEY CHECK (id ~ '^af_[0-9bcdfghjkmnpqrstvwxz]{27}$'),

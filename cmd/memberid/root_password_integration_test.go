@@ -100,6 +100,9 @@ func TestDatabaseInitSavesInitialRootPasswordExclusively(t *testing.T) {
 	if !regexp.MustCompile(`^[A-Za-z0-9_-]{32}\n$`).Match(stdout.Bytes()) || bytes.Equal(stdout.Bytes(), contents) {
 		t.Fatal("local reset did not return a newly generated password")
 	}
+	if stderr.String() != "Login org_system/root\n" {
+		t.Fatal("local reset did not report the current login alongside the password")
+	}
 	if retained, err := os.ReadFile(path); err != nil || !bytes.Equal(retained, contents) {
 		t.Fatal("local reset changed the initial password file", err)
 	}

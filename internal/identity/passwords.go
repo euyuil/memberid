@@ -51,13 +51,12 @@ func (store *Store) HasPasswordCredentials(ctx context.Context, organizationID s
 	return found, err
 }
 
-// SetMemberPassword provisions or rotates a locally managed credential. The
-// username is an immutable organization-scoped identifier for that credential.
+// SetMemberPassword provisions a credential or rotates it under its current username.
 func (store *Store) SetMemberPassword(ctx context.Context, principal Principal, organizationID, memberID, username string) (string, error) {
 	if principal.kind != operatorPrincipal {
 		return "", ErrForbidden
 	}
-	if !ValidID(organizationID, OrganizationKind) || !ValidID(memberID, MemberKind) || !validNewPasswordUsername(organizationID, username) {
+	if !ValidID(organizationID, OrganizationKind) || !ValidID(memberID, MemberKind) || !passwordUsername.MatchString(username) {
 		return "", ErrInvalid
 	}
 	password, hash, err := randomPassword()
@@ -85,10 +84,6 @@ func (store *Store) SetMemberPassword(ctx context.Context, principal Principal, 
 		return "", err
 	}
 	return password, nil
-}
-
-func validNewPasswordUsername(organizationID, username string) bool {
-	return passwordUsername.MatchString(username) && (organizationID != SystemOrganizationID || username != RootUsername)
 }
 
 func insertMemberPassword(ctx context.Context, tx pgx.Tx, principal Principal, organizationID, memberID, username string, hash passwordHash) error {
@@ -140,8 +135,8 @@ func passwordAttemptKey(organizationID, username string) [32]byte {
 }
 
 // VerifyPasswordAndApply commits the caller's session changes only while the
-// verified credential is still current. Password reset uses an exclusive lock
-// on that same credential and revokes sessions issued with the previous secret.
+// verified credential is still current. Password reset and username changes
+// take an exclusive lock on the same credential.
 func (store *Store) VerifyPasswordAndApply(ctx context.Context, organizationID, username, password string, apply func(pgx.Tx, MemberAdmission) error) error {
 	if !ValidID(organizationID, OrganizationKind) || !passwordUsername.MatchString(username) || len(password) == 0 || len(password) > 1024 {
 		return ErrPasswordCredential
@@ -184,7 +179,7 @@ func (store *Store) VerifyPasswordAndApply(ctx context.Context, organizationID, 
 		}
 		var admission MemberAdmission
 		admission.OrganizationID = organizationID
-		err := tx.QueryRow(ctx, "SELECT m.id,b.id::text"+eligibleBindings+" AND o.id=$1 AND f.id=$2", organizationID, factorID).Scan(&admission.MemberID, &admission.BindingID)
+		err := tx.QueryRow(ctx, "SELECT m.id,b.id::text"+eligibleBindings+" AND o.id=$1 AND f.id=$2 AND f.subject=$3", organizationID, factorID, username).Scan(&admission.MemberID, &admission.BindingID)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrPasswordCredential
 		}

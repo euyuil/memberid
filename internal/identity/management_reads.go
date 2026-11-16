@@ -96,6 +96,7 @@ type ManagementMemberDetail struct {
 	Member           Member    `json:"member"`
 	Bindings         []Binding `json:"bindings"`
 	AdministratorIDs []string  `json:"administratorIds"`
+	PasswordUsername string    `json:"passwordUsername,omitempty"`
 }
 
 func (service *ManagementService) Member(ctx context.Context, principal Principal, organizationID, memberID string) (ManagementMemberDetail, error) {
@@ -106,7 +107,12 @@ func (service *ManagementService) Member(ctx context.Context, principal Principa
 	if err := store.authorizeManagementRead(ctx, principal, memberReadRequirements(organizationID, memberID)...); err != nil {
 		return ManagementMemberDetail{}, err
 	}
-	member, err := store.Member(ctx, organizationID, memberID)
+	var member Member
+	var username string
+	row := store.pool.QueryRow(ctx, "SELECT "+memberColumns+
+		",COALESCE((SELECT f.subject"+memberPasswordBinding+"),'') FROM members WHERE organization_id=$1 AND id=$2",
+		organizationID, memberID)
+	err := scanMember(row, &member, &username)
 	if err != nil {
 		return ManagementMemberDetail{}, err
 	}
@@ -118,7 +124,7 @@ func (service *ManagementService) Member(ctx context.Context, principal Principa
 	if err != nil {
 		return ManagementMemberDetail{}, err
 	}
-	return ManagementMemberDetail{Member: member, Bindings: bindings, AdministratorIDs: ids}, nil
+	return ManagementMemberDetail{Member: member, Bindings: bindings, AdministratorIDs: ids, PasswordUsername: username}, nil
 }
 
 func (service *ManagementService) MemberDirectory(ctx context.Context, principal Principal, after string, limit int, filter MemberDirectoryFilter) (Page[MemberDirectoryEntry], error) {
