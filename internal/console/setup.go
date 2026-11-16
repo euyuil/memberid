@@ -77,6 +77,8 @@ func New(ctx context.Context, store *identity.Store, installation *config.Loaded
 	s.routes.HandleFunc("GET /api/organizations/{organizationId}/members/{memberId}", s.member)
 	s.routes.HandleFunc("PATCH /api/organizations/{organizationId}/members/{memberId}", s.mutate)
 	s.routes.HandleFunc("PUT /api/organizations/{organizationId}/members/{memberId}/administrator", s.administrator)
+	s.routes.HandleFunc("POST /api/organizations/{organizationId}/members/{memberId}/password", s.createMemberPassword)
+	s.routes.HandleFunc("POST /api/organizations/{organizationId}/members/{memberId}/password/reset", s.resetMemberPassword)
 	s.routes.HandleFunc("GET /api/events", s.events)
 	s.routes.HandleFunc("GET /api/authentication-events", s.authenticationEvents)
 	s.routes.HandleFunc("GET /api/authentication-events/{eventId}", s.authenticationEvent)

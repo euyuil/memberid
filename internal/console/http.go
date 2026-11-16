@@ -298,6 +298,30 @@ func (s *Service) administrator(w http.ResponseWriter, r *http.Request) {
 	e := s.management.SetAdministrator(r.Context(), r.Context().Value(sessionKey{}).(session).principal(), r.PathValue("organizationId"), r.PathValue("memberId"), *v.Enabled)
 	respond(w, map[string]bool{"enabled": *v.Enabled}, e)
 }
+func (s *Service) createMemberPassword(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		Username *string `json:"username"`
+	}
+	if !management.DecodeRequest(w, r, &input) {
+		return
+	}
+	if input.Username == nil {
+		problem(w, 400, "invalid_request")
+		return
+	}
+	s.generateMemberPassword(w, r, input.Username)
+}
+func (s *Service) resetMemberPassword(w http.ResponseWriter, r *http.Request) {
+	var input struct{}
+	if !management.DecodeRequest(w, r, &input) {
+		return
+	}
+	s.generateMemberPassword(w, r, nil)
+}
+func (s *Service) generateMemberPassword(w http.ResponseWriter, r *http.Request, username *string) {
+	value, err := s.management.GenerateMemberPassword(r.Context(), r.Context().Value(sessionKey{}).(session).principal(), r.PathValue("organizationId"), r.PathValue("memberId"), username)
+	respond(w, value, err)
+}
 func (s *Service) events(w http.ResponseWriter, r *http.Request) {
 	v := r.Context().Value(sessionKey{}).(session)
 	q := r.URL.Query()

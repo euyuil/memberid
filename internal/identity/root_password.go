@@ -20,7 +20,7 @@ func provisionRoot(ctx context.Context, tx pgx.Tx, savePassword func(string) err
 	if _, err = tx.Exec(ctx, "INSERT INTO members(id,organization_id,display_name) VALUES($1,$2,$3)", memberID, SystemOrganizationID, RootUsername); err != nil {
 		return err
 	}
-	if err = insertMemberPassword(ctx, tx, SystemOrganizationID, memberID, RootUsername, hash); err != nil {
+	if err = insertMemberPassword(ctx, tx, OperatorPrincipal(), SystemOrganizationID, memberID, RootUsername, hash); err != nil {
 		return err
 	}
 	if _, err = tx.Exec(ctx, "INSERT INTO administrators(organization_id,member_id) VALUES($1,$2)", SystemOrganizationID, memberID); err != nil {

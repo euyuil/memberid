@@ -170,6 +170,8 @@ func TestConsoleOIDCOrganizationScopeAndRevocation(t *testing.T) {
 		t.Fatal("cross organization directory")
 	}
 	base := "/api/organizations/" + f.member.OrganizationID
+	consoleJSON(t, f, server, "POST", base+"/members/"+f.member.ID+"/password", csrf, `{"username":"example"}`, 403)
+	consoleJSON(t, f, server, "POST", base+"/members/"+f.member.ID+"/password/reset", csrf, `{}`, 403)
 	consoleJSON(t, f, server, "GET", "/api/organizations/"+f.otherMember.OrganizationID, "", "", 403)
 	consoleJSON(t, f, server, "GET", "/api/organizations/org_system", "", "", 403)
 	consoleJSON(t, f, server, "GET", "/api/events?organizationId="+f.otherMember.OrganizationID, "", "", 403)

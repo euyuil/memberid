@@ -33,10 +33,11 @@ The [Member role definitions](roles.md) and [management scopes and actions](mana
 | List/create/rename/block/unblock Members | Any organization | Own organization |
 | Grant/revoke administrator assignment | Any organization | Own organization |
 | Read bindings and management events | Any organization | Own organization |
+| Set or reset a Member password | Any organization, including `org_system` | No |
 | List, configure and disable identity providers | Any organization | Own organization |
 | Create, inspect, update, disable and retire SAML applications | Any organization | Own organization |
 
-Platform administrators can switch organizations from the management scope in the header while retaining their original operator identity. The sidebar has separate Organizations, Members, Identity providers, and Operation history entries. Switching between them keeps the selected organization. In the all-organization scope, platform administrators see members from every organization. Each row identifies its organization and opens the member detail in that organization. Organization administrators see their own organization in the header. These permissions belong exclusively to MemberID management and are not added to business application identity claims. There are no custom roles, invitations, deletion, bulk operations, credential resets or OIDC client-registration pages in this version. Explicit operator binding and first-administrator recovery use the operator tools.
+Platform administrators can switch organizations from the management scope in the header while retaining their original operator identity. The sidebar has separate Organizations, Members, Identity providers, and Operation history entries. Switching between them keeps the selected organization. In the all-organization scope, platform administrators see members from every organization. Each row identifies its organization and opens the member detail in that organization. Organization administrators see their own organization in the header. These permissions belong exclusively to MemberID management and are not added to business application identity claims. There are no custom roles, invitations, deletion, bulk operations or OIDC client-registration pages in this version. Explicit operator binding and first-administrator recovery use the operator tools.
 
 ## Console navigation and directories
 
@@ -162,6 +163,8 @@ For production, set the console origin to the HTTPS origin at the root of its ho
 Follow [first-time setup](administration.md#first-time-setup) to provision `org_system/root` during deployment. Then open the standard administration console and sign in with the password from the protected file. The [operator bootstrap](administration.md#bootstrap-and-recovery) supports installations that prefer a verified phone or DingTalk binding. The console checks administrator access at the OIDC callback and on subsequent management requests.
 
 Ordinary organization administrators can then be assigned in the console once their login binding is available. Creating a Member does not verify a phone or fabricate an external binding. Operator recovery, last-available-administrator protection, and external-departure precedence are described in the same guide.
+
+Platform administrators can use [Member password management](administration.md#organization-scoped-passwords) from the Member detail to prepare the first organization administrator's login. Give the recipient the organization ID, username and generated password through a protected channel.
 
 ## Sessions, requests, and audit
 

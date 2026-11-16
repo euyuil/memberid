@@ -95,6 +95,7 @@ import {
 } from "@/authentication-events"
 import { Providers, type ProviderDirectory } from "@/Providers"
 import { SAMLServiceProviders } from "@/SAMLServiceProviders"
+import { MemberPassword } from "@/MemberPassword"
 import type {
   SAMLDirectory,
   SAMLServiceProvider,
@@ -1411,6 +1412,32 @@ export default function App() {
                           </div>
                         ))}
                     </CardContent>
+                    {actor.platform && (
+                      <CardFooter>
+                        <MemberPassword
+                          key={member}
+                          configured={data.detail.bindings.some(
+                            (binding) => binding.factorType === "password"
+                          )}
+                          generate={(username) =>
+                            request(
+                              `${base}/members/${member}/password${username === undefined ? "/reset" : ""}`,
+                              {
+                                method: "POST",
+                                headers: {
+                                  "Content-Type": "application/json",
+                                  "X-CSRF-Token": session.csrf,
+                                },
+                                body: JSON.stringify(
+                                  username === undefined ? {} : { username }
+                                ),
+                              }
+                            )
+                          }
+                          onComplete={refresh}
+                        />
+                      </CardFooter>
+                    )}
                   </Card>
                 </div>
               </section>
