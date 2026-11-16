@@ -96,6 +96,10 @@ import {
 import { Providers, type ProviderDirectory } from "@/Providers"
 import { SAMLServiceProviders } from "@/SAMLServiceProviders"
 import { MemberPassword } from "@/MemberPassword"
+import {
+  passwordUsernameError,
+  passwordUsernamePattern,
+} from "@/member-password"
 import type {
   SAMLDirectory,
   SAMLServiceProvider,
@@ -136,6 +140,7 @@ type Detail = {
   member: Member
   bindings: Binding[]
   administratorIds: string[]
+  passwordUsername?: string
 }
 type Data = {
   organizations?: Page<Organization>
@@ -167,6 +172,7 @@ const messages: Record<string, string> = {
   provider_unavailable: "无法验证应用凭据。请检查应用状态、应用 ID 和密钥。",
   not_found: "记录不存在，请返回列表刷新。",
   conflict: "当前状态发生冲突，请刷新后重新检查。",
+  username_taken: "该用户名已被本组织中的其他成员使用。",
   invalid_csrf: "页面验证已失效，请刷新后重试。",
   sign_in_required: "登录已过期或管理员资格已失效，请重新登录。",
   not_administrator: "当前成员没有管理权限，请使用已授权的管理员身份登录。",
@@ -1402,8 +1408,19 @@ export default function App() {
                             className="flex items-center justify-between gap-4"
                             key={b.id}
                           >
-                            <span>
-                              {factorLabels[b.factorType] ?? b.factorType}
+                            <span className="flex min-w-0 items-center gap-2">
+                              <span className="shrink-0">
+                                {factorLabels[b.factorType] ?? b.factorType}
+                              </span>
+                              {b.factorType === "password" &&
+                                data.detail?.passwordUsername && (
+                                  <span
+                                    className="truncate text-muted-foreground"
+                                    title={data.detail.passwordUsername}
+                                  >
+                                    {data.detail.passwordUsername}
+                                  </span>
+                                )}
                             </span>
                             <Status
                               active={b.status === "active"}
@@ -1413,7 +1430,27 @@ export default function App() {
                         ))}
                     </CardContent>
                     {actor.platform && (
-                      <CardFooter>
+                      <CardFooter className="flex flex-wrap gap-2">
+                        {data.detail.passwordUsername && (
+                          <Button
+                            variant="outline"
+                            onClick={() =>
+                              setAction({
+                                title: "修改登录用户名",
+                                path: `${base}/members/${member}/password`,
+                                method: "PATCH",
+                                field: "username",
+                                value: data.detail?.passwordUsername,
+                                body: {
+                                  expectedUsername:
+                                    data.detail?.passwordUsername,
+                                },
+                              })
+                            }
+                          >
+                            修改登录用户名
+                          </Button>
+                        )}
                         <MemberPassword
                           key={member}
                           configured={data.detail.bindings.some(
@@ -2030,11 +2067,20 @@ function ActionDialog({
   const [pending, setPending] = useState(false)
   const [error, setError] = useState("")
   const cancelRef = useRef<HTMLButtonElement>(null)
+  const usernameField = action.field === "username"
   async function submit(e?: FormEvent<HTMLFormElement>) {
     e?.preventDefault()
     if (pending) return
     setError("")
-    if (action.field && (!value.trim() || [...value].length > 128)) {
+    if (usernameField && !passwordUsernamePattern.test(value)) {
+      setError(passwordUsernameError)
+      return
+    }
+    if (
+      action.field &&
+      !usernameField &&
+      (!value.trim() || [...value].length > 128)
+    ) {
       setError("请检查填写内容。名称不能为空，最多 128 个字符。")
       return
     }
@@ -2048,7 +2094,7 @@ function ActionDialog({
           "X-CSRF-Token": csrf,
         },
         body: JSON.stringify(
-          action.field ? { [action.field]: value } : action.body
+          action.field ? { ...action.body, [action.field]: value } : action.body
         ),
       })
       onComplete(result.id, submittedFrom)
@@ -2112,13 +2158,18 @@ function ActionDialog({
           <FieldGroup>
             {action.field && (
               <Field data-invalid={!!error}>
-                <FieldLabel htmlFor="record-name">名称</FieldLabel>
+                <FieldLabel htmlFor="record-name">
+                  {usernameField ? "用户名" : "名称"}
+                </FieldLabel>
                 <Input
                   id="record-name"
                   autoFocus
                   value={value}
                   disabled={pending}
                   aria-invalid={!!error}
+                  autoComplete={usernameField ? "off" : undefined}
+                  autoCapitalize={usernameField ? "none" : undefined}
+                  spellCheck={usernameField ? false : undefined}
                   onChange={(e) => setValue(e.target.value)}
                 />
               </Field>

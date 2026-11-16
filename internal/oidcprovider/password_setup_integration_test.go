@@ -5,6 +5,7 @@ package oidcprovider
 import (
 	"context"
 	"net/url"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -66,25 +67,62 @@ func TestConsoleFirstLoginAndMemberPasswordManagement(t *testing.T) {
 		t.Fatal("the console did not return the generated Member credential")
 	}
 	detail := consoleJSON(t, f, server, "GET", target, "", "", 200)
-	if len(detail["bindings"].([]any)) != 2 {
+	if len(detail["bindings"].([]any)) != 2 || detail["passwordUsername"] != "example" {
 		t.Fatal("password setup did not preserve the Member's existing phone binding")
+	}
+	consoleJSON(t, f, server, "PATCH", target+"/password", "bad-token", `{"expectedUsername":"example","username":"member-login"}`, 403)
+	consoleJSON(t, f, server, "PATCH", target+"/password", csrf, `{"expectedUsername":"example","username":"member-login"}`, 200)
+	renamed := consoleJSON(t, f, server, "GET", target, "", "", 200)
+	if renamed["passwordUsername"] != "member-login" || !reflect.DeepEqual(renamed["bindings"], detail["bindings"]) {
+		t.Fatal("changing a username changed the Member's bindings")
 	}
 	consoleJSON(t, f, server, "PUT", target+"/administrator", csrf, `{"enabled":true}`, 200)
 	rootBrowser := f.browser
 	f.browser = browserClient()
 	memberFields := url.Values{"password_organization": {f.otherMember.OrganizationID}, "username": {"example"}, "password": {generated}}
-	finishLogin(f.submit(loginPage().body, "password", memberFields))
+	memberLogin := f.submit(loginPage().body, "password", memberFields)
+	f.status(memberLogin, 200)
+	if !strings.Contains(memberLogin.body, "password is incorrect") {
+		t.Fatal("the old Member username was accepted")
+	}
+	memberFields.Set("username", "member-login")
+	finishLogin(f.submit(memberLogin.body, "password", memberFields))
 	memberActor := consoleJSON(t, f, server, "GET", "/api/session", "", "", 200)["actor"].(map[string]any)
 	if memberActor["memberId"] != f.otherMember.ID || memberActor["platform"] != false {
 		t.Fatal("new credential did not sign in as the intended organization administrator")
 	}
 	f.browser = rootBrowser
 
-	rootReset := "/api/organizations/org_system/members/" + rootMemberID + "/password/reset"
+	rootCredential := "/api/organizations/org_system/members/" + rootMemberID + "/password"
+	consoleJSON(t, f, server, "PATCH", rootCredential, csrf, `{"expectedUsername":"root","username":"platform-login"}`, 200)
+	consoleJSON(t, f, server, "PATCH", rootCredential, csrf, `{"expectedUsername":"root","username":"stale-replacement"}`, 409)
+	consoleJSON(t, f, server, "GET", "/api/session", "", "", 200)
+	f.browser = browserClient()
+	login = f.submit(loginPage().body, "password", fields)
+	f.status(login, 200)
+	if !strings.Contains(login.body, "password is incorrect") {
+		t.Fatal("the old root username was accepted")
+	}
+	fields.Set("username", "platform-login")
+	finishLogin(f.submit(login.body, "password", fields))
+	session = consoleJSON(t, f, server, "GET", "/api/session", "", "", 200)
+	if session["actor"].(map[string]any)["memberId"] != rootMemberID {
+		t.Fatal("changing the root username changed the signed-in Member")
+	}
+	csrf = session["csrf"].(string)
+	other := consoleJSON(t, f, server, "POST", "/api/organizations/org_system/members", csrf, `{"displayName":"Other system Member"}`, 200)
+	otherCredential := "/api/organizations/org_system/members/" + other["id"].(string) + "/password"
+	consoleJSON(t, f, server, "POST", otherCredential, csrf, `{"username":"root"}`, 200)
+	conflict := consoleJSON(t, f, server, "PATCH", rootCredential, csrf, `{"expectedUsername":"platform-login","username":"root"}`, 409)
+	if conflict["error"] != "username_taken" {
+		t.Fatal("the username collision was not reported")
+	}
+
+	rootReset := rootCredential + "/reset"
 	consoleJSON(t, f, server, "POST", rootReset, csrf, `{"username":"another-root"}`, 400)
 	rotated := consoleJSON(t, f, server, "POST", rootReset, csrf, `{}`, 200)
 	next, ok := rotated["password"].(string)
-	if !ok || len(next) != 32 || next == password || rotated["username"] != identity.RootUsername {
+	if !ok || len(next) != 32 || next == password || rotated["username"] != "platform-login" {
 		t.Fatal("root password was not rotated under its existing username")
 	}
 	consoleJSON(t, f, server, "GET", "/api/session", "", "", 401)
@@ -98,6 +136,8 @@ func TestConsoleFirstLoginAndMemberPasswordManagement(t *testing.T) {
 	finishLogin(f.submit(login.body, "password", fields))
 	for _, expected := range []struct{ organizationID, memberID, action string }{
 		{f.otherMember.OrganizationID, f.otherMember.ID, "password.create"},
+		{f.otherMember.OrganizationID, f.otherMember.ID, "password.username.update"},
+		{identity.SystemOrganizationID, rootMemberID, "password.username.update"},
 		{identity.SystemOrganizationID, rootMemberID, "password.reset"},
 	} {
 		events := consoleJSON(t, f, server, "GET", "/api/events?organizationId="+expected.organizationID+"&memberId="+expected.memberID, "", "", 200)["items"].([]any)
@@ -112,6 +152,17 @@ func TestConsoleFirstLoginAndMemberPasswordManagement(t *testing.T) {
 		if !found {
 			t.Fatal("password mutation was not attributed to the console actor with an empty audit payload")
 		}
+	}
+	recovered, err := f.store.ResetRootPassword(t.Context(), identity.OperatorPrincipal())
+	if err != nil || recovered.Username != "platform-login" || len(recovered.Password) != 32 || recovered.Password == next {
+		t.Fatal("local recovery did not rotate the original root account after its old username was reused", err)
+	}
+	f.browser = browserClient()
+	fields.Set("password", recovered.Password)
+	finishLogin(f.submit(loginPage().body, "password", fields))
+	who = consoleJSON(t, f, server, "GET", "/api/session", "", "", 200)["actor"].(map[string]any)
+	if who["memberId"] != rootMemberID || who["platform"] != true {
+		t.Fatal("local recovery changed the selected administrator")
 	}
 }
 

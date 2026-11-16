@@ -33,7 +33,7 @@ The [Member role definitions](roles.md) and [management scopes and actions](mana
 | List/create/rename/block/unblock Members | Any organization | Own organization |
 | Grant/revoke administrator assignment | Any organization | Own organization |
 | Read bindings and management events | Any organization | Own organization |
-| Set or reset a Member password | Any organization, including `org_system` | No |
+| Set or reset a Member password or change the password username | Any organization, including `org_system` | No |
 | List, configure and disable identity providers | Any organization | Own organization |
 | Create, inspect, update, disable and retire SAML applications | Any organization | Own organization |
 
@@ -129,7 +129,7 @@ targets. Explicit console logout returns to `/`.
 
 Build with `sh scripts/check.sh` or `sh scripts/package.sh VERSION NEW_OUTPUT_DIRECTORY`. Both build the locked frontend before embedding it in Go. Node/npm are build dependencies; the resulting executable needs neither at runtime.
 
-Initialize a protected installation and a new database as described in [operator setup](operations.md). This increment uses fresh schema version **21**. Existing databases are not migrated or erased. Start the OIDC process before starting the console so its discovery and keys are reachable.
+Initialize a protected installation and a new database as described in [operator setup](operations.md). This increment uses fresh schema version **22**. Existing databases are not migrated or erased. Start the OIDC process before starting the console so its discovery and keys are reachable.
 
 Register a dedicated confidential Member client with no organization restriction:
 

@@ -11,7 +11,7 @@ import (
 	"github.com/euyuil/memberid/internal/identity"
 )
 
-func manageSetup(ctx context.Context, args []string, stdout io.Writer) error {
+func manageSetup(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	if len(args) != 1 || args[0] != "reset-password" {
 		return errors.New("usage: memberid setup reset-password")
 	}
@@ -24,7 +24,10 @@ func manageSetup(ctx context.Context, args []string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
-	_, err = fmt.Fprintln(stdout, secret)
+	if _, err := fmt.Fprintln(stdout, secret.Password); err != nil {
+		return err
+	}
+	_, err = fmt.Fprintf(stderr, "Login %s/%s\n", identity.SystemOrganizationID, secret.Username)
 	return err
 }
 

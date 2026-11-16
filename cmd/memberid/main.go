@@ -36,7 +36,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	case "administrator":
 		return manageAdministrator(ctx, args[1:], stdout, stderr)
 	case "setup":
-		return manageSetup(ctx, args[1:], stdout)
+		return manageSetup(ctx, args[1:], stdout, stderr)
 	case "dingtalk":
 		return manageDingTalk(ctx, args[1:], stdout, stderr)
 	case "grant":
