@@ -174,7 +174,7 @@ targets. Explicit console logout returns to `/`.
 
 Build with `sh scripts/check.sh` or `sh scripts/package.sh VERSION NEW_OUTPUT_DIRECTORY`. Both build the locked frontend before embedding it in Go. Node/npm are build dependencies; the resulting executable needs neither at runtime.
 
-Initialize a protected installation and a new database as described in [operator setup](operations.md). This increment uses fresh schema version **26**. Existing databases are not migrated or erased. Start the OIDC process before starting the console so its discovery and keys are reachable.
+Initialize a protected installation and a new database as described in [operator setup](operations.md). This increment uses fresh schema version **27**. Existing schema 26 databases use the [explicit forward upgrade](database-upgrades.md); startup never migrates or erases data. Start the OIDC process before starting the console so its discovery and keys are reachable.
 
 Register a dedicated confidential Member client with no organization restriction:
 

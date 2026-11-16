@@ -31,7 +31,7 @@ For a focused frontend change, run `npm --prefix web ci`, `npm --prefix web run 
 
 The executable can serve process health alone or the configured [OIDC provider](docs/oidc.md), with an optional native [SAML IdP](docs/saml.md) sharing its browser authentication flow; operator commands and the separate [management process](docs/management-api.md) manage stored organizations, Members, and explicit factor bindings. See [the implementation plan](docs/implementation-plan.md) for the remaining identity and OIDC work.
 
-For routine demo changes, select focused checks for the affected behavior and preserve the required PR CI checks. Fresh-installation acceptance does not require an upgrade rehearsal. Actual-browser inspection is targeted to UI or browser-specific uncertainty; automated real-client interoperability and interactive browser results must be reported separately.
+Select focused checks for the affected behavior and preserve the required PR CI checks. Schema 26 is the first supported upgrade baseline. Persisted schema changes must include a versioned forward migration, fresh-install equivalence checks, populated upgrade acceptance and recovery rehearsal. Keep released migrations and the frozen schema 26 fixture unchanged; add new versions rather than editing an already supported migration. Changes unrelated to persistence do not require repeating upgrade acceptance without a relevant regression risk. Actual-browser inspection is targeted to UI or browser-specific uncertainty; automated real-client interoperability and interactive browser results must be reported separately. See [database upgrades and recovery](docs/database-upgrades.md).
 
 ## Local distributions
 

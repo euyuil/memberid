@@ -4,7 +4,7 @@ MemberID implements a restricted, SP-initiated SAML 2.0 Web Browser SSO profile 
 
 ## Enable signing and register an SP
 
-Use a fresh schema version 26 database. Existing demo databases are rejected; no upgrade migration or data reset is performed. Follow [operator setup](operations.md) to create the installation, organization, Member, and authentication source.
+Use schema 27, initialized in a fresh database or [explicitly upgraded from schema 26](database-upgrades.md). Earlier demo schemas are unsupported; no automatic migration or data reset is performed. Follow [operator setup](operations.md) to create the installation, organization, Member, and authentication source.
 
 Provision a dedicated RSA private key of at least 2048 bits and its matching X.509 signing certificate in the protected installation directory. The certificate must be currently valid and permit digital signatures if it declares key usage. Use separate key material from TLS and OIDC. MemberID rejects an OIDC key found in its retained public key set. The SAML certificate is an explicitly distributed signing trust anchor; a publicly trusted TLS certificate is not required.
 
@@ -101,7 +101,7 @@ The initial profile in [issue #99](https://github.com/euyuil/memberid/issues/99)
 
 The [dependency inventory](third-party-components.md#saml-idp-and-xml-signatures) records the pinned upstream SAML implementation, XML dependencies, reviewed licenses, retained notices, and advisory reachability limits. [Startup tests](../cmd/memberid/saml_integration_test.go) and HTTP admission tests cover configuration gating. Shared SAML/OIDC tests retain separate protocol transactions and the existing OIDC identity/session contract.
 
-[NameID mappings](saml-nameid.md) extend the initial persistent allocation with an explicit unspecified format and operator-provisioned legacy values. Production database upgrades ([#106](https://github.com/euyuil/memberid/issues/106)) remain separate work. [Administrator-managed email](member-email.md) is an optional extension with its own authority and release rules.
+[NameID mappings](saml-nameid.md) extend the initial persistent allocation with an explicit unspecified format and operator-provisioned legacy values. [Explicit forward upgrades and recovery](database-upgrades.md) start at schema 26. [Administrator-managed email](member-email.md) is an optional extension with its own authority and release rules.
 
 ## Boundaries and validation
 

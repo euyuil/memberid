@@ -23,6 +23,7 @@ const root = fileURLToPath(new URL("../../../", import.meta.url));
 const postgres =
   "postgres:18.6@sha256:bd5dfa494a5a259704365813dbfa5fa6b3e69be7348d43b547f540c730478583";
 const distribution = process.env.MEMBERID_SAML_PACKAGE;
+const upgradeBaseline = process.env.MEMBERID_UPGRADE_BASELINE_PACKAGE;
 
 function command(executable, args, env = process.env) {
   try {
@@ -49,7 +50,7 @@ function hidden(body, name) {
 
 function client(ca) {
   const cookies = new Map();
-  return async (target, form) => {
+  return async (target, form, headers = {}) => {
     const url = new URL(target);
     const jar = cookies.get(url.host) ?? new Map();
     const data = form ? new URLSearchParams(form).toString() : undefined;
@@ -58,12 +59,14 @@ function client(ca) {
         url,
         {
           ca,
+          agent: false,
           lookup: (_host, options, callback) =>
             options.all
               ? callback(null, [{ address: "127.0.0.1", family: 4 }])
               : callback(null, "127.0.0.1", 4),
           method: data ? "POST" : "GET",
           headers: {
+            ...headers,
             Cookie: [...jar].map(([k, v]) => `${k}=${v}`).join("; "),
             ...(data
               ? {
@@ -113,7 +116,8 @@ test(
     );
     const binaryName =
       process.platform === "win32" ? "memberid.exe" : "memberid";
-    const executable = path.join(distribution, binaryName);
+    let executable = path.join(distribution, binaryName);
+    const upgradedExecutable = executable;
     const build = readFileSync(path.join(distribution, "BUILDINFO"), "utf8");
     assert.ok(
       build.includes(
@@ -133,6 +137,22 @@ test(
         ),
       "packaged executable checksum",
     );
+    if (upgradeBaseline) {
+      assert.ok(path.isAbsolute(upgradeBaseline));
+      executable = path.join(upgradeBaseline, binaryName);
+      const baselineHash = createHash("sha256")
+        .update(readFileSync(executable))
+        .digest("hex");
+      assert.ok(
+        readFileSync(path.join(upgradeBaseline, "SHA256SUMS"), "utf8")
+          .split(/\r?\n/)
+          .some(
+            (line) =>
+              line === `${baselineHash}  ./${binaryName}` ||
+              line === `${baselineHash} *./${binaryName}`,
+          ),
+      );
+    }
 
     const owner = randomBytes(6).toString("hex");
     const local = path.join(root, ".local");
@@ -215,6 +235,7 @@ test(
         const proxy = http.request(
           {
             hostname: "127.0.0.1",
+            agent: false,
             port: upstreamPort,
             path: request.url,
             method: request.method,
@@ -396,6 +417,53 @@ test(
       "--username",
       "saml-fixture",
     );
+    const oidcSecret = randomBytes(32).toString("hex");
+    if (upgradeBaseline) {
+      writeFileSync(
+        path.join(installation, configuration.clientsFile),
+        JSON.stringify([
+          {
+            client_id: "upgrade-client",
+            secret_sha256: createHash("sha256")
+              .update(oidcSecret)
+              .digest("hex"),
+            redirect_uris: [`${spOrigin}/oidc-callback`],
+            subjectKind: "member",
+            organizationId: organization.id,
+            refresh: true,
+          },
+        ]),
+        { mode: 0o600 },
+      );
+      const administrator = JSON.parse(
+        cli(
+          "member",
+          "create",
+          "--organization",
+          organization.id,
+          "--name",
+          "Synthetic upgrade administrator",
+        ),
+      );
+      cli(
+        "member",
+        "set-password",
+        "--organization",
+        organization.id,
+        "--member",
+        administrator.id,
+        "--username",
+        "upgrade-admin",
+      );
+      cli(
+        "administrator",
+        "grant",
+        "--organization",
+        organization.id,
+        "--member",
+        administrator.id,
+      );
+    }
     const spFile = path.join(directory, "registration.json");
     writeFileSync(
       spFile,
@@ -814,6 +882,245 @@ test(
       assert.match(lastFailure, /signature/i);
       assert.equal((await browser(`${spOrigin}/session`)).status, 401);
     });
+    await t.test(
+      "schema 26 upgrades with stable identities and recovers with the old executable",
+      { skip: !upgradeBaseline },
+      async () => {
+        const oldExecutable = executable;
+        const pg = (sql) =>
+          command("docker", [
+            "exec",
+            database,
+            "psql",
+            "--username",
+            "postgres",
+            "--dbname",
+            "postgres",
+            "--no-psqlrc",
+            "--tuples-only",
+            "--no-align",
+            "--set",
+            "ON_ERROR_STOP=1",
+            "--command",
+            sql,
+          ]);
+        const snapshot = () =>
+          Object.fromEntries(
+            pg(
+              "SELECT tablename FROM pg_tables WHERE schemaname='public' AND tablename NOT IN ('memberid_schema','database_upgrades') ORDER BY tablename",
+            )
+              .split(/\r?\n/)
+              .map((name) => {
+                assert.match(name, /^[a-z_]+$/);
+                return [
+                  name,
+                  pg(
+                    `SELECT md5(coalesce(jsonb_agg(to_jsonb(t) ORDER BY to_jsonb(t)::text),'[]'::jsonb)::text) FROM public.${name} t`,
+                  ),
+                ];
+              }),
+          );
+        assert.equal(pg("SELECT version FROM memberid_schema"), "26");
+        assert.equal((await browser(acs, await responseForm())).status, 303);
+        const originalNameID = JSON.parse(
+          (await browser(`${spOrigin}/session`)).body,
+        ).nameID;
+        const verifier = randomBytes(32).toString("base64url");
+        const discovery = JSON.parse(
+          (await browser(`${issuer}/.well-known/openid-configuration`)).body,
+        );
+        const authorization = new URL(discovery.authorization_endpoint);
+        authorization.search = new URLSearchParams({
+          client_id: "upgrade-client",
+          redirect_uri: `${spOrigin}/oidc-callback`,
+          response_type: "code",
+          scope: "openid profile offline_access",
+          state: "upgrade-state",
+          nonce: "upgrade-nonce",
+          code_challenge_method: "S256",
+          code_challenge: createHash("sha256")
+            .update(verifier)
+            .digest("base64url"),
+        }).toString();
+        const start = await browser(authorization);
+        const page = await browser(new URL(start.headers.location, issuer));
+        const completed = await browser(`${issuer}/login`, {
+          request: hidden(page.body, "request"),
+          csrf: hidden(page.body, "csrf"),
+          action: "continue",
+          member: member.id,
+          consent: "yes",
+        });
+        const redirected = await browser(
+          new URL(completed.headers.location, issuer),
+        );
+        const callback = new URL(redirected.headers.location, issuer);
+        assert.equal(callback.searchParams.get("state"), "upgrade-state");
+        const authHeader = {
+          Authorization: `Basic ${Buffer.from(`upgrade-client:${oidcSecret}`).toString("base64")}`,
+        };
+        const exchanged = await browser(
+          discovery.token_endpoint,
+          {
+            grant_type: "authorization_code",
+            code: callback.searchParams.get("code"),
+            redirect_uri: `${spOrigin}/oidc-callback`,
+            code_verifier: verifier,
+          },
+          authHeader,
+        );
+        assert.equal(exchanged.status, 200);
+        const tokens = JSON.parse(exchanged.body);
+        assert.ok(tokens.refresh_token);
+        const claims = JSON.parse(
+          Buffer.from(tokens.id_token.split(".")[1], "base64url").toString(),
+        );
+        assert.equal(claims.sub, member.id);
+        await stopProvider();
+        const before = snapshot();
+        const pgDump = path.join(
+          directory,
+          process.platform === "win32" ? "pgdump.exe" : "pgdump",
+        );
+        command("go", [
+          "build",
+          "-o",
+          pgDump,
+          path.join(root, "internal", "interop", "saml", "pgdump"),
+        ]);
+        env.MEMBERID_TEST_PGDUMP_CONTAINER = database;
+        executable = upgradedExecutable;
+        const recovery = path.join(directory, "upgrade-recovery");
+        const upgradeArgs = [
+          "database",
+          "upgrade",
+          "--directory",
+          installation,
+          "--backup-directory",
+          recovery,
+          "--maintenance-confirmed",
+          "--pg-dump",
+          pgDump,
+        ];
+        const upgraded = JSON.parse(cli(...upgradeArgs));
+        assert.equal(upgraded.upgraded, true);
+        assert.equal(upgraded.currentVersion, 27);
+        t.diagnostic("upgrade rehearsal: schema 27 committed");
+        assert.deepEqual(snapshot(), before);
+        assert.equal(JSON.parse(cli(...upgradeArgs)).upgraded, false);
+        assert.equal(pg("SELECT count(*) FROM database_upgrades"), "1");
+        cli("database", "backup-check", "--backup-directory", recovery);
+        assert.throws(() => command(oldExecutable, ["database", "check"], env));
+        await startProvider();
+        const refreshed = await browser(
+          discovery.token_endpoint,
+          { grant_type: "refresh_token", refresh_token: tokens.refresh_token },
+          authHeader,
+        );
+        assert.equal(refreshed.status, 200);
+        const renewed = JSON.parse(
+          Buffer.from(
+            JSON.parse(refreshed.body).id_token.split(".")[1],
+            "base64url",
+          ).toString(),
+        );
+        assert.equal(renewed.sub, claims.sub);
+        assert.equal(renewed.auth_time, claims.auth_time);
+        t.diagnostic("upgrade rehearsal: original OIDC grant refreshed");
+        assert.equal((await browser(acs, await responseForm())).status, 303);
+        assert.equal(
+          JSON.parse((await browser(`${spOrigin}/session`)).body).nameID,
+          originalNameID,
+        );
+        await stopProvider();
+        // Rehearse a failed deployment: restore the pre-upgrade set to a new DB
+        // and directory; retain the upgraded database without reverse migration.
+        command("docker", [
+          "exec",
+          database,
+          "createdb",
+          "--username",
+          "postgres",
+          "recovered26",
+        ]);
+        command("docker", [
+          "cp",
+          path.join(recovery, "database.dump"),
+          `${database}:/tmp/upgrade-recovery.dump`,
+        ]);
+        command("docker", [
+          "exec",
+          database,
+          "pg_restore",
+          "--username",
+          "postgres",
+          "--dbname",
+          "recovered26",
+          "--no-owner",
+          "--no-acl",
+          "--exit-on-error",
+          "--single-transaction",
+          "/tmp/upgrade-recovery.dump",
+        ]);
+        command("docker", [
+          "cp",
+          path.join(root, "docs", "recovery-sessions.sql"),
+          `${database}:/tmp/recovery-sessions.sql`,
+        ]);
+        command("docker", [
+          "exec",
+          database,
+          "psql",
+          "--username",
+          "postgres",
+          "--dbname",
+          "recovered26",
+          "--set",
+          "ON_ERROR_STOP=1",
+          "--file",
+          "/tmp/recovery-sessions.sql",
+        ]);
+        installation = path.join(directory, "recovered26-installation");
+        cpSync(path.join(recovery, "installation"), installation, {
+          recursive: true,
+          errorOnExist: true,
+          force: false,
+        });
+        const oldURL = env.MEMBERID_DATABASE_URL;
+        env.MEMBERID_DATABASE_URL = oldURL.replace(
+          "/postgres?",
+          "/recovered26?",
+        );
+        executable = oldExecutable;
+        cli("database", "check");
+        await startProvider();
+        t.diagnostic("upgrade rehearsal: recovered schema 26 started");
+        assert.equal(
+          (
+            await browser(
+              discovery.token_endpoint,
+              {
+                grant_type: "refresh_token",
+                refresh_token: tokens.refresh_token,
+              },
+              authHeader,
+            )
+          ).status,
+          400,
+        );
+        assert.equal((await browser(acs, await responseForm())).status, 303);
+        assert.equal(
+          JSON.parse((await browser(`${spOrigin}/session`)).body).nameID,
+          originalNameID,
+        );
+        await stopProvider();
+        // Return to the preserved upgraded installation for remaining checks.
+        installation = path.join(directory, "installation");
+        env.MEMBERID_DATABASE_URL = oldURL;
+        executable = upgradedExecutable;
+        await startProvider();
+      },
+    );
     await t.test(
       "signing rollover, rollback and consistent backup restore preserve the SP account",
       async () => {
