@@ -243,7 +243,7 @@ func (service *Service) login(w http.ResponseWriter, r *http.Request) {
 				}
 				return
 			}
-			service.renderLogin(w, r, request, registered, "Phone verified. Select your identity and continue.")
+			service.renderLogin(w, r, request, registered, "Phone verified.")
 			return
 		case "cancel":
 			request.DingTalk, request.Feishu = nil, nil

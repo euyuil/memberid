@@ -20,6 +20,7 @@ type memberChoice struct{ ID, Label string }
 type pageData struct {
 	Request                                                        *authorizationRequest
 	ApplicationName, Scopes, Message, Nonce                        string
+	SelectedMemberID                                               string
 	Members                                                        []memberChoice
 	Verified, Pending, PhonePending, FactorClient, ConsentRequired bool
 	PhoneEnabled, ProviderEnabled, OrganizationRestricted          bool
@@ -48,9 +49,9 @@ func (service *Service) renderLogin(w http.ResponseWriter, r *http.Request, requ
 	if verified && message == "" {
 		switch request.Method {
 		case "dingtalk":
-			message = "DingTalk verified. Select your identity and continue."
+			message = "DingTalk verified."
 		case "feishu":
-			message = "Feishu verified. Select your identity and continue."
+			message = "Feishu verified."
 		}
 	}
 	if verified && client.registration.SubjectKind == "member" && len(choices) == 0 {
@@ -70,6 +71,9 @@ func (service *Service) renderLogin(w http.ResponseWriter, r *http.Request, requ
 		PhoneEnabled: service.phone != nil, ProviderEnabled: client.registration.SubjectKind == "member" && (service.dingtalk != nil || service.feishu != nil),
 		OrganizationRestricted: client.registration.OrganizationID != "", ProviderOrganizationID: client.registration.OrganizationID,
 		FactorClient: client.registration.SubjectKind == "factor", ConsentRequired: !client.registration.Preauthorized || slices.Contains(request.prompts(), "consent"),
+	}
+	if request.SAML == nil && len(choices) == 1 {
+		data.SelectedMemberID = choices[0].ID
 	}
 	if !data.OrganizationRestricted {
 		data.ProviderOrganizationID = request.ProviderOrganizationID
