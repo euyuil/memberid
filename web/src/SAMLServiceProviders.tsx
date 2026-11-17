@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react"
+import { SAMLIdentityProvider } from "@/SAMLIdentityProvider"
 import { Plus } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
@@ -66,6 +67,7 @@ export function SAMLServiceProviders({
   save: Save
   onComplete: () => void
 }) {
+  const [integration, setIntegration] = useState(false)
   const [editing, setEditing] = useState<SAMLServiceProvider | "new">()
   const [viewing, setViewing] = useState(selected)
   const [retiring, setRetiring] = useState<SAMLServiceProvider>()
@@ -78,7 +80,17 @@ export function SAMLServiceProviders({
   }
   return (
     <section aria-label="SAML 应用列表">
-      <div className="flex justify-end pb-4">
+      {integration && (
+        <SAMLIdentityProvider
+          organizationId={organizationId}
+          request={save}
+          onClose={() => setIntegration(false)}
+        />
+      )}
+      <div className="flex justify-end gap-2 pb-4">
+        <Button variant="outline" onClick={() => setIntegration(true)}>
+          接入信息
+        </Button>
         <Button onClick={() => setEditing("new")}>
           <Plus data-icon="inline-start" />
           添加 SAML 应用
