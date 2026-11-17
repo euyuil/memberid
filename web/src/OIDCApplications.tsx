@@ -43,6 +43,11 @@ export type OIDCApplication = {
   organizationId?: string
   redirectUris: string[]
   postLogoutRedirectUris?: string[]
+  accountReturnUris: string[] | null
+  preauthorized: boolean
+  subjectKind: "member" | "factor"
+  evidenceScope?: string
+  evidenceAudience?: string
   refresh: boolean
   enabled: boolean
   system: boolean
@@ -258,6 +263,36 @@ export function OIDCApplications({
                   value={panel.application.refresh ? "允许" : "不允许"}
                 />
               </div>
+              <ReadField
+                label="身份类型"
+                value={
+                  panel.application.subjectKind === "member"
+                    ? "组织成员"
+                    : "认证因子"
+                }
+              />
+              <ReadField
+                label="用户授权确认"
+                value={
+                  panel.application.preauthorized ? "跳过确认" : "需要确认"
+                }
+              />
+              {panel.application.evidenceScope && (
+                <ReadField
+                  label="身份凭据范围"
+                  value={panel.application.evidenceScope}
+                />
+              )}
+              {panel.application.evidenceAudience && (
+                <CopyField
+                  label="身份凭据接收方"
+                  value={panel.application.evidenceAudience}
+                />
+              )}
+              <URIFields
+                label="账号绑定后返回地址"
+                values={panel.application.accountReturnUris ?? []}
+              />
               <URIFields
                 label="登录回调地址"
                 values={panel.application.redirectUris}
@@ -428,6 +463,9 @@ function ApplicationForm({
   onSave: (input: object) => void
 }) {
   const [refresh, setRefresh] = useState(application?.refresh ?? false)
+  const [preauthorized, setPreauthorized] = useState(
+    application?.preauthorized ?? false
+  )
   const [validationError, setValidationError] = useState("")
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -440,18 +478,21 @@ function ApplicationForm({
         .filter(Boolean)
     const redirectUris = uris("redirectUris")
     const postLogoutRedirectUris = uris("postLogoutRedirectUris")
+    const accountReturnUris = uris("accountReturnUris")
     if (
       !redirectUris.length ||
-      [...redirectUris, ...postLogoutRedirectUris].some((value) => {
-        const url = URL.parse(value)
-        return (
-          !url ||
-          url.protocol !== "https:" ||
-          Boolean(url.username || url.password) ||
-          value.includes("#") ||
-          value.includes("*")
-        )
-      })
+      [...redirectUris, ...postLogoutRedirectUris, ...accountReturnUris].some(
+        (value) => {
+          const url = URL.parse(value)
+          return (
+            !url ||
+            url.protocol !== "https:" ||
+            Boolean(url.username || url.password) ||
+            value.includes("#") ||
+            value.includes("*")
+          )
+        }
+      )
     ) {
       setValidationError(
         "请填写有效的 HTTPS 回调地址，每行一个，地址中不能包含通配符、片段或用户信息。"
@@ -466,6 +507,8 @@ function ApplicationForm({
         field("organizationId") === "*" ? "" : field("organizationId"),
       redirectUris,
       postLogoutRedirectUris,
+      accountReturnUris,
+      preauthorized,
       refresh,
     })
   }
@@ -560,6 +603,34 @@ function ApplicationForm({
                 defaultValue={application?.postLogoutRedirectUris?.join("\n")}
               />
             </Field>
+            <Field>
+              <FieldLabel htmlFor="oidc-account-return">
+                账号绑定后返回地址（可选）
+              </FieldLabel>
+              <Textarea
+                id="oidc-account-return"
+                name="accountReturnUris"
+                rows={2}
+                defaultValue={application?.accountReturnUris?.join("\n")}
+              />
+            </Field>
+            <Field orientation="horizontal">
+              <Checkbox
+                id="oidc-preauthorized"
+                checked={preauthorized}
+                onCheckedChange={setPreauthorized}
+              />
+              <FieldLabel htmlFor="oidc-preauthorized">
+                跳过用户授权确认
+              </FieldLabel>
+            </Field>
+            {preauthorized && (
+              <Alert>
+                <AlertDescription>
+                  此应用可在用户完成认证后接收请求的身份信息，无需再次确认授权。应用明确要求确认时仍需用户确认。
+                </AlertDescription>
+              </Alert>
+            )}
             <Field orientation="horizontal">
               <Checkbox
                 id="oidc-refresh"
@@ -569,11 +640,13 @@ function ApplicationForm({
               <FieldLabel htmlFor="oidc-refresh">允许 Refresh Token</FieldLabel>
             </Field>
           </FieldGroup>
-          {feedback && (
-            <Alert variant="destructive">
-              <AlertDescription>{feedback}</AlertDescription>
-            </Alert>
-          )}
+          <div className="form-feedback" role="status" aria-live="polite">
+            {feedback && (
+              <Alert variant="destructive">
+                <AlertDescription>{feedback}</AlertDescription>
+              </Alert>
+            )}
+          </div>
           <DialogFooter>
             <Button
               type="button"
