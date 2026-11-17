@@ -97,6 +97,8 @@ Choose an organization, then open **身份提供商** (Identity providers). This
 
 Saving a new secret verifies the application credentials before storing an encrypted value. Leaving the secret blank during editing keeps the existing one. An operator-initiated disable is rejected if it would remove the last eligible administrator from an organization that currently has one. Confirmed upstream revocation applies even in that case. Configuration changes are audited with actor and provider IDs, display name, type, and enabled state.
 
+The create/edit and detail views show separate login and account-link callback URLs and upstream permission requirements. **检查已保存凭据** performs a bounded, non-mutating application-token check using the saved secret. Its result identifies the configuration revision and check time, distinguishes acceptance, explicit upstream denial and unavailable verification, and never returns tokens or upstream messages. It does not verify directory permissions, member visibility, enterprise identity or callback registration, and never changes source authorization or binding status. This session/CSRF-protected `POST /api/organizations/{organizationId}/providers/{kind}/{providerId}/check` requires the built-in provider `credential.check` permission before and after upstream I/O; organization administrators are limited to their own organization. Configuration changes during a check invalidate its result.
+
 See [Feishu setup](feishu.md) and [DingTalk setup](dingtalk.md) for the required application and runtime settings.
 
 ## OIDC applications
