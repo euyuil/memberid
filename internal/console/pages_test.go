@@ -22,6 +22,7 @@ func TestConsolePageRequests(t *testing.T) {
 	})
 	for _, path := range []string{
 		"/", "/organizations", "/members?q=Alice&status=active", "/providers", "/events?before=42",
+		"/oidc-applications", "/organizations/org_example/oidc-applications",
 		"/organizations/org_example", "/organizations/org_example/members?after=mbr_cursor",
 		"/organizations/org_example/members/mbr_example", "/organizations/org_example/providers",
 		"/organizations/org_system/events?memberId=mbr_example",
@@ -66,7 +67,7 @@ func TestConsolePageRequests(t *testing.T) {
 }
 
 func TestLoginReturnTargets(t *testing.T) {
-	for _, value := range []string{"/authentication-events?type=sms.send", "/organizations/org_example/authentication-events?requestId=example", "/", "/members?q=%E5%A7%93%E5%90%8D+%26+Alice&after=mbr_cursor", "/organizations/org_example/members/mbr_example", "/organizations/org_example/events?memberId=mbr_example&before=42"} {
+	for _, value := range []string{"/authentication-events?type=sms.send", "/organizations/org_example/authentication-events?requestId=example", "/organizations/org_example/oidc-applications", "/", "/members?q=%E5%A7%93%E5%90%8D+%26+Alice&after=mbr_cursor", "/organizations/org_example/members/mbr_example", "/organizations/org_example/events?memberId=mbr_example&before=42"} {
 		if !validReturnTo(value) {
 			t.Errorf("rejected local page: %q", value)
 		}

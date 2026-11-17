@@ -25,6 +25,12 @@ test("page paths identify resources independently of query parameters", () => {
       "mbr_example",
     ],
     ["/organizations/org_example/providers", "providers", "org_example", ""],
+    [
+      "/organizations/org_example/oidc-applications",
+      "oidc-applications",
+      "org_example",
+      "",
+    ],
     ["/organizations/org_system/events", "events", "org_system", ""],
   ]) {
     const route = parseRoute(
@@ -39,15 +45,15 @@ test("page paths identify resources independently of query parameters", () => {
 
 test("OIDC application navigation retains the selected management scope", () => {
   const url = routeURL({ view: "oidc-applications", org: "org_example" })
-  assert.equal(url, "/oidc-applications?organizationId=org_example")
+  assert.equal(url, "/organizations/org_example/oidc-applications")
   const route = parseRoute(url)!
   assert.equal(route.view, "oidc-applications")
   assert.equal(route.org, "org_example")
   assert.equal(routeURL(route), url)
   assert.equal(routeURL({ view: "oidc-applications" }), "/oidc-applications")
   assert.equal(
-    parseRoute("/oidc-applications?organizationId=not%2Fvalid"),
-    null
+    parseRoute("/oidc-applications?organizationId=org_example")?.org,
+    ""
   )
 })
 

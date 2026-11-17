@@ -23,19 +23,14 @@ export type Route = {
 
 export function routeURL(route: Route): string {
   const { view = "organization", org, member } = route
-  let path =
-    org && view !== "oidc-applications"
-      ? `/organizations/${encodeURIComponent(org)}`
-      : ""
+  let path = org ? `/organizations/${encodeURIComponent(org)}` : ""
   if (view === "organization") path ||= "/organizations"
   else path += `/${view}`
   if (view === "members" && org && member)
     path += `/${encodeURIComponent(member)}`
 
   const query = new URLSearchParams()
-  if (view === "oidc-applications") {
-    if (org) query.set("organizationId", org)
-  } else if (view === "members" && !member) {
+  if (view === "members" && !member) {
     for (const key of ["q", "status", "administrator", "after"] as const)
       if (route[key]) query.set(key, route[key])
   } else if (view === "providers" && org) {
@@ -65,20 +60,17 @@ export function parseRoute(location: string) {
       query,
     }
   const match =
-    /^(?:\/(organizations|members|providers|oidc-applications|saml-service-providers|events|authentication-events)|\/organizations\/([A-Za-z0-9_-]+)(?:\/(members|providers|saml-service-providers|events|authentication-events)(?:\/([A-Za-z0-9_-]+))?)?)$/.exec(
+    /^(?:\/(organizations|members|providers|oidc-applications|saml-service-providers|events|authentication-events)|\/organizations\/([A-Za-z0-9_-]+)(?:\/(members|providers|oidc-applications|saml-service-providers|events|authentication-events)(?:\/([A-Za-z0-9_-]+))?)?)$/.exec(
       path
     )
   if (!match || (match[4] && match[3] !== "members")) return null
   const view = (match[3] ||
     (match[1] === "organizations" ? "organization" : match[1]) ||
     "organization") as View
-  const organizationId =
-    view === "oidc-applications" ? query.get("organizationId") : null
-  if (organizationId && !/^[A-Za-z0-9_-]+$/.test(organizationId)) return null
   return {
     root: false,
     view,
-    org: match[2] ?? organizationId ?? "",
+    org: match[2] ?? "",
     member: match[4] ?? "",
     query,
   }
