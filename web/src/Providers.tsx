@@ -425,7 +425,7 @@ function ProviderSetup({
   kind: Kind
 }) {
   return (
-    <dl>
+    <dl className="grid-cols-1 gap-2 [&>dd]:mb-2">
       <dt>登录回调地址</dt>
       <dd>
         <RecordIdentifier
@@ -435,6 +435,7 @@ function ProviderSetup({
               : directory.dingTalkCallback
           }
           label="登录回调地址"
+          multiline
         />
       </dd>
       <dt>账号绑定回调地址</dt>
@@ -446,6 +447,7 @@ function ProviderSetup({
               : directory.dingTalkLinkCallback
           }
           label="账号绑定回调地址"
+          multiline
         />
       </dd>
       <dt>所需上游权限</dt>

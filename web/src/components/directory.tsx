@@ -16,6 +16,7 @@ import {
   InputGroupAddon,
   InputGroupButton,
   InputGroupInput,
+  InputGroupTextarea,
 } from "@/components/ui/input-group"
 
 const directoryStateImages = {
@@ -68,9 +69,11 @@ export function DirectoryResults({
 export function RecordIdentifier({
   value,
   label,
+  multiline = false,
 }: {
   value: string
   label: string
+  multiline?: boolean
 }) {
   const [copyResult, setCopyResult] = useState<{
     status: "idle" | "copying" | "copied" | "failed"
@@ -88,13 +91,24 @@ export function RecordIdentifier({
   return (
     <div className="min-w-0">
       <InputGroup>
-        <InputGroupInput
-          aria-label={label}
-          className="h-full rounded-s-[calc(var(--radius)-1px)] bg-input/50 dark:bg-input/80"
-          value={value}
-          readOnly
-          onFocus={(event) => event.currentTarget.select()}
-        />
+        {multiline ? (
+          <InputGroupTextarea
+            aria-label={label}
+            className="min-h-20 resize-none bg-input/50 break-all dark:bg-input/80"
+            value={value}
+            readOnly
+            rows={3}
+            onFocus={(event) => event.currentTarget.select()}
+          />
+        ) : (
+          <InputGroupInput
+            aria-label={label}
+            className="h-full rounded-s-[calc(var(--radius)-1px)] bg-input/50 dark:bg-input/80"
+            value={value}
+            readOnly
+            onFocus={(event) => event.currentTarget.select()}
+          />
+        )}
         <InputGroupAddon
           align="inline-end"
           className="h-full px-0.75 py-0 has-[>button]:mr-0"
