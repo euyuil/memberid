@@ -18,13 +18,18 @@ type OIDCClientRegistration struct {
 }
 
 // OIDCApplication contains only registration information safe to show to an
-// administrator. The protocol policy and credential verifier stay internal.
+// administrator. Credential verifiers are never part of this projection.
 type OIDCApplication struct {
 	ClientID               string   `json:"clientId"`
 	DisplayName            string   `json:"displayName"`
 	OrganizationID         string   `json:"organizationId,omitempty"`
 	RedirectURIs           []string `json:"redirectUris"`
 	PostLogoutRedirectURIs []string `json:"postLogoutRedirectUris,omitempty"`
+	AccountReturnURIs      []string `json:"accountReturnUris"`
+	Preauthorized          bool     `json:"preauthorized"`
+	SubjectKind            string   `json:"subjectKind"`
+	EvidenceScope          string   `json:"evidenceScope,omitempty"`
+	EvidenceAudience       string   `json:"evidenceAudience,omitempty"`
 	Refresh                bool     `json:"refresh"`
 	Enabled                bool     `json:"enabled"`
 	System                 bool     `json:"system"`
@@ -36,6 +41,8 @@ func (registration OIDCClientRegistration) Application() OIDCApplication {
 	return OIDCApplication{
 		ClientID: client.ID, DisplayName: registration.DisplayName, OrganizationID: client.OrganizationID,
 		RedirectURIs: client.RedirectURIs, PostLogoutRedirectURIs: client.PostLogoutRedirectURIs, Refresh: client.Refresh,
+		AccountReturnURIs: client.AccountReturnURIs, Preauthorized: client.Preauthorized,
+		SubjectKind: client.SubjectKind, EvidenceScope: client.EvidenceScope, EvidenceAudience: client.EvidenceAudience,
 		Enabled: registration.Enabled, System: registration.System, Revision: registration.Revision,
 	}
 }
@@ -125,6 +132,7 @@ func (service *ManagementService) CreateOIDCApplication(ctx context.Context, pri
 			ID: application.ClientID, SecretSHA256: secretHash, SubjectKind: "member",
 			OrganizationID: application.OrganizationID, RedirectURIs: application.RedirectURIs,
 			PostLogoutRedirectURIs: application.PostLogoutRedirectURIs, Refresh: application.Refresh,
+			AccountReturnURIs: application.AccountReturnURIs, Preauthorized: application.Preauthorized,
 		},
 	}
 	return service.store.CreateOIDCClient(ctx, principal, registration, loopback)
@@ -161,19 +169,21 @@ func (store *Store) CreateOIDCClient(ctx context.Context, principal Principal, r
 }
 
 type OIDCApplicationChange struct {
-	ExpectedRevision       int64    `json:"expectedRevision"`
-	DisplayName            string   `json:"displayName"`
-	OrganizationID         string   `json:"organizationId"`
-	RedirectURIs           []string `json:"redirectUris"`
-	PostLogoutRedirectURIs []string `json:"postLogoutRedirectUris"`
-	Refresh                bool     `json:"refresh"`
-	Enabled                *bool    `json:"enabled"`
+	ExpectedRevision       int64     `json:"expectedRevision"`
+	DisplayName            string    `json:"displayName"`
+	OrganizationID         string    `json:"organizationId"`
+	RedirectURIs           []string  `json:"redirectUris"`
+	PostLogoutRedirectURIs []string  `json:"postLogoutRedirectUris"`
+	AccountReturnURIs      *[]string `json:"accountReturnUris"`
+	Preauthorized          *bool     `json:"preauthorized"`
+	Refresh                bool      `json:"refresh"`
+	Enabled                *bool     `json:"enabled"`
 }
 
 func (service *ManagementService) UpdateOIDCApplication(ctx context.Context, principal Principal, id string, change OIDCApplicationChange, loopback bool) (OIDCApplication, error) {
 	action := actionUpdate
 	if change.Enabled != nil {
-		if change.DisplayName != "" || change.OrganizationID != "" || change.RedirectURIs != nil || change.PostLogoutRedirectURIs != nil || change.Refresh {
+		if change.DisplayName != "" || change.OrganizationID != "" || change.RedirectURIs != nil || change.PostLogoutRedirectURIs != nil || change.AccountReturnURIs != nil || change.Preauthorized != nil || change.Refresh {
 			return OIDCApplication{}, ErrInvalid
 		}
 		action = actionStatusUpdate
@@ -194,6 +204,12 @@ func (service *ManagementService) UpdateOIDCApplication(ctx context.Context, pri
 		registration.DisplayName = change.DisplayName
 		client.RedirectURIs, client.PostLogoutRedirectURIs = change.RedirectURIs, change.PostLogoutRedirectURIs
 		client.OrganizationID, client.Refresh = change.OrganizationID, change.Refresh
+		if change.AccountReturnURIs != nil {
+			client.AccountReturnURIs = *change.AccountReturnURIs
+		}
+		if change.Preauthorized != nil {
+			client.Preauthorized = *change.Preauthorized
+		}
 		if ValidateOIDCClients([]OIDCClient{*client}, loopback) != nil {
 			return false, ErrInvalid
 		}

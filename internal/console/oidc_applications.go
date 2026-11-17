@@ -30,6 +30,8 @@ func (s *Service) registerOIDCApplicationRoutes(installation *config.Loaded) {
 			OrganizationID         string   `json:"organizationId"`
 			RedirectURIs           []string `json:"redirectUris"`
 			PostLogoutRedirectURIs []string `json:"postLogoutRedirectUris"`
+			AccountReturnURIs      []string `json:"accountReturnUris"`
+			Preauthorized          bool     `json:"preauthorized"`
 			Refresh                bool     `json:"refresh"`
 		}
 		if !management.DecodeRequest(w, r, &input) {
@@ -40,6 +42,7 @@ func (s *Service) registerOIDCApplicationRoutes(installation *config.Loaded) {
 			identity.OIDCApplication{
 				ClientID: input.ClientID, DisplayName: input.DisplayName, OrganizationID: input.OrganizationID,
 				RedirectURIs: input.RedirectURIs, PostLogoutRedirectURIs: input.PostLogoutRedirectURIs, Refresh: input.Refresh,
+				AccountReturnURIs: input.AccountReturnURIs, Preauthorized: input.Preauthorized,
 			}, config.SecretHash(secret), installation.AllowLoopbackHTTP)
 		respond(w, oidcApplicationResult{value, secret}, err)
 	})

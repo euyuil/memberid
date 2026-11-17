@@ -101,7 +101,7 @@ See [Feishu setup](feishu.md) and [DingTalk setup](dingtalk.md) for the required
 
 ## OIDC applications
 
-Platform administrators open **OIDC 应用** in the application integrations group. A registration has an immutable client ID, a display name, explicit exact redirect URLs, and a login organization restriction. Select one organization or explicitly select all organizations. Editing a registration preserves its operator-managed subject policy, evidence scope, account-return destinations and consent policy. The protected console client appears read-only.
+Platform administrators open **OIDC 应用** in the application integrations group. A registration has an immutable client ID, a display name, explicit exact redirect URLs, and a login organization restriction. Select one organization or explicitly select all organizations. Administrators can also configure exact account-link return destinations independently of login/logout callbacks and explicitly skip ordinary user consent. `prompt=consent` still requires confirmation. Details show the current subject and evidence policy read-only; edits preserve those operator-managed policies. Omitting the new account-return or consent fields in an API update preserves their existing values. The protected console client appears read-only.
 
 The create and rotate dialogs return the new secret once. Rotation immediately replaces the old verifier. Disabling a registration blocks fresh authorization, code exchange and renewal, and revokes its current MemberID grants. Re-enabling requires a new authorization. The application's own session and offline JWT expiration continue to follow the relying party's policy. Changes to the registration are audited under the system organization without secret values or verifiers.
 

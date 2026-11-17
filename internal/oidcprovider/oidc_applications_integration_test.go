@@ -86,3 +86,83 @@ func TestManageOIDCApplicationWithoutRestart(t *testing.T) {
 		t.Fatal("audit entry missing or credential exposed", err)
 	}
 }
+
+func TestOIDCApplicationPolicyManagement(t *testing.T) {
+	f := newFixture(t)
+	ctx := t.Context()
+	operator := identity.OperatorPrincipal()
+	admin, err := f.store.CreateMember(ctx, operator, identity.SystemOrganizationID, "", "Policy administrator")
+	if err != nil {
+		t.Fatal(err)
+	}
+	factor, err := f.store.EnsureFactor(ctx, "phone", "phone:e164", "+8619900000001")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = f.store.BindFactor(ctx, operator, admin.OrganizationID, admin.ID, factor.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err = f.store.SetAdministrator(ctx, operator, admin.OrganizationID, admin.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	server := consoleFixture(t, f)
+	consoleLogin(t, f, server, admin.ID)
+	csrf := consoleJSON(t, f, server, "GET", "/api/session", "", "", 200)["csrf"].(string)
+	const base = "/api/oidc-applications"
+	payload := fmt.Sprintf(`{"clientId":"policy","displayName":"Policy application","organizationId":%q,"redirectUris":[%q],"accountReturnUris":["https://app.example.invalid/account"],"preauthorized":true}`, f.member.OrganizationID, callback)
+	created := consoleJSON(t, f, server, "POST", base, csrf, payload, 200)
+	application := created["application"].(map[string]any)
+	if application["preauthorized"] != true || application["subjectKind"] != "member" || len(application["accountReturnUris"].([]any)) != 1 {
+		t.Fatal("policy missing", application)
+	}
+	f.secret = created["clientSecret"].(string)
+	page, _ := f.loginPage("policy", "openid profile")
+	if strings.Contains(page.body, `name="member" disabled`) {
+		page = f.verifyPhone(page)
+	}
+	if !strings.Contains(page.body, `name="consent" type="checkbox" value="yes"  checked`) {
+		t.Fatal("live policy did not skip consent")
+	}
+	update := map[string]any{"expectedRevision": 1, "displayName": "Updated policy", "organizationId": f.member.OrganizationID, "redirectUris": []string{callback}}
+	send := func(status int) map[string]any {
+		t.Helper()
+		b, _ := json.Marshal(update)
+		return consoleJSON(t, f, server, "PATCH", base+"/policy", csrf, string(b), status)
+	}
+	send(200) // Older callers do not erase policy fields they did not send.
+	stored, err := f.store.OIDCClient(ctx, "policy")
+	if err != nil || !stored.Client.Preauthorized || len(stored.Client.AccountReturnURIs) != 1 {
+		t.Fatal("omitted policy was lost", err)
+	}
+	update["expectedRevision"] = 2
+	update["accountReturnUris"] = []string{"https://app.example.invalid/*"}
+	update["preauthorized"] = false
+	send(400)
+	stored, _ = f.store.OIDCClient(ctx, "policy")
+	if stored.Revision != 2 || !stored.Client.Preauthorized {
+		t.Fatal("invalid update changed policy")
+	}
+	update["accountReturnUris"] = []string{}
+	send(200)
+	send(409)
+	stored, _ = f.store.OIDCClient(ctx, "policy")
+	if stored.Client.Preauthorized || len(stored.Client.AccountReturnURIs) != 0 {
+		t.Fatal("explicit policy removal ignored")
+	}
+	page, _ = f.loginPage("policy", "openid profile")
+	if !strings.Contains(page.body, `name="consent" type="checkbox" value="yes"  required`) {
+		t.Fatal("live policy did not restore consent")
+	}
+	consoleJSON(t, f, server, "PATCH", base+"/policy", csrf, `{"expectedRevision":3,"enabled":false,"preauthorized":true}`, 400)
+	consoleJSON(t, f, server, "PATCH", base+"/console", csrf, `{"expectedRevision":1,"displayName":"Console","redirectUris":["https://app.example.invalid/callback"],"preauthorized":false}`, 403)
+	// Organization administrators cannot configure installation-wide applications.
+	if err = f.store.SetAdministrator(ctx, operator, f.member.OrganizationID, f.member.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	consoleLogin(t, f, server, f.member.ID)
+	csrf = consoleJSON(t, f, server, "GET", "/api/session", "", "", 200)["csrf"].(string)
+	consoleJSON(t, f, server, "GET", base, "", "", 403)
+	consoleJSON(t, f, server, "POST", base, csrf, payload, 403)
+	update["expectedRevision"] = 3
+	send(403)
+}

@@ -112,6 +112,18 @@ export function describeEvent(event: ManagementEvent) {
       break
     case "oidc.application.update":
       label = "编辑 OIDC 应用"
+      field("preauthorized", "更新授权确认策略", (value) =>
+        typeof value === "boolean"
+          ? value
+            ? "跳过确认"
+            : "用户确认"
+          : undefined
+      )
+      if (
+        JSON.stringify(changes.accountReturnUris) !==
+        JSON.stringify(previous.accountReturnUris)
+      )
+        operations.push("更新账号绑定返回地址")
       break
     case "oidc.application.status.update":
       label = changes.enabled ? "启用 OIDC 应用" : "停用 OIDC 应用"
