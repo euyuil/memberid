@@ -175,7 +175,7 @@ func (service *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		r.PostForm.Del("token_type_hint")
 	}
 	browser := service.cookieValue(r, "browser")
-	interactive := r.URL.Path == samlprovider.SSOPath || (r.URL.Path == accountPath || r.URL.Path == feishuAccountPath) || r.URL.Path == "/login" || r.URL.Path == "/oauth/logout" || strings.HasPrefix(r.URL.Path, "/oauth/authorize")
+	interactive := r.URL.Path == samlprovider.SSOPath || r.URL.Path == "/account" || (r.URL.Path == accountPath || r.URL.Path == feishuAccountPath) || r.URL.Path == "/login" || r.URL.Path == "/oauth/logout" || strings.HasPrefix(r.URL.Path, "/oauth/authorize")
 	if interactive && len(browser) != 43 {
 		browser = config.RandomSecret()
 		service.cookie(w, "browser", browser, sessionIdleLifetime)
@@ -221,6 +221,9 @@ func (service *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		metadata.RevocationEndpointAuthMethodsSupported = []oidc.AuthMethod{oidc.AuthMethodBasic}
 		metadata.DeviceAuthorizationEndpoint = ""
 		op.Discover(w, metadata)
+		return
+	case "/account":
+		service.accountHome(w, r)
 		return
 	case "/account/link/phone":
 		service.accountPhone(w, r)

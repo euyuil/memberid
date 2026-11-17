@@ -41,6 +41,7 @@ type Service struct {
 	management *identity.ManagementService
 	sessions   *consolestate.Store
 	origin     string
+	issuer     string
 	clientID   string
 	party      rp.RelyingParty
 	routes     *http.ServeMux
@@ -188,6 +189,11 @@ func (s *Service) callback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	claims := tokens.IDTokenClaims
+	linkMember := accountLinkMember(returnTo)
+	if linkMember != "" && (claims.Subject != linkMember || claims.AuthTime.AsTime().After(time.Now()) || !claims.AuthTime.AsTime().Add(5*time.Minute).After(time.Now())) {
+		loginFailure(w, r, returnTo, "login_failed")
+		return
+	}
 	if login.SwitchMemberID != "" && claims.Subject != login.SwitchMemberID {
 		loginFailure(w, r, returnTo, failure)
 		return
@@ -244,6 +250,9 @@ func (s *Service) callback(w http.ResponseWriter, r *http.Request) {
 	s.cookie(w, "session", secret, int(time.Until(absolute).Seconds()))
 	if login.SwitchMemberID != "" {
 		returnTo = "/"
+	}
+	if linkMember != "" {
+		returnTo = s.issuer + "/account?" + url.Values{"memberId": {linkMember}}.Encode()
 	}
 	http.Redirect(w, r, returnTo, 303)
 }

@@ -94,11 +94,11 @@ func (service *ManagementService) Members(ctx context.Context, principal Princip
 }
 
 type ManagementMemberDetail struct {
-	Member           Member      `json:"member"`
-	Bindings         []Binding   `json:"bindings"`
-	AdministratorIDs []string    `json:"administratorIds"`
-	PasswordUsername string      `json:"passwordUsername,omitempty"`
-	Email            MemberEmail `json:"email"`
+	Member           Member              `json:"member"`
+	Bindings         []ManagementBinding `json:"bindings"`
+	AdministratorIDs []string            `json:"administratorIds"`
+	PasswordUsername string              `json:"passwordUsername,omitempty"`
+	Email            MemberEmail         `json:"email"`
 }
 
 func (service *ManagementService) Member(ctx context.Context, principal Principal, organizationID, memberID string) (ManagementMemberDetail, error) {
@@ -118,7 +118,7 @@ func (service *ManagementService) Member(ctx context.Context, principal Principa
 	if err != nil {
 		return ManagementMemberDetail{}, err
 	}
-	bindings, err := store.bindings(ctx, member.OrganizationID, member.ID)
+	bindings, err := store.managementBindings(ctx, member.OrganizationID, member.ID)
 	if err != nil {
 		return ManagementMemberDetail{}, err
 	}

@@ -109,3 +109,5 @@ The final check occurs after target verification and before the binding write.
 Existing browser, request, source freshness, client, conflict and replay checks
 remain required. The initial page does not reserve permission for the later
 commit. Subjects, authentication time, grants and token lifetimes are unchanged.
+
+Administrators can start this flow from their own Member detail in the management console using **绑定本人的登录方式**. It first requests fresh authentication and rejects a different returned Member. The public `/account?memberId=...` chooser also independently checks session freshness and Member evidence, then links to the existing phone, DingTalk or Feishu flows supported by that installation and organization. It accepts no return destination and does not establish a binding itself.
