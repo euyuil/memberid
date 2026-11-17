@@ -7,6 +7,7 @@ test("page paths identify resources independently of query parameters", () => {
     ["/organizations", "organization", "", ""],
     ["/members", "members", "", ""],
     ["/providers", "providers", "", ""],
+    ["/oidc-applications", "oidc-applications", "", ""],
     ["/events", "events", "", ""],
     ["/authentication-events", "authentication-events", "", ""],
     [
@@ -34,6 +35,20 @@ test("page paths identify resources independently of query parameters", () => {
     assert.equal(routeURL(route), path)
   }
   assert.equal(parseRoute("/")?.root, true)
+})
+
+test("OIDC application navigation retains the selected management scope", () => {
+  const url = routeURL({ view: "oidc-applications", org: "org_example" })
+  assert.equal(url, "/oidc-applications?organizationId=org_example")
+  const route = parseRoute(url)!
+  assert.equal(route.view, "oidc-applications")
+  assert.equal(route.org, "org_example")
+  assert.equal(routeURL(route), url)
+  assert.equal(routeURL({ view: "oidc-applications" }), "/oidc-applications")
+  assert.equal(
+    parseRoute("/oidc-applications?organizationId=not%2Fvalid"),
+    null
+  )
 })
 
 test("only supported pages are routes", () => {

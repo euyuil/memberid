@@ -33,7 +33,9 @@ export function routeURL(route: Route): string {
     path += `/${encodeURIComponent(member)}`
 
   const query = new URLSearchParams()
-  if (view === "members" && !member) {
+  if (view === "oidc-applications") {
+    if (org) query.set("organizationId", org)
+  } else if (view === "members" && !member) {
     for (const key of ["q", "status", "administrator", "after"] as const)
       if (route[key]) query.set(key, route[key])
   } else if (view === "providers" && org) {
@@ -67,12 +69,16 @@ export function parseRoute(location: string) {
       path
     )
   if (!match || (match[4] && match[3] !== "members")) return null
+  const view = (match[3] ||
+    (match[1] === "organizations" ? "organization" : match[1]) ||
+    "organization") as View
+  const organizationId =
+    view === "oidc-applications" ? query.get("organizationId") : null
+  if (organizationId && !/^[A-Za-z0-9_-]+$/.test(organizationId)) return null
   return {
     root: false,
-    view: (match[3] ||
-      (match[1] === "organizations" ? "organization" : match[1]) ||
-      "organization") as View,
-    org: match[2] ?? "",
+    view,
+    org: match[2] ?? organizationId ?? "",
     member: match[4] ?? "",
     query,
   }

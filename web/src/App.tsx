@@ -487,12 +487,11 @@ export default function App() {
       try {
         let result: Data
         if (oidcApplications) {
-          result = {
-            oidcApplications: await request<OIDCApplicationDirectory>(
-              "/api/oidc-applications",
-              options
-            ),
-          }
+          const [directory, organization] = await Promise.all([
+            request<OIDCApplicationDirectory>("/api/oidc-applications", options),
+            org ? fetchOrganization() : undefined,
+          ])
+          result = { oidcApplications: directory, organization }
         } else if (authenticationEvents) {
           const [page, organization] = await Promise.all([
             request<AuthenticationEventPage>(
@@ -789,7 +788,10 @@ export default function App() {
               ? [
                   {
                     label: "OIDC 应用",
-                    href: routeURL({ view: "oidc-applications" }),
+                    href: routeURL({
+                      view: "oidc-applications",
+                      ...navigationScope,
+                    }),
                     active: oidcApplications,
                   },
                 ]
@@ -844,10 +846,7 @@ export default function App() {
           name={scopeName}
           canSwitch={actor.platform}
           onSelect={(id) =>
-            navigate({
-              view: oidcApplications ? "organization" : activeView,
-              ...(id ? { org: id } : {}),
-            })
+            navigate({ view: activeView, ...(id ? { org: id } : {}) })
           }
         />
       }
