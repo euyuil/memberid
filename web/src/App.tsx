@@ -1,3 +1,8 @@
+import {
+  MemberBindings,
+  SelfAccountLink,
+  type MemberBinding,
+} from "@/MemberBindings"
 import { useEffect, useRef, useState, type FormEvent } from "react"
 import {
   Building2,
@@ -132,13 +137,7 @@ type DirectoryMember = Member & {
   administrator?: boolean
 }
 type MemberPage = Page<DirectoryMember> & { administratorIds?: string[] }
-type Binding = { id: string; factorType: string; status: string }
-const factorLabels: Partial<Record<string, string>> = {
-  phone: "手机号",
-  dingtalk: "钉钉",
-  feishu: "飞书",
-  password: "密码",
-}
+type Binding = MemberBinding
 type Page<T> = { items: T[]; nextAfter?: string }
 type Detail = {
   member: Member
@@ -1496,32 +1495,16 @@ export default function App() {
                           </AlertDescription>
                         </Alert>
                       )}
-                      {data.detail.bindings.length > 0 &&
-                        data.detail.bindings.map((b) => (
-                          <div
-                            className="flex items-center justify-between gap-4"
-                            key={b.id}
-                          >
-                            <span className="flex min-w-0 items-center gap-2">
-                              <span className="shrink-0">
-                                {factorLabels[b.factorType] ?? b.factorType}
-                              </span>
-                              {b.factorType === "password" &&
-                                data.detail?.passwordUsername && (
-                                  <span
-                                    className="truncate text-muted-foreground"
-                                    title={data.detail.passwordUsername}
-                                  >
-                                    {data.detail.passwordUsername}
-                                  </span>
-                                )}
-                            </span>
-                            <Status
-                              active={b.status === "active"}
-                              text={b.status === "active" ? "已绑定" : "已撤销"}
-                            />
-                          </div>
-                        ))}
+                      <MemberBindings
+                        items={data.detail.bindings}
+                        username={data.detail.passwordUsername}
+                      />
+                      {actor.memberId === member && (
+                        <SelfAccountLink
+                          csrf={session.csrf}
+                          request={request}
+                        />
+                      )}
                     </CardContent>
                     {actor.platform && (
                       <CardFooter className="flex flex-wrap gap-2">

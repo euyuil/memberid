@@ -51,11 +51,13 @@ func New(ctx context.Context, store *identity.Store, installation *config.Loaded
 		return nil, err
 	}
 	s := &Service{management: identity.NewManagementService(store, dingTalkApps, feishuApps, installation.AuthenticationEventRetention()), sessions: consolestate.New(store.Database()), origin: settings.Origin, clientID: settings.ClientID, party: party, routes: http.NewServeMux()}
+	s.issuer = installation.Issuer
 	s.routes.HandleFunc("GET /auth/login", s.login)
 	s.routes.HandleFunc("GET /auth/callback", s.callback)
 	s.routes.HandleFunc("POST /api/logout", s.logout)
 	s.routes.HandleFunc("GET /api/identities", s.identities)
 	s.routes.HandleFunc("POST /api/identity-switch", s.switchIdentity)
+	s.routes.HandleFunc("POST /api/account-link", s.beginAccountLink)
 	s.routes.HandleFunc("GET /api/session", func(w http.ResponseWriter, r *http.Request) {
 		v := r.Context().Value(sessionKey{}).(session)
 		actor, err := s.management.Actor(r.Context(), v.memberID, v.grantID)
