@@ -23,7 +23,7 @@ func (service *Service) passwordLogin(w http.ResponseWriter, r *http.Request, re
 		organizationID = restricted
 	}
 	username := r.PostForm.Get("username")
-	event := service.loginEvent(request)
+	event := service.loginEvent(r.Context(), request)
 	err := service.verifyPasswordLogin(w, r, request, organizationID, username, r.PostForm.Get("password"), &event)
 	service.recordVerification(r, event, "pwd", err)
 	if errors.Is(err, identity.ErrRateLimited) {

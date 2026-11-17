@@ -1,7 +1,7 @@
 CREATE TABLE memberid_schema (
-    version integer PRIMARY KEY CHECK (version = 28)
+    version integer PRIMARY KEY CHECK (version = 29)
 );
-INSERT INTO memberid_schema(version) VALUES (28);
+INSERT INTO memberid_schema(version) VALUES (29);
 
 CREATE TABLE database_upgrades (
     to_version integer PRIMARY KEY,
@@ -162,6 +162,17 @@ CREATE TABLE authentication_requests (
     CHECK ((protocol='saml') = (saml_service_provider_id IS NOT NULL AND saml_request_id IS NOT NULL)),
     CHECK (protocol='oidc' OR code_hash IS NULL)
 );
+CREATE TABLE oidc_clients (
+    client_id text COLLATE "C" PRIMARY KEY CHECK (client_id ~ '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'),
+    display_name text NOT NULL CHECK (char_length(display_name) BETWEEN 1 AND 128),
+    enabled boolean NOT NULL,
+    system boolean NOT NULL,
+    revision bigint NOT NULL CHECK (revision > 0),
+    registration jsonb NOT NULL,
+    CHECK (NOT system OR enabled),
+    CHECK ((registration->>'client_id') IS NOT DISTINCT FROM client_id)
+);
+
 CREATE TABLE oidc_grants (
     id text COLLATE "C" PRIMARY KEY,
     client_id text NOT NULL,
@@ -171,6 +182,8 @@ CREATE TABLE oidc_grants (
     absolute_expires_at timestamptz NOT NULL,
     revoked_at timestamptz
 );
+CREATE INDEX oidc_grants_client_active ON oidc_grants (client_id) WHERE revoked_at IS NULL;
+
 CREATE TABLE oidc_access_tokens (
     id text COLLATE "C" PRIMARY KEY,
     grant_id text COLLATE "C" NOT NULL REFERENCES oidc_grants(id) ON DELETE CASCADE,

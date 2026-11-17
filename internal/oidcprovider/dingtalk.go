@@ -97,7 +97,7 @@ func (service *Service) dingTalkCallback(w http.ResponseWriter, r *http.Request)
 	}
 	request := input
 	attempt := request.DingTalk
-	event = service.loginEvent(request)
+	event = service.loginEvent(r.Context(), request)
 	if attempt != nil {
 		event.OrganizationID = attempt.OrganizationID
 		event.ProviderID = attempt.Namespace

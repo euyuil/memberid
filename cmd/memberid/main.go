@@ -42,7 +42,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	case "grant":
 		return manageGrant(ctx, args[1:], stdout, stderr)
 	case "config", "client":
-		return configure(args, stdout, stderr)
+		return configure(ctx, args, stdout, stderr)
 	case "database", "organization", "member", "factor":
 		return manage(ctx, args, stdout, stderr)
 	case "version":

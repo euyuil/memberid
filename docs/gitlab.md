@@ -15,7 +15,7 @@ memberid client add --directory .local/memberid \
   > .local/gitlab-client.json
 ```
 
-Protect the generated `client_secret`, transfer it to GitLab's secret management, and restart MemberID after updating file-backed client policy. This example does not request `offline_access` or enable refresh for GitLab. GitLab owns the lifetime of its local application session; an OIDC login does not grant GitLab project permissions.
+Protect the generated `client_secret`, transfer it to GitLab's secret management. Registration changes take effect as soon as they commit. This example does not request `offline_access` or enable refresh for GitLab. GitLab owns the lifetime of its local application session; an OIDC login does not grant GitLab project permissions.
 
 Configure GitLab's normal `gitlab.rb` provider settings, replacing the example origins and supplying the secret from a protected file:
 

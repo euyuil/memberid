@@ -164,7 +164,7 @@ func (service *Service) accountPhonePost(w http.ResponseWriter, r *http.Request,
 			if err := tx.QueryRow(r.Context(), "SELECT state,data->>'challengeId' FROM account_link_requests WHERE id=$1 AND expires_at>$2 FOR UPDATE", request.ID, service.now()).Scan(&state, &challenge); err != nil {
 				return accountVerificationError(err)
 			}
-			if state != "pending" || challenge != request.ChallengeID || !service.accountClient(request.accountDetails) {
+			if state != "pending" || challenge != request.ChallengeID || !service.accountClient(r.Context(), tx, request.accountDetails) {
 				return identity.ErrIneligible
 			}
 			principal := identity.AccountPrincipal(current.id, request.MemberID, current.verified.Factor.ID, request.BindingID)
@@ -237,8 +237,8 @@ func (service *Service) renderPhoneAccount(w http.ResponseWriter, r *http.Reques
 		http.Error(w, "Account management temporarily unavailable", 503)
 		return
 	}
-	available := request.ExpiresAt.After(service.now()) && service.accountClient(request.accountDetails)
-	if !service.accountClient(request.accountDetails) {
+	available := request.ExpiresAt.After(service.now()) && service.accountClient(r.Context(), service.store.Database(), request.accountDetails)
+	if !service.accountClient(r.Context(), service.store.Database(), request.accountDetails) {
 		request.ClientID, request.ReturnURI = "", ""
 	}
 	data := phoneAccountPageData{Request: request, Member: member.DisplayName, Organization: organization.Name, Message: message, Nonce: config.RandomSecret(), ReopenURI: accountAddress(request.accountDetails), CanSend: available && fresh && !occupied && request.State == "ready", CanVerify: available && fresh && !occupied && request.State == "pending" && request.ChallengeID != "", CanCancel: available && (request.State == "pending" || request.State == "consumed"), NumberLocked: request.State != "ready" || occupied || !fresh}

@@ -76,8 +76,8 @@ func baselineDatabase(t *testing.T) string {
 	return dsn
 }
 
-func syntheticBackup(context.Context, string, int) (UpgradeBackup, error) {
-	return UpgradeBackup{ID: "synthetic-backup", SHA256: strings.Repeat("a", 64)}, nil
+func syntheticBackup(context.Context, string, int) (UpgradePreparation, error) {
+	return UpgradePreparation{Backup: UpgradeBackup{ID: "synthetic-backup", SHA256: strings.Repeat("a", 64)}}, nil
 }
 
 func assertBaseline(t *testing.T, dsn string) {
@@ -104,8 +104,8 @@ func TestDatabaseUpgradeAtomicFailureAndRetry(t *testing.T) {
 	if err != nil || !plan.Supported || plan.CurrentVersion != 26 || !plan.UpgradeRequired {
 		t.Fatal(plan, err)
 	}
-	if _, err := UpgradeDatabase(t.Context(), dsn, func(context.Context, string, int) (UpgradeBackup, error) {
-		return UpgradeBackup{}, errors.New("synthetic failed backup")
+	if _, err := UpgradeDatabase(t.Context(), dsn, func(context.Context, string, int) (UpgradePreparation, error) {
+		return UpgradePreparation{}, errors.New("synthetic failed backup")
 	}); err == nil {
 		t.Fatal("accepted failed backup")
 	}
@@ -135,9 +135,9 @@ func TestDatabaseUpgradeAtomicFailureAndRetry(t *testing.T) {
 	if err != nil || !result.Upgraded || result.CurrentVersion != SchemaVersion {
 		t.Fatal(result, err)
 	}
-	result, err = UpgradeDatabase(t.Context(), dsn, func(context.Context, string, int) (UpgradeBackup, error) {
+	result, err = UpgradeDatabase(t.Context(), dsn, func(context.Context, string, int) (UpgradePreparation, error) {
 		t.Error("repeat created another backup")
-		return UpgradeBackup{}, nil
+		return UpgradePreparation{}, nil
 	})
 	if err != nil || result.Upgraded || result.UpgradeRequired {
 		t.Fatal(result, err)
@@ -204,7 +204,7 @@ func TestDatabaseUpgradeMaintenanceAndConcurrentAttempts(t *testing.T) {
 	entered, release := make(chan struct{}), make(chan struct{})
 	done := make(chan error, 1)
 	go func() {
-		_, err := UpgradeDatabase(t.Context(), dsn, func(ctx context.Context, _ string, _ int) (UpgradeBackup, error) {
+		_, err := UpgradeDatabase(t.Context(), dsn, func(ctx context.Context, _ string, _ int) (UpgradePreparation, error) {
 			close(entered)
 			<-release
 			return syntheticBackup(ctx, "", 26)
@@ -228,7 +228,7 @@ func TestDatabaseUpgradeMaintenanceAndConcurrentAttempts(t *testing.T) {
 }
 
 func TestDatabaseUpgradeUnsupportedAndCancellation(t *testing.T) {
-	for _, version := range []int{25, 29} {
+	for _, version := range []int{25, SchemaVersion + 1} {
 		dsn := testdb.Create(t)
 		c, err := pgx.Connect(t.Context(), dsn)
 		if err != nil {
@@ -241,9 +241,9 @@ func TestDatabaseUpgradeUnsupportedAndCancellation(t *testing.T) {
 			t.Fatal(err)
 		}
 		c.Close(context.Background())
-		if _, err := UpgradeDatabase(t.Context(), dsn, func(context.Context, string, int) (UpgradeBackup, error) {
+		if _, err := UpgradeDatabase(t.Context(), dsn, func(context.Context, string, int) (UpgradePreparation, error) {
 			t.Error("unsupported version backed up")
-			return UpgradeBackup{}, nil
+			return UpgradePreparation{}, nil
 		}); !errors.Is(err, ErrUpgradeUnsupported) {
 			t.Fatal(err)
 		}
@@ -254,7 +254,7 @@ func TestDatabaseUpgradeUnsupportedAndCancellation(t *testing.T) {
 	}
 	dsn := baselineDatabase(t)
 	ctx, cancel := context.WithCancel(t.Context())
-	if _, err := UpgradeDatabase(ctx, dsn, func(context.Context, string, int) (UpgradeBackup, error) {
+	if _, err := UpgradeDatabase(ctx, dsn, func(context.Context, string, int) (UpgradePreparation, error) {
 		cancel()
 		return syntheticBackup(ctx, "", 26)
 	}); err == nil {
@@ -296,13 +296,13 @@ func TestSchema27UpgradeRetainsAdmittedFeishuBindings(t *testing.T) {
 		t.Fatal(err)
 	}
 	c.Close(context.Background())
-	result, err := UpgradeDatabase(t.Context(), dsn, func(ctx context.Context, snapshot string, version int) (UpgradeBackup, error) {
+	result, err := UpgradeDatabase(t.Context(), dsn, func(ctx context.Context, snapshot string, version int) (UpgradePreparation, error) {
 		if version != 27 || snapshot == "" {
 			t.Fatal("incorrect backup source", version)
 		}
 		return syntheticBackup(ctx, snapshot, version)
 	})
-	if err != nil || result.CurrentVersion != 28 || !result.Upgraded {
+	if err != nil || result.CurrentVersion != SchemaVersion || !result.Upgraded {
 		t.Fatal(result, err)
 	}
 	store, err := Open(t.Context(), dsn)

@@ -12,7 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-const SchemaVersion = 28
+const SchemaVersion = 29
 
 // The two-int key space is separate from existing bigint initialization,
 // administration and worker locks. MID identifies this maintenance namespace.
@@ -28,6 +28,9 @@ var upgrade27 string
 //go:embed migrations/0028_feishu_memberships.sql
 var upgrade28 string
 
+//go:embed migrations/0029_oidc_clients.sql
+var upgrade29 string
+
 type DatabasePlan struct {
 	CurrentVersion  int  `json:"currentVersion"`
 	TargetVersion   int  `json:"targetVersion"`
@@ -38,6 +41,11 @@ type DatabasePlan struct {
 type UpgradeBackup struct {
 	ID     string `json:"backupId"`
 	SHA256 string `json:"backupSha256"`
+}
+
+type UpgradePreparation struct {
+	Backup      UpgradeBackup
+	OIDCClients []OIDCClientRegistration
 }
 
 type UpgradeResult struct {
@@ -110,7 +118,7 @@ func requireStoppedClients(ctx context.Context, tx pgx.Tx) error {
 // UpgradeDatabase holds write-excluding table locks while the caller creates a
 // consistent database/configuration backup. No SQL changes commit without it.
 // The callback must fail if the protected files change while being copied.
-func UpgradeDatabase(ctx context.Context, databaseURL string, backup func(context.Context, string, int) (UpgradeBackup, error)) (UpgradeResult, error) {
+func UpgradeDatabase(ctx context.Context, databaseURL string, prepare func(context.Context, string, int) (UpgradePreparation, error)) (UpgradeResult, error) {
 	var result UpgradeResult
 	c, err := maintenanceConnection(ctx, databaseURL)
 	if err != nil {
@@ -136,7 +144,7 @@ func UpgradeDatabase(ctx context.Context, databaseURL string, backup func(contex
 		if !plan.UpgradeRequired {
 			return nil
 		}
-		if backup == nil {
+		if prepare == nil {
 			return errors.New("a consistent recovery backup is required")
 		}
 		var serverVersion int
@@ -166,10 +174,11 @@ func UpgradeDatabase(ctx context.Context, databaseURL string, backup func(contex
 		if err := tx.QueryRow(ctx, "SELECT pg_export_snapshot()").Scan(&snapshot); err != nil {
 			return err
 		}
-		receipt, err := backup(ctx, snapshot, plan.CurrentVersion)
+		prepared, err := prepare(ctx, snapshot, plan.CurrentVersion)
 		if err != nil {
 			return err
 		}
+		receipt := prepared.Backup
 		digest, err := hex.DecodeString(receipt.SHA256)
 		if err != nil || len(digest) != 32 || receipt.ID == "" {
 			return errors.New("invalid recovery backup receipt")
@@ -185,12 +194,17 @@ func UpgradeDatabase(ctx context.Context, databaseURL string, backup func(contex
 		for _, migration := range []struct {
 			from, to int
 			sql      string
-		}{{26, 27, upgrade27}, {27, 28, upgrade28}} {
+		}{{26, 27, upgrade27}, {27, 28, upgrade28}, {28, 29, upgrade29}} {
 			if migration.from < plan.CurrentVersion {
 				continue
 			}
 			if _, err := tx.Exec(ctx, migration.sql); err != nil {
 				return err
+			}
+			if migration.to == 29 {
+				if err := importOIDCClients(ctx, tx, prepared.OIDCClients); err != nil {
+					return err
+				}
 			}
 			migrationHash := sha256.Sum256([]byte(migration.sql))
 			if _, err := tx.Exec(ctx, "INSERT INTO database_upgrades(from_version,to_version,migration_sha256,backup_id,backup_sha256) VALUES($1,$2,$3,$4,$5)", migration.from, migration.to, hex.EncodeToString(migrationHash[:]), receipt.ID, receipt.SHA256); err != nil {

@@ -95,7 +95,13 @@ operator() {
 }
 
 operator config init --directory /setup/installation --issuer "$issuer"
-operator client add --directory /setup/installation --id memberid-console \
+docker compose --env-file "$state/compose.env" up -d --wait postgres
+mkdir "$state/bootstrap"
+docker compose --env-file "$state/compose.env" run --rm --no-deps -T \
+  --volume "$absolute_state/bootstrap:/bootstrap-output" auth database init \
+  --initial-root-password-file /bootstrap-output/initial-root-password
+docker compose --env-file "$state/compose.env" run --rm --no-deps -T auth \
+  client add --directory /etc/memberid --id memberid-console --name "MemberID 管理台" --system \
   --redirect "$console_origin/auth/callback" --preauthorized > "$state/console-client.json"
 python3 - "$state" "$console_origin" <<'PY'
 import json
@@ -122,11 +128,6 @@ with (installation / "console.json").open("x", encoding="utf-8") as output:
 (state / "console-client.json").unlink()
 PY
 
-docker compose --env-file "$state/compose.env" up -d --wait postgres
-mkdir "$state/bootstrap"
-docker compose --env-file "$state/compose.env" run --rm --no-deps -T \
-  --volume "$absolute_state/bootstrap:/bootstrap-output" auth database init \
-  --initial-root-password-file /bootstrap-output/initial-root-password
 trap - EXIT
 printf 'Local installation ready. Review %s/auth.env, then start the Compose stack.\n' "$state"
 printf 'OIDC issuer: %s\nAdministration console: %s\n' "$issuer" "$console_origin"

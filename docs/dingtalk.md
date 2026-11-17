@@ -48,13 +48,13 @@ Management request logs record only the installation principal, method, route te
 
 Tests simulate DingTalk responses and use disposable PostgreSQL databases. They cover request encoding, error redaction, redirect rejection, response limits, encrypted storage and restart, wrong keys, ciphertext substitution, stable bindings, failed-candidate preservation, conflicting initial configuration and rotations, disabled organizations during provider I/O, and the CLI/HTTP contracts. HTTP and database tests also cover DingTalk-only OIDC login, distinct organization subjects, standard refresh, callback browser binding and replay, and cancellation or configuration changes during provider verification. These checks simulate the upstream provider; they do not establish live DingTalk credentials or actual provider consent.
 
-The fresh-install schema is version 28. Startup refuses older schemas without resetting or migrating their data.
+The fresh-install schema is version 29. Startup refuses older schemas without resetting or migrating their data.
 
 The reserved `org_system` organization accepts only explicitly provisioned Members. Unlike ordinary organizations, it does not automatically admit every verified employee. Use the [system Member bootstrap](administration.md#bootstrap-and-recovery) operator approval before the intended person's fresh DingTalk login; administrator assignment remains a separate step.
 
 ## Enable interactive login
 
-Set `MEMBERID_DINGTALK_ENABLED=true` for the public authentication process. `MEMBERID_PHONE_ENABLED` is independent; a DingTalk-only installation needs no SMS credentials. Register at least one confidential Member client and configure a usable organization application before sending users to login. Management may configure applications while the server is running. Provider enablement and file-backed OIDC client changes require a restart.
+Set `MEMBERID_DINGTALK_ENABLED=true` for the public authentication process. `MEMBERID_PHONE_ENABLED` is independent; a DingTalk-only installation needs no SMS credentials. Register at least one confidential Member client and configure a usable organization application before sending users to login. Management may configure applications while the server is running. The provider enable flag is loaded at startup. OIDC client registration changes apply as soon as they commit.
 
 Register `<issuer>/login/dingtalk/callback` as the exact upstream redirect URL in the DingTalk application's settings. The issuer is the same configured HTTPS origin used for OIDC. The explicit loopback development exception uses `http://127.0.0.1` and still needs a provider-accepted callback registration. MemberID requests `openid corpid` as described in DingTalk's [browser authorization flow](https://open-dingtalk.github.io/developerpedia/docs/develop/permission/token/browser/get_user_app_token_browser/). The application also needs the user-profile and employee-directory permissions used to resolve `unionId`, find the corresponding employee, and read that employee's details.
 

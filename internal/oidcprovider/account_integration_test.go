@@ -31,7 +31,7 @@ func accountFixture(t *testing.T) (*fixture, *testDingTalk, *identity.DingTalkAp
 	t.Helper()
 	f := newConfiguredFixture(t, true)
 	provider, apps := enableDingTalk(t, f, true)
-	f.service.configuration.Clients[0].AccountReturnURIs = []string{accountReturn}
+	f.updateClient("example-web", func(c *config.Client) { c.AccountReturnURIs = []string{accountReturn} })
 	page, _ := f.loginPage("example-web", "openid offline_access")
 	f.verifyPhone(page)
 	query := url.Values{"memberId": {f.member.ID}, "client_id": {"example-web"}, "returnUri": {accountReturn}}
@@ -244,7 +244,7 @@ func TestAccountRejectsChangesDuringProviderVerification(t *testing.T) {
 				case "request canceled":
 					_, err = f.store.Database().Exec(t.Context(), "UPDATE account_link_requests SET state='canceled'")
 				case "return removed":
-					f.service.configuration.Clients[0].AccountReturnURIs = nil
+					f.updateClient("example-web", func(c *config.Client) { c.AccountReturnURIs = nil })
 				case "expired":
 					_, err = f.store.Database().Exec(t.Context(), "UPDATE account_link_requests SET expires_at=clock_timestamp()-interval '1 second'")
 				}

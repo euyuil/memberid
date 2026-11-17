@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"github.com/euyuil/memberid/internal/config"
 	"net/http"
 	"net/url"
 	"strings"
@@ -21,7 +22,7 @@ func phoneAccountFixture(t *testing.T) (*fixture, reply) {
 	t.Helper()
 	f := newConfiguredFixture(t, true)
 	enableDingTalk(t, f, true)
-	f.service.configuration.Clients[0].AccountReturnURIs = []string{accountReturn}
+	f.updateClient("example-web", func(c *config.Client) { c.AccountReturnURIs = []string{accountReturn} })
 	_, verifier, callbackPath := beginDingTalk(t, f, "example-web", "openid offline_access", f.member.OrganizationID)
 	response := f.call(f.browser, "GET", callbackPath, nil, nil)
 	f.status(response, 303)
@@ -241,7 +242,7 @@ func TestPhoneAccountRejectsEligibilityChanges(t *testing.T) {
 			case "request expired":
 				query = "UPDATE account_link_requests SET expires_at=clock_timestamp()-interval '1 second'"
 			case "return removed":
-				f.service.configuration.Clients[0].AccountReturnURIs = nil
+				f.updateClient("example-web", func(c *config.Client) { c.AccountReturnURIs = nil })
 			}
 			if query != "" {
 				if _, err := f.store.Database().Exec(t.Context(), query); err != nil {

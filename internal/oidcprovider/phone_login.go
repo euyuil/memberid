@@ -22,7 +22,7 @@ func (service *Service) verifyPhoneLogin(w http.ResponseWriter, r *http.Request,
 		expires, err = service.persistVerifiedSession(r.Context(), tx, &completed, verified, secret)
 		return err
 	})
-	event := service.loginEvent(request)
+	event := service.loginEvent(r.Context(), request)
 	if err == nil {
 		event.Actor = authevent.Actor{Kind: "factor", ID: verified.Factor.ID}
 		event.FactorID, event.SessionID = verified.Factor.ID, id

@@ -36,9 +36,10 @@ The [Member role definitions](roles.md) and [management scopes and actions](mana
 | Set or reset a Member password or change the password username | Any organization, including `org_system` | No |
 | List, configure and disable identity providers | Any organization | Own organization |
 | Create, inspect, update, disable and retire SAML applications | Any organization | Own organization |
+| Manage OIDC applications | Installation-wide | No |
 | Read, set or clear a Member's managed email | Any organization | Own organization |
 
-Platform administrators can switch organizations from the management scope in the header while retaining their original operator identity. The sidebar groups Organizations, Members, and Identity providers under Identity management; SAML applications under Application integrations; and Authentication events and Operation history under Activity. Switching between them keeps the selected organization. In the all-organization scope, platform administrators see members from every organization. Each row identifies its organization and opens the member detail in that organization. Organization administrators see their own organization in the header. These permissions belong exclusively to MemberID management and are not added to business application identity claims. There are no custom roles, invitations, deletion, bulk operations or OIDC client-registration pages in this version. Explicit operator binding and first-administrator recovery use the operator tools.
+Platform administrators can switch organizations from the management scope in the header while retaining their original operator identity. The sidebar groups Organizations, Members, and Identity providers under Identity management; OIDC and SAML applications under Application integrations; and Authentication events and Operation history under Activity. Switching between them keeps the selected organization. In the all-organization scope, platform administrators see members from every organization. Each row identifies its organization and opens the member detail in that organization. Organization administrators see their own organization in the header. These permissions belong exclusively to MemberID management and are not added to business application identity claims. There are no custom roles, invitations, deletion, or bulk operations in this version. Explicit operator binding and first-administrator recovery use the operator tools.
 
 ## Switch the signed-in Member
 
@@ -98,6 +99,12 @@ Saving a new secret verifies the application credentials before storing an encry
 
 See [Feishu setup](feishu.md) and [DingTalk setup](dingtalk.md) for the required application and runtime settings.
 
+## OIDC applications
+
+Platform administrators open **OIDC 应用** in the application integrations group. A registration has an immutable client ID, a display name, explicit exact redirect URLs, and a login organization restriction. Select one organization or explicitly select all organizations. Editing a registration preserves its operator-managed subject policy, evidence scope, account-return destinations and consent policy. The protected console client appears read-only.
+
+The create and rotate dialogs return the new secret once. Rotation immediately replaces the old verifier. Disabling a registration blocks fresh authorization, code exchange and renewal, and revokes its current MemberID grants. Re-enabling requires a new authorization. The application's own session and offline JWT expiration continue to follow the relying party's policy. Changes to the registration are audited under the system organization without secret values or verifiers.
+
 ## SAML applications
 
 Choose an organization, then open **SAML 应用**. Platform administrators can select any organization; organization administrators remain in their own organization. Ordinary Members cannot access this directory or its API. The all-organization entry is an organization picker, not an aggregate of foreign trust policies.
@@ -128,6 +135,7 @@ and Member IDs identify resources; names do not participate in routing.
 | `/authentication-events` | Platform authentication events. |
 | `/organizations/{organizationId}/authentication-events` | Organization authentication events. |
 | `/providers` | Organization picker for provider management (platform administrators). |
+| `/oidc-applications` | Installation OIDC application management (platform administrators). |
 | `/saml-service-providers` | Organization picker for SAML application management (platform administrators). |
 | `/organizations/{organizationId}/saml-service-providers` | Organization SAML applications; `after` cursor and optional `serviceProviderId` detail selection. |
 
@@ -174,12 +182,12 @@ targets. Explicit console logout returns to `/`.
 
 Build with `sh scripts/check.sh` or `sh scripts/package.sh VERSION NEW_OUTPUT_DIRECTORY`. Both build the locked frontend before embedding it in Go. Node/npm are build dependencies; the resulting executable needs neither at runtime.
 
-Initialize a protected installation and a new database as described in [operator setup](operations.md). This increment uses fresh schema version **27**. Existing schema 26 databases use the [explicit forward upgrade](database-upgrades.md); startup never migrates or erases data. Start the OIDC process before starting the console so its discovery and keys are reachable.
+Initialize a protected installation and a new database as described in [operator setup](operations.md). Fresh installations use schema version **29**. Existing schema 26–28 databases use the [explicit forward upgrade](database-upgrades.md); startup never migrates or erases data. Start the OIDC process before starting the console so its discovery and keys are reachable.
 
 Register a dedicated confidential Member client with no organization restriction:
 
 ```sh
-memberid client add --directory .local/memberid --id memberid-console \
+memberid client add --directory .local/memberid --id memberid-console --system \
   --redirect https://admin.example.invalid/auth/callback --preauthorized
 ```
 
@@ -193,7 +201,7 @@ Capture the returned secret directly into a protected file named `console-client
 }
 ```
 
-The console validates the client, secret, all-organization Member policy, and exact callback against local registration. It requests only `openid profile`, with no Refresh Token. Restart the OIDC process after client registration; restart both processes after client secret rotation and replace the protected console secret file. Configuration is not hot-reloaded.
+The console validates the client, secret, all-organization Member policy, and exact callback against the database registration. It requests only `openid profile`, with no Refresh Token. The registration is available immediately. After rotating the protected console secret, replace its local secret file and restart the console process to load it.
 
 ```sh
 memberid serve --directory .local/memberid --listen 127.0.0.1:8080

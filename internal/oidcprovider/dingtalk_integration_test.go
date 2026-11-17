@@ -114,8 +114,8 @@ func admittedMember(t *testing.T, f *fixture, organization string) string {
 func TestDingTalkOnlyOIDCLoginRefreshAndIndependentSubjects(t *testing.T) {
 	f := newConfiguredFixture(t, true)
 	provider, _ := enableDingTalk(t, f, false)
-	f.service.configuration.Clients[0].EvidenceScope = "identity"
-	f.service.configuration.Clients[0].EvidenceAudience = "https://resource.example.invalid"
+	f.updateClient("example-web", func(c *config.Client) { c.EvidenceScope = "identity" })
+	f.updateClient("example-web", func(c *config.Client) { c.EvidenceAudience = "https://resource.example.invalid" })
 	page, verifier, callbackPath := beginDingTalk(t, f, "example-web", "openid profile email phone offline_access identity", f.member.OrganizationID)
 	if strings.Contains(page.body, `id="phone"`) || !strings.Contains(page.body, "Sign in with DingTalk") {
 		t.Fatal("disabled phone provider rendered")

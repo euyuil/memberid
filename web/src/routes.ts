@@ -2,6 +2,7 @@ export type View =
   | "organization"
   | "members"
   | "providers"
+  | "oidc-applications"
   | "saml-service-providers"
   | "events"
   | "authentication-events"
@@ -22,7 +23,10 @@ export type Route = {
 
 export function routeURL(route: Route): string {
   const { view = "organization", org, member } = route
-  let path = org ? `/organizations/${encodeURIComponent(org)}` : ""
+  let path =
+    org && view !== "oidc-applications"
+      ? `/organizations/${encodeURIComponent(org)}`
+      : ""
   if (view === "organization") path ||= "/organizations"
   else path += `/${view}`
   if (view === "members" && org && member)
@@ -59,7 +63,7 @@ export function parseRoute(location: string) {
       query,
     }
   const match =
-    /^(?:\/(organizations|members|providers|saml-service-providers|events|authentication-events)|\/organizations\/([A-Za-z0-9_-]+)(?:\/(members|providers|saml-service-providers|events|authentication-events)(?:\/([A-Za-z0-9_-]+))?)?)$/.exec(
+    /^(?:\/(organizations|members|providers|oidc-applications|saml-service-providers|events|authentication-events)|\/organizations\/([A-Za-z0-9_-]+)(?:\/(members|providers|saml-service-providers|events|authentication-events)(?:\/([A-Za-z0-9_-]+))?)?)$/.exec(
       path
     )
   if (!match || (match[4] && match[3] !== "members")) return null

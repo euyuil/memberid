@@ -81,11 +81,11 @@ func (service *Service) freshAccountSession(session accountSession) bool {
 	at := session.verified.AuthenticatedAt
 	return !at.IsZero() && !at.After(service.now()) && at.Add(accountLifetime).After(service.now())
 }
-func (service *Service) accountClient(details accountDetails) bool {
+func (service *Service) accountClient(ctx context.Context, db databaseReader, details accountDetails) bool {
 	if details.ClientID == "" {
 		return details.ReturnURI == ""
 	}
-	client, err := service.storage.client(details.ClientID)
+	client, err := service.storage.clientAt(ctx, db, details.ClientID)
 	return err == nil && client.registration.SubjectKind == "member" && slices.Contains(client.registration.AccountReturnURIs, details.ReturnURI) && (client.registration.OrganizationID == "" || client.registration.OrganizationID == details.OrganizationID)
 }
 func (service *Service) accountMember(r *http.Request, session accountSession, memberID string) (identity.Member, string, error) {
@@ -128,7 +128,7 @@ func (service *Service) readAccount(r *http.Request, field, value string) (accou
 	if err == nil {
 		err = json.Unmarshal(data, &request.accountDetails)
 	}
-	if err == nil && ((request.Kind != "phone" && request.Kind != "dingtalk" && request.Kind != "feishu") || len(accountBrowser(r)) != 43 || !service.accountClient(request.accountDetails) || !sameSecret(request.BrowserHash, config.SecretHash(accountBrowser(r)))) {
+	if err == nil && ((request.Kind != "phone" && request.Kind != "dingtalk" && request.Kind != "feishu") || len(accountBrowser(r)) != 43 || !service.accountClient(r.Context(), service.store.Database(), request.accountDetails) || !sameSecret(request.BrowserHash, config.SecretHash(accountBrowser(r)))) {
 		err = identity.ErrIneligible
 	}
 	return request, err
@@ -178,7 +178,7 @@ func (service *Service) openAccount(w http.ResponseWriter, r *http.Request, sess
 		return accountRequest{}, identity.Member{}, false
 	}
 	details := accountDetails{InteractionID: newID(), Kind: kind, MemberID: member.ID, OrganizationID: member.OrganizationID, FactorID: session.verified.Factor.ID, BindingID: binding, ClientID: r.Form.Get("client_id"), ReturnURI: r.Form.Get("returnUri"), BrowserHash: config.SecretHash(accountBrowser(r))}
-	if !service.accountClient(details) {
+	if !service.accountClient(r.Context(), service.store.Database(), details) {
 		http.Error(w, "Invalid account return destination or client", 400)
 		return accountRequest{}, identity.Member{}, false
 	}
@@ -385,7 +385,7 @@ func (service *Service) accountExternalCallback(w http.ResponseWriter, r *http.R
 		if state != "consumed" {
 			return identity.ErrConflict
 		}
-		if !service.accountClient(request.accountDetails) {
+		if !service.accountClient(r.Context(), tx, request.accountDetails) {
 			return identity.ErrIneligible
 		}
 		principal := identity.AccountPrincipal(current.id, request.MemberID, current.verified.Factor.ID, request.BindingID)
@@ -469,8 +469,8 @@ func (service *Service) renderAccount(w http.ResponseWriter, r *http.Request, re
 		http.Error(w, "Account management temporarily unavailable", 503)
 		return
 	}
-	available := request.ExpiresAt.After(service.now()) && service.accountClient(request.accountDetails)
-	if !service.accountClient(request.accountDetails) {
+	available := request.ExpiresAt.After(service.now()) && service.accountClient(r.Context(), service.store.Database(), request.accountDetails)
+	if !service.accountClient(r.Context(), service.store.Database(), request.accountDetails) {
 		request.ReturnURI = ""
 		request.ClientID = ""
 	}

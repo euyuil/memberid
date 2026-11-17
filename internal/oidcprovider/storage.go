@@ -19,9 +19,12 @@ import (
 )
 
 func (s *storage) CreateAuthRequest(ctx context.Context, input *oidc.AuthRequest, hintSubject string) (op.AuthRequest, error) {
-	registered, err := s.client(input.ClientID)
+	registered, err := s.client(ctx, input.ClientID)
 	if err != nil {
 		return nil, err
+	}
+	if !slices.Contains(registered.registration.RedirectURIs, input.RedirectURI) {
+		return nil, oidc.ErrInvalidRequest()
 	}
 	if input.ResponseMode != "" && input.ResponseMode != oidc.ResponseModeQuery && input.ResponseMode != oidc.ResponseModeFragment {
 		return nil, oidc.ErrInvalidRequest().WithDescription("Supported response modes are query and fragment")
@@ -57,7 +60,7 @@ func (s *storage) CreateAuthRequest(ctx context.Context, input *oidc.AuthRequest
 	if registered.registration.EvidenceScope != "" && slices.Contains(input.Scopes, registered.registration.EvidenceScope) {
 		audience = registered.registration.EvidenceAudience
 	}
-	request := &authorizationRequest{grant: grant{InteractionID: newID(), ID: newID(), ClientID: input.ClientID, Scopes: input.Scopes, Audience: []string{audience}}, Input: *input, HintSubject: hintSubject, Interaction: browserauth.Interaction{BrowserHash: config.SecretHash(browser), CSRF: config.RandomSecret()}}
+	request := &authorizationRequest{ClientRevision: registered.revision, grant: grant{InteractionID: newID(), ID: newID(), ClientID: input.ClientID, Scopes: input.Scopes, Audience: []string{audience}}, Input: *input, HintSubject: hintSubject, Interaction: browserauth.Interaction{BrowserHash: config.SecretHash(browser), CSRF: config.RandomSecret()}}
 	data, err := json.Marshal(request)
 	if err != nil {
 		return nil, err
@@ -125,6 +128,13 @@ func (s *storage) SaveAuthCode(ctx context.Context, id, code string) error {
 		if !request.Complete {
 			return oidc.ErrInvalidGrant()
 		}
+		registered, err := s.clientAt(ctx, tx, request.ClientID)
+		if err != nil {
+			return err
+		}
+		if !request.permitsClient(registered) {
+			return oidc.ErrInvalidGrant()
+		}
 		if err := s.lockMemberOrganization(ctx, tx, &request.grant); err != nil {
 			return err
 		}
@@ -167,7 +177,7 @@ func (s *storage) eligible(ctx context.Context, database databaseReader, g *gran
 	if g.FactorID == "" || !g.AbsoluteExpiry.After(s.service.now()) {
 		return oidc.ErrInvalidGrant()
 	}
-	registered, err := s.client(g.ClientID)
+	registered, err := s.clientAt(ctx, database, g.ClientID)
 	if err != nil {
 		return err
 	}
@@ -253,6 +263,13 @@ func (s *storage) createCodeTokens(ctx context.Context, request *authorizationRe
 	}
 	observation, observationErr := s.observeDirectory(ctx, &request.grant)
 	err := pgx.BeginFunc(ctx, s.service.store.Database(), func(tx pgx.Tx) error {
+		registered, err := s.issuanceClient(ctx, tx, request.ClientID)
+		if err != nil {
+			return err
+		}
+		if !request.permitsClient(registered) || withRefresh && !registered.registration.Refresh {
+			return oidc.ErrInvalidGrant()
+		}
 		var sessionID string
 		var sessionExpiry time.Time
 		if err := tx.QueryRow(ctx, "SELECT id,expires_at FROM authentication_sessions WHERE id=$1 AND revoked_at IS NULL AND expires_at>$2 AND absolute_expires_at>$2 FOR UPDATE", request.SessionID, now).Scan(&sessionID, &sessionExpiry); err != nil {
@@ -329,13 +346,13 @@ func (s *storage) accessGrant(ctx context.Context, id, subject string) (*grant, 
 func (s *storage) GetPrivateClaimsFromScopes(context.Context, string, string, []string) (map[string]any, error) {
 	return nil, errors.New("request-bound claims required")
 }
-func (s *storage) GetPrivateClaimsFromRequest(_ context.Context, input op.TokenRequest, _ []string) (map[string]any, error) {
+func (s *storage) GetPrivateClaimsFromRequest(ctx context.Context, input op.TokenRequest, _ []string) (map[string]any, error) {
 	g, err := requestGrant(input)
 	if err != nil {
 		return nil, err
 	}
 	claims := map[string]any{"scope": strings.Join(g.Scopes, " "), "tokenUse": "access", "auth_time": g.AuthTime.Unix(), "amr": g.GetAMR()}
-	registered, err := s.client(g.ClientID)
+	registered, err := s.client(ctx, g.ClientID)
 	if err != nil {
 		return nil, err
 	}

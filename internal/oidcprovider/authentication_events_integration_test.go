@@ -4,6 +4,7 @@ package oidcprovider
 
 import (
 	"encoding/json"
+	"github.com/euyuil/memberid/internal/config"
 	"net/url"
 	"testing"
 	"time"
@@ -52,11 +53,11 @@ func TestSMSLoginEventCorrelationAndUnknownIdentity(t *testing.T) {
 		t.Run(map[bool]string{true: "registered organization", false: "shared login"}[restricted], func(t *testing.T) {
 			f := newFixture(t)
 			if !restricted {
-				for i := range f.service.configuration.Clients {
-					f.service.configuration.Clients[i].OrganizationID = ""
+				for _, id := range []string{"example-web", "second-web"} {
+					f.updateClient(id, func(c *config.Client) { c.OrganizationID = "" })
 				}
 			}
-			registered, _ := f.service.storage.client("example-web")
+			registered, _ := f.service.storage.client(t.Context(), "example-web")
 			recorder := enableAuthenticationEvents(t, f)
 			page, _ := f.loginPage("example-web", "openid")
 			f.status(f.submit(page.body, "send", url.Values{"phone": {"not-a-number"}}), 200)

@@ -9,9 +9,7 @@ authoritative. The catalog does not itself add endpoints, token claims, or schem
 
 The catalog covers the console, account linking, and the corresponding private
 management API and operator commands. Protocol login, token issuance/renewal,
-provider callbacks for ordinary login, process setup, signing keys, and OIDC client
-registration keep their separate documented contracts. They are not implicitly
-Member management operations.
+provider callbacks for ordinary login, process setup and signing keys keep their separate documented contracts. Installation-wide OIDC registrations use the `oidcApplications` collection, with list/create and per-client update, status update and credential rotation reserved for platform administrators. The operator CLI retains protected console registration and credential management.
 
 ## Current enforcement
 

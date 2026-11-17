@@ -14,7 +14,7 @@ import (
 
 // Initialize creates a new directory exclusively. Existing installations are never overwritten.
 func Initialize(directory, issuer string, allowLoopback bool) error {
-	installation := Installation{Issuer: issuer, AllowLoopbackHTTP: allowLoopback, SigningKeyFile: "signing-key.pem", PublicKeysFile: "public-keys.pem", SecretsFile: "secrets.json", ClientsFile: "clients.json"}
+	installation := Installation{Issuer: issuer, AllowLoopbackHTTP: allowLoopback, SigningKeyFile: "signing-key.pem", PublicKeysFile: "public-keys.pem", SecretsFile: "secrets.json"}
 	if err := installation.Validate(); err != nil {
 		return err
 	}
@@ -42,7 +42,7 @@ func Initialize(directory, issuer string, allowLoopback bool) error {
 	if err := os.Mkdir(directory, 0700); err != nil {
 		return errors.New("create a new installation directory inside an existing protected parent; existing directories are refused")
 	}
-	files := map[string]any{"memberid.json": installation, "secrets.json": secrets, "clients.json": []Client{}}
+	files := map[string]any{"memberid.json": installation, "secrets.json": secrets}
 	for name, value := range files {
 		data, err := json.MarshalIndent(value, "", "  ")
 		if err != nil {
@@ -79,52 +79,4 @@ func WriteExclusive(file string, data []byte) error {
 		return err
 	}
 	return handle.Close()
-}
-
-// ChangeClients serializes operator edits and atomically replaces the validated registry.
-// The installation directory must remain writable only by trusted operators.
-func ChangeClients(directory string, change func([]Client) ([]Client, error)) error {
-	lockName := filepath.Join(directory, ".clients.lock")
-	lock, err := os.OpenFile(lockName, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
-	if err != nil {
-		return errors.New("client registry is locked or unavailable")
-	}
-	defer os.Remove(lockName)
-	if err := lock.Close(); err != nil {
-		return err
-	}
-	loaded, err := Load(directory)
-	if err != nil {
-		return err
-	}
-	clients, err := change(loaded.Clients)
-	if err != nil {
-		return err
-	}
-	if err := ValidateClients(clients, loaded.AllowLoopbackHTTP); err != nil {
-		return err
-	}
-	data, err := json.MarshalIndent(clients, "", "  ")
-	if err != nil {
-		return err
-	}
-	temporary, err := os.CreateTemp(directory, ".clients-*.tmp")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(temporary.Name())
-	defer temporary.Close()
-	if err := temporary.Chmod(0600); err != nil {
-		return err
-	}
-	if _, err := temporary.Write(append(data, '\n')); err != nil {
-		return err
-	}
-	if err := temporary.Sync(); err != nil {
-		return err
-	}
-	if err := temporary.Close(); err != nil {
-		return err
-	}
-	return os.Rename(temporary.Name(), filepath.Join(directory, loaded.ClientsFile))
 }

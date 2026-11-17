@@ -35,14 +35,7 @@ func serveConsole(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	if err != nil {
 		return err
 	}
-	var settings console.Settings
-	if err = config.ReadJSON(filepath.Join(*directory, "console.json"), &settings); err != nil {
-		return err
-	}
-	if settings.ClientSecretFile == "" || filepath.Base(settings.ClientSecretFile) != settings.ClientSecretFile || strings.ContainsAny(settings.ClientSecretFile, `/\:`) {
-		return errors.New("console client secret must be a protected local filename")
-	}
-	data, err := os.ReadFile(filepath.Join(*directory, settings.ClientSecretFile))
+	settings, secret, err := consoleConfiguration(*directory)
 	if err != nil {
 		return err
 	}
@@ -51,11 +44,26 @@ func serveConsole(ctx context.Context, args []string, stdout, stderr io.Writer) 
 		return err
 	}
 	defer store.Close()
-	h, err := console.New(ctx, store, loaded, settings, strings.TrimSpace(string(data)), dingtalk.New(), feishu.New())
+	h, err := console.New(ctx, store, loaded, settings, secret, dingtalk.New(), feishu.New())
 	if err != nil {
 		return err
 	}
 	s := server.New()
 	s.Handler = h
 	return serveHTTP(ctx, *listen, s, stdout)
+}
+
+func consoleConfiguration(directory string) (console.Settings, string, error) {
+	var settings console.Settings
+	if err := config.ReadJSON(filepath.Join(directory, "console.json"), &settings); err != nil {
+		return settings, "", err
+	}
+	if settings.ClientSecretFile == "" || filepath.Base(settings.ClientSecretFile) != settings.ClientSecretFile || strings.ContainsAny(settings.ClientSecretFile, `/\:`) {
+		return settings, "", errors.New("console client secret must be a protected local filename")
+	}
+	data, err := os.ReadFile(filepath.Join(directory, settings.ClientSecretFile))
+	if err != nil {
+		return settings, "", errors.New("could not read the configured console client secret")
+	}
+	return settings, strings.TrimSpace(string(data)), nil
 }

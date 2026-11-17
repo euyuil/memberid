@@ -98,6 +98,10 @@ import { MemberEmail, type ManagedEmail } from "@/MemberEmail"
 import { IdentitySwitch } from "@/IdentitySwitch"
 import { OrganizationDetails, type Organization } from "@/OrganizationDetails"
 import {
+  OIDCApplications,
+  type OIDCApplicationDirectory,
+} from "@/OIDCApplications"
+import {
   passwordUsernameError,
   passwordUsernamePattern,
 } from "@/member-password"
@@ -152,6 +156,7 @@ type Data = {
   authenticationEvents?: AuthenticationEventPage
   historyMember?: Member
   providers?: ProviderDirectory
+  oidcApplications?: OIDCApplicationDirectory
   saml?: SAMLDirectory
   serviceProvider?: SAMLServiceProvider
 }
@@ -354,6 +359,7 @@ export default function App() {
   const events = view === "events"
   const authenticationEvents = view === "authentication-events"
   const providers = view === "providers"
+  const oidcApplications = view === "oidc-applications"
   const saml = view === "saml-service-providers"
   const membersView = view === "members"
   const activeView = view ?? "organization"
@@ -480,7 +486,14 @@ export default function App() {
       }
       try {
         let result: Data
-        if (authenticationEvents) {
+        if (oidcApplications) {
+          result = {
+            oidcApplications: await request<OIDCApplicationDirectory>(
+              "/api/oidc-applications",
+              options
+            ),
+          }
+        } else if (authenticationEvents) {
           const [page, organization] = await Promise.all([
             request<AuthenticationEventPage>(
               `/api${authenticationEventPath(org)}?${authenticationEventQuery(params)}`,
@@ -691,6 +704,8 @@ export default function App() {
     }
   } else if (providers) {
     breadcrumbs.push({ label: "身份提供商" })
+  } else if (oidcApplications) {
+    breadcrumbs.push({ label: "OIDC 应用" })
   } else if (saml) {
     breadcrumbs.push({ label: "SAML 应用" })
   } else if (authenticationEvents) {
@@ -770,6 +785,15 @@ export default function App() {
           label: "应用接入",
           icon: AppWindow,
           items: [
+            ...(actor.platform
+              ? [
+                  {
+                    label: "OIDC 应用",
+                    href: routeURL({ view: "oidc-applications" }),
+                    active: oidcApplications,
+                  },
+                ]
+              : []),
             {
               label: "SAML 应用",
               href: routeURL({
@@ -821,7 +845,7 @@ export default function App() {
           canSwitch={actor.platform}
           onSelect={(id) =>
             navigate({
-              view: activeView,
+              view: oidcApplications ? "organization" : activeView,
               ...(id ? { org: id } : {}),
             })
           }
@@ -852,8 +876,10 @@ export default function App() {
                   : "操作记录"
                 : providers
                   ? "身份提供商"
-                  : saml
-                    ? "SAML 应用"
+                  : oidcApplications || saml
+                    ? oidcApplications
+                      ? "OIDC 应用"
+                      : "SAML 应用"
                     : membersView
                       ? member
                         ? (selected?.displayName ?? "成员详情")
@@ -1022,8 +1048,10 @@ export default function App() {
                   ? "暂时无法加载操作记录"
                   : providers
                     ? "暂时无法加载身份提供商"
-                    : saml
-                      ? "暂时无法加载 SAML 应用"
+                    : oidcApplications || saml
+                      ? oidcApplications
+                        ? "暂时无法加载 OIDC 应用"
+                        : "暂时无法加载 SAML 应用"
                       : membersView
                         ? member
                           ? "暂时无法加载成员详情"
@@ -1049,6 +1077,28 @@ export default function App() {
           </div>
         ) : (
           <>
+            {data.oidcApplications && (
+              <OIDCApplications
+                directory={data.oidcApplications}
+                csrf={session.csrf}
+                request={request}
+                onComplete={(application) =>
+                  setData((current) => {
+                    const directory = current.oidcApplications
+                    if (!directory) return current
+                    const items = directory.items.filter(
+                      (item) => item.clientId !== application.clientId
+                    )
+                    items.push(application)
+                    items.sort((a, b) => a.clientId.localeCompare(b.clientId))
+                    return {
+                      ...current,
+                      oidcApplications: { ...directory, items },
+                    }
+                  })
+                }
+              />
+            )}
             {data.organizations && (
               <section aria-label="组织列表">
                 <div className="overflow-hidden rounded-md border">

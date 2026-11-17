@@ -17,6 +17,7 @@ import (
 	"github.com/euyuil/memberid/internal/identity"
 	"github.com/euyuil/memberid/internal/samlprovider"
 	jose "github.com/go-jose/go-jose/v4"
+	"github.com/jackc/pgx/v5"
 	"github.com/zitadel/oidc/v3/pkg/oidc"
 	"github.com/zitadel/oidc/v3/pkg/op"
 )
@@ -27,6 +28,7 @@ const maximumLifetime = 365 * 24 * time.Hour
 
 type client struct {
 	registration config.Client
+	revision     int64
 	loopback     bool
 }
 
@@ -100,9 +102,10 @@ func (g *grant) SetCurrentScopes(scopes []string) { g.Scopes = scopes }
 type authorizationRequest struct {
 	browserauth.Interaction
 	grant
-	Input       oidc.AuthRequest          `json:"input,omitempty"`
-	HintSubject string                    `json:"hintSubject,omitempty"`
-	SAML        *samlprovider.Transaction `json:"saml,omitempty"`
+	ClientRevision int64                     `json:"clientRevision,omitempty"`
+	Input          oidc.AuthRequest          `json:"input,omitempty"`
+	HintSubject    string                    `json:"hintSubject,omitempty"`
+	SAML           *samlprovider.Transaction `json:"saml,omitempty"`
 }
 
 func (r *authorizationRequest) externalPending() bool { return r.DingTalk != nil || r.Feishu != nil }
@@ -168,19 +171,56 @@ func (k publicKey) Use() string                        { return "sig" }
 
 type storage struct{ service *Service }
 
-func (s *storage) client(id string) (client, error) {
-	for _, entry := range s.service.configuration.Clients {
-		if entry.ID == id {
-			return client{entry, s.service.configuration.AllowLoopbackHTTP}, nil
-		}
+type authenticatedClientKey struct{}
+
+type authenticatedClient struct {
+	id, verifier string
+}
+
+func (s *storage) client(ctx context.Context, id string) (client, error) {
+	return s.clientAt(ctx, s.service.store.Database(), id)
+}
+
+func (s *storage) clientAt(ctx context.Context, db databaseReader, id string) (client, error) {
+	return s.registeredClient(identity.ReadOIDCClient(ctx, db, id))
+}
+
+func (s *storage) registeredClient(registration identity.OIDCClientRegistration, err error) (client, error) {
+	if errors.Is(err, identity.ErrNotFound) || err == nil && !registration.Enabled {
+		return client{}, oidc.ErrInvalidClient()
 	}
-	return client{}, oidc.ErrInvalidClient()
+	if err != nil {
+		return client{}, oidc.ErrServerError()
+	}
+	return client{registration.Client, registration.Revision, s.service.configuration.AllowLoopbackHTTP}, nil
 }
-func (s *storage) GetClientByClientID(_ context.Context, id string) (op.Client, error) {
-	return s.client(id)
+
+func (s *storage) issuanceClient(ctx context.Context, tx pgx.Tx, id string) (client, error) {
+	registered, err := s.registeredClient(identity.LockOIDCClient(ctx, tx, id))
+	if err != nil {
+		return client{}, err
+	}
+	if authenticated, ok := ctx.Value(authenticatedClientKey{}).(*authenticatedClient); ok &&
+		(authenticated.id != id || !sameSecret(authenticated.verifier, registered.registration.SecretSHA256)) {
+		return client{}, oidc.ErrInvalidClient()
+	}
+	return registered, nil
 }
-func (s *storage) AuthorizeClientIDSecret(_ context.Context, id, secret string) error {
-	entry, err := s.client(id)
+
+func (request *authorizationRequest) permitsClient(registered client) bool {
+	revision := request.ClientRevision
+	if revision == 0 {
+		revision = 1 // Pre-upgrade pending requests were created from the imported policy.
+	}
+	return registered.revision == revision && slices.Contains(registered.registration.RedirectURIs, request.Input.RedirectURI)
+}
+
+func (s *storage) GetClientByClientID(ctx context.Context, id string) (op.Client, error) {
+	return s.client(ctx, id)
+}
+
+func (s *storage) AuthorizeClientIDSecret(ctx context.Context, id, secret string) error {
+	entry, err := s.client(ctx, id)
 	if err != nil {
 		return err
 	}
@@ -189,8 +229,12 @@ func (s *storage) AuthorizeClientIDSecret(_ context.Context, id, secret string) 
 	if err != nil || subtle.ConstantTimeCompare(expected, actual) != 1 {
 		return oidc.ErrInvalidClient()
 	}
+	if authenticated, ok := ctx.Value(authenticatedClientKey{}).(*authenticatedClient); ok {
+		*authenticated = authenticatedClient{id, entry.registration.SecretSHA256}
+	}
 	return nil
 }
+
 func (s *storage) Health(ctx context.Context) error { return s.service.store.Database().Ping(ctx) }
 func (s *storage) SigningKey(context.Context) (op.SigningKey, error) {
 	return signingKey{s.service.configuration.KeyID, s.service.configuration.SigningKey}, nil
