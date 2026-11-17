@@ -74,6 +74,7 @@ func New(ctx context.Context, store *identity.Store, installation *config.Loaded
 	s.routes.HandleFunc("GET /api/organizations/{organizationId}/members", s.members)
 	s.routes.HandleFunc("POST /api/organizations/{organizationId}/members", s.mutate)
 	s.routes.HandleFunc("GET /api/organizations/{organizationId}/members/{memberId}", s.member)
+	s.routes.HandleFunc("GET /api/organizations/{organizationId}/members/{memberId}/grants", s.memberGrants)
 	s.routes.HandleFunc("PATCH /api/organizations/{organizationId}/members/{memberId}", s.mutate)
 	s.routes.HandleFunc("PUT /api/organizations/{organizationId}/members/{memberId}/email", s.putMemberEmail)
 	s.routes.HandleFunc("PUT /api/organizations/{organizationId}/members/{memberId}/administrator", s.administrator)

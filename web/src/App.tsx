@@ -1,3 +1,4 @@
+import { MemberGrants } from "@/MemberGrants"
 import {
   MemberBindings,
   SelfAccountLink,
@@ -1495,6 +1496,12 @@ export default function App() {
                           </AlertDescription>
                         </Alert>
                       )}
+                      <MemberGrants
+                        key={`${org}:${member}`}
+                        organizationId={org}
+                        memberId={member}
+                        request={request}
+                      />
                       <MemberBindings
                         items={data.detail.bindings}
                         username={data.detail.passwordUsername}
