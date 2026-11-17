@@ -29,9 +29,12 @@ func (service *Service) loginPolicy(ctx context.Context, request *authorizationR
 		}
 		return loginPolicy{browserauth.Policy{ID: sp.ID, OrganizationID: sp.OrganizationID, SubjectKind: "member", Preauthorized: sp.Preauthorized, ReturnURI: sp.ACSURL, IdentityInformation: strings.Join(append([]string{"persistent identifier"}, sp.Attributes...), ", ")}}, nil
 	}
-	registered, err := service.storage.client(request.ClientID)
+	registered, err := service.storage.client(ctx, request.ClientID)
 	if err != nil {
 		return loginPolicy{}, err
+	}
+	if !request.permitsClient(registered) {
+		return loginPolicy{}, identity.ErrIneligible
 	}
 	c := registered.registration
 	return loginPolicy{browserauth.Policy{ID: c.ID, OrganizationID: c.OrganizationID, SubjectKind: c.SubjectKind, Preauthorized: c.Preauthorized, ReturnURI: request.Input.RedirectURI, IdentityInformation: strings.Join(request.Scopes, ", ")}}, nil
@@ -51,6 +54,13 @@ func (request *authorizationRequest) prompts() []string {
 // authentication, including after external provider I/O.
 func (service *Service) validateLoginPolicy(ctx context.Context, tx pgx.Tx, request *authorizationRequest) error {
 	if request.SAML == nil {
+		client, err := service.storage.clientAt(ctx, tx, request.ClientID)
+		if err != nil {
+			return err
+		}
+		if !request.permitsClient(client) {
+			return identity.ErrIneligible
+		}
 		return nil
 	}
 	sp, err := identity.LockSAMLServiceProvider(ctx, tx, request.SAML.ServiceProviderID)

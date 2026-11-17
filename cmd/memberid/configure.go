@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -8,6 +9,7 @@ import (
 	"os"
 
 	"github.com/euyuil/memberid/internal/config"
+	"github.com/euyuil/memberid/internal/identity"
 	"github.com/euyuil/memberid/internal/sms"
 )
 
@@ -16,7 +18,7 @@ type repeatedFlag []string
 func (values *repeatedFlag) String() string         { return "" }
 func (values *repeatedFlag) Set(value string) error { *values = append(*values, value); return nil }
 
-func configure(args []string, stdout, stderr io.Writer) error {
+func configure(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	if len(args) < 2 {
 		return errors.New("usage: memberid config <init|check|export-jwks|rotate-management-secret> | client <add|rotate-secret>")
 	}
@@ -86,15 +88,19 @@ func configure(args []string, stdout, stderr io.Writer) error {
 		if err != nil {
 			return err
 		}
-		return json.NewEncoder(stdout).Encode(map[string]any{"valid": true, "issuer": loaded.Issuer, "keyId": loaded.KeyID, "clients": len(loaded.Clients), "phoneEnabled": phone != nil})
+		return json.NewEncoder(stdout).Encode(map[string]any{"valid": true, "issuer": loaded.Issuer, "keyId": loaded.KeyID, "phoneEnabled": phone != nil})
 	case "client":
 		if args[1] != "add" && args[1] != "rotate-secret" {
 			return errors.New("unknown client operation")
 		}
-		var client config.Client
+		var client identity.OIDCClient
+		var system bool
+		var displayName string
 		flags.StringVar(&client.ID, "id", "", "client identifier")
 		var redirects, logouts, accountReturns repeatedFlag
 		if args[1] == "add" {
+			flags.BoolVar(&system, "system", false, "protect an all-organization console client from administrative mutation")
+			flags.StringVar(&displayName, "name", "", "display name (defaults to the client ID)")
 			flags.Var(&redirects, "redirect", "exact callback URL; repeat for multiple URLs")
 			flags.Var(&logouts, "post-logout-redirect", "exact post-logout URL")
 			flags.Var(&accountReturns, "account-return", "exact account-management return URL")
@@ -117,21 +123,26 @@ func configure(args []string, stdout, stderr io.Writer) error {
 		secret := config.RandomSecret()
 		client.SecretSHA256 = config.SecretHash(secret)
 		client.RedirectURIs, client.PostLogoutRedirectURIs, client.AccountReturnURIs = redirects, logouts, accountReturns
-		err := config.ChangeClients(*directory, func(clients []config.Client) ([]config.Client, error) {
-			for index := range clients {
-				if clients[index].ID == client.ID {
-					if args[1] == "add" {
-						return nil, errors.New("client already exists")
-					}
-					clients[index].SecretSHA256 = client.SecretSHA256
-					return clients, nil
-				}
+		installation, err := config.Load(*directory)
+		if err != nil {
+			return err
+		}
+		store, err := identity.Open(ctx, os.Getenv("MEMBERID_DATABASE_URL"))
+		if err != nil {
+			return err
+		}
+		defer store.Close()
+		principal := identity.OperatorPrincipal()
+		if args[1] == "add" {
+			if displayName == "" {
+				displayName = client.ID
 			}
-			if args[1] == "rotate-secret" {
-				return nil, errors.New("client not found")
-			}
-			return append(clients, client), nil
-		})
+			_, err = store.CreateOIDCClient(ctx, principal, identity.OIDCClientRegistration{
+				Client: client, DisplayName: displayName, System: system,
+			}, installation.AllowLoopbackHTTP)
+		} else {
+			_, err = store.RotateOIDCClientSecret(ctx, principal, client.ID, 0, client.SecretSHA256)
+		}
 		if err != nil {
 			return err
 		}

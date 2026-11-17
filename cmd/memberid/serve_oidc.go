@@ -23,9 +23,6 @@ func authenticationHandler(ctx context.Context, directory string) (http.Handler,
 	if err != nil {
 		return nil, nil, err
 	}
-	if len(loaded.Clients) == 0 && (loaded.SAML == nil || !loaded.SAML.Enabled) {
-		return nil, nil, errors.New("register an OIDC client or enable SAML before starting authentication")
-	}
 	sender, err := sms.FromEnvironment(os.Getenv)
 	if err != nil {
 		return nil, nil, err
@@ -42,7 +39,16 @@ func authenticationHandler(ctx context.Context, directory string) (http.Handler,
 	if err != nil {
 		return nil, nil, err
 	}
-	if len(loaded.Clients) == 0 {
+	capabilities, err := store.OIDCClientCapabilities(ctx)
+	if err != nil {
+		store.Close()
+		return nil, nil, err
+	}
+	if capabilities.ActiveClients == 0 {
+		if loaded.SAML == nil || !loaded.SAML.Enabled {
+			store.Close()
+			return nil, nil, errors.New("register an enabled OIDC client or enable SAML before starting authentication")
+		}
 		registrations, err := store.SAMLServiceProviders(ctx)
 		active := false
 		for _, sp := range registrations {

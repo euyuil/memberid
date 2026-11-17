@@ -907,7 +907,7 @@ test(
         const snapshot = () =>
           Object.fromEntries(
             pg(
-              "SELECT tablename FROM pg_tables WHERE schemaname='public' AND tablename NOT IN ('memberid_schema','database_upgrades','feishu_memberships') ORDER BY tablename",
+              "SELECT tablename FROM pg_tables WHERE schemaname='public' AND tablename NOT IN ('memberid_schema','database_upgrades','feishu_memberships','oidc_clients') ORDER BY tablename",
             )
               .split(/\r?\n/)
               .map((name) => {
@@ -1011,13 +1011,13 @@ test(
         ];
         const upgraded = JSON.parse(cli(...upgradeArgs));
         assert.equal(upgraded.upgraded, true);
-        assert.equal(upgraded.currentVersion, 28);
-        t.diagnostic("upgrade rehearsal: schema 28 committed");
+        assert.equal(upgraded.currentVersion, 29);
+        t.diagnostic("upgrade rehearsal: schema 29 committed");
         assert.deepEqual(snapshot(), before);
         assert.equal(JSON.parse(cli(...upgradeArgs)).upgraded, false);
         assert.equal(
           Number(pg("SELECT count(*) FROM database_upgrades")),
-          previousUpgrades + 28 - sourceSchemaVersion,
+          previousUpgrades + 29 - sourceSchemaVersion,
         );
         cli("database", "backup-check", "--backup-directory", recovery);
         assert.throws(() => command(oldExecutable, ["database", "check"], env));

@@ -10,7 +10,7 @@ memberid database init --initial-root-password-file /path/to/protected/initial-r
 
 This is an explicit installation operation. It refuses existing user relations and never resets, replaces, or migrates an existing database. Normal startup does not initialize schema.
 
-This command installs schema version 28 and provisions `org_system/root` with a generated password. The password output file must be new and in a protected directory. Running `database init` without the file option initializes only the schema and the reserved system organization. Existing schema 26 installations use [explicit forward upgrade and recovery](database-upgrades.md). See [first-time setup](administration.md#first-time-setup) for password delivery and recovery.
+This command installs schema version 29 and provisions `org_system/root` with a generated password. The password output file must be new and in a protected directory. Running `database init` without the file option initializes only the schema and the reserved system organization. Existing schema 26–28 installations use [explicit forward upgrade and recovery](database-upgrades.md). See [first-time setup](administration.md#first-time-setup) for password delivery and recovery.
 
 ## Check an existing database
 
@@ -96,7 +96,7 @@ memberid client add --directory .local/memberid --id example \
 memberid client rotate-secret --directory .local/memberid --id example
 ```
 
-Each successful add or rotation writes the client identifier and newly generated secret to standard output once. Capture it directly into protected application configuration; do not publish it, retain it in ordinary logs, or commit it. The registry stores only a SHA-256 verifier of the random 256-bit secret. Duplicate registration refuses replacement. Rotation preserves client policy and replaces only the verifier.
+Run these commands after database initialization with `MEMBERID_DATABASE_URL` set. Each successful add or rotation writes the client identifier and newly generated secret to standard output once. Capture it directly into protected application configuration; do not publish it, retain it in ordinary logs, or commit it. The registry stores only a SHA-256 verifier of the random 256-bit secret. Duplicate registration refuses replacement. Rotation preserves client policy and replaces only the verifier.
 
 The [MemberID account linking page](account-linking.md) uses `--account-return` destinations independently of OIDC callbacks and logout. Callback, post-logout, and account-management return destinations are separately registered exact URLs; no wildcards, fragments, or URL user information are allowed. Repeat `--redirect`, `--post-logout-redirect`, or `--account-return` for additional destinations. A localhost alias or an arbitrary HTTP address does not qualify for the loopback exception.
 
@@ -104,9 +104,9 @@ Clients default to independent Member subjects. Optional `--organization ORGANIZ
 
 An evidence policy uses an operator-chosen custom scope and a fixed resource URL audience. Both must be configured together. Clients cannot set their own audience or claim policy through authorization-request parameters. Standard scopes cannot be repurposed as evidence scopes. Evidence contains identity facts, not application roles or resource permissions. `--preauthorized` records an operator's explicit consent decision for the registered scope policy; omit it when interactive consent is required.
 
-Client configuration is file-backed and requires an explicit server restart. This is operator registration, not OAuth dynamic client registration. The implemented profile uses Authorization Code with PKCE S256 and `client_secret_basic`. The `--refresh` flag permits `offline_access` and standard rotating Refresh Tokens; omit it for clients that should not retain a refresh grant.
+The CLI, [console](console.md#oidc-applications), and authentication instances use the same PostgreSQL registry. Registration changes are available without a restart. Approved discovery metadata is computed from currently enabled clients. Registration uses operator and platform-administrator authority, with Authorization Code flow, PKCE S256, and `client_secret_basic`. The `--refresh` flag permits `offline_access` and rotating Refresh Tokens.
 
-Registry edits acquire an exclusive `.clients.lock`, validate the whole configuration, and replace the registry atomically. Concurrent edits fail without modifying the registry. A crashed operator can leave a lock: remove it only after confirming no registration command is running. Keep the installation directory writable only by trusted operators and coordinate hand-edited changes with the same maintenance boundary.
+A new installation registers the console client with `--system`. To rotate that protected client, use the operator CLI during coordinated console maintenance, replace the protected console secret file with the one-time output, and restart the console process to reload its credential. The new verifier is active when the command commits.
 
 ## Signing-key material
 

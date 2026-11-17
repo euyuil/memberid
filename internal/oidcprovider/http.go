@@ -45,9 +45,6 @@ func New(configuration *config.Loaded, store *identity.Store, phone *identity.Ph
 	if err := configuration.Secrets.Validate(); err != nil {
 		return nil, err
 	}
-	if err := config.ValidateClients(configuration.Clients, configuration.AllowLoopbackHTTP); err != nil {
-		return nil, err
-	}
 	service := &Service{configuration: configuration, store: store, phone: phone, dingtalk: dingtalk, feishu: feishu, directory: directory, now: time.Now, passwordWork: make(chan struct{}, 4)}
 	service.storage = &storage{service: service}
 	if configuration.SAML != nil && configuration.SAML.Enabled {
@@ -60,19 +57,6 @@ func New(configuration *config.Loaded, store *identity.Store, phone *identity.Ph
 	var key [32]byte
 	decoded, _ := base64.StdEncoding.DecodeString(configuration.Secrets.ProtocolKey)
 	copy(key[:], decoded)
-	scopes := []string{"openid", "profile", "email", "phone"}
-	refreshEnabled := false
-	seen := map[string]bool{}
-	for _, client := range configuration.Clients {
-		refreshEnabled = refreshEnabled || client.Refresh
-		if client.EvidenceScope != "" && !seen[client.EvidenceScope] {
-			scopes = append(scopes, client.EvidenceScope)
-			seen[client.EvidenceScope] = true
-		}
-	}
-	if refreshEnabled {
-		scopes = append(scopes, "offline_access")
-	}
 	options := []op.Option{
 		// MemberID has no legacy opaque ciphertext requiring unauthenticated fallback.
 		op.WithCrypto(op.NewAES256GCMCrypto(key, "")),
@@ -84,7 +68,7 @@ func New(configuration *config.Loaded, store *identity.Store, phone *identity.Ph
 	if configuration.AllowLoopbackHTTP {
 		options = append(options, op.WithAllowInsecure())
 	}
-	provider, err := op.NewProvider(&op.Config{CryptoKey: key, CodeMethodS256: true, GrantTypeRefreshToken: refreshEnabled, SupportedScopes: scopes, SupportedClaims: []string{"iss", "sub", "aud", "exp", "iat", "auth_time", "nonce", "amr", "at_hash", "c_hash", "client_id", "azp", "sid", "name", "preferred_username", "phone_number", "phone_number_verified"}, DefaultLogoutRedirectURI: configuration.Issuer + "/signed-out"}, service.storage, op.StaticIssuer(configuration.Issuer), options...)
+	provider, err := op.NewProvider(&op.Config{CryptoKey: key, CodeMethodS256: true, GrantTypeRefreshToken: true, SupportedScopes: []string{"openid", "profile", "email", "phone", "offline_access"}, SupportedClaims: []string{"iss", "sub", "aud", "exp", "iat", "auth_time", "nonce", "amr", "at_hash", "c_hash", "client_id", "azp", "sid", "name", "preferred_username", "phone_number", "phone_number_verified"}, DefaultLogoutRedirectURI: configuration.Issuer + "/signed-out"}, service.storage, op.StaticIssuer(configuration.Issuer), options...)
 	if err != nil {
 		return nil, err
 	}
@@ -197,6 +181,9 @@ func (service *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		service.cookie(w, "browser", browser, sessionIdleLifetime)
 	}
 	ctx := context.WithValue(r.Context(), browserKey{}, browser)
+	if r.URL.Path == "/oauth/token" {
+		ctx = context.WithValue(ctx, authenticatedClientKey{}, &authenticatedClient{})
+	}
 	r = r.WithContext(ctx)
 	switch r.URL.Path {
 	case samlprovider.MetadataPath:
@@ -220,7 +207,14 @@ func (service *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		metadata.ResponseTypesSupported = []string{"code"}
 		metadata.ResponseModesSupported = []string{"query", "fragment"}
 		metadata.GrantTypesSupported = []oidc.GrantType{oidc.GrantTypeCode}
-		if service.protocol.GrantTypeRefreshTokenSupported() {
+		capabilities, err := service.store.OIDCClientCapabilities(r.Context())
+		if err != nil {
+			http.Error(w, "OIDC client registry unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		metadata.ScopesSupported = append([]string{"openid", "profile", "email", "phone"}, capabilities.EvidenceScopes...)
+		if capabilities.Refresh {
+			metadata.ScopesSupported = append(metadata.ScopesSupported, "offline_access")
 			metadata.GrantTypesSupported = append(metadata.GrantTypesSupported, oidc.GrantTypeRefreshToken)
 		}
 		metadata.TokenEndpointAuthMethodsSupported = []oidc.AuthMethod{oidc.AuthMethodBasic}
@@ -283,7 +277,7 @@ func (service *Service) rejectAuthorization(w http.ResponseWriter, r *http.Reque
 		op.AuthRequestError(w, r, nil, err, service.protocol)
 		return
 	}
-	registered, err := service.storage.client(request.ClientID)
+	registered, err := service.storage.client(r.Context(), request.ClientID)
 	if err != nil {
 		op.AuthRequestError(w, r, nil, oidc.ErrInvalidRequest(), service.protocol)
 		return

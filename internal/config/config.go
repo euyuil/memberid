@@ -6,13 +6,10 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"net/netip"
-	"net/url"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"time"
 
@@ -32,7 +29,7 @@ type Installation struct {
 	SigningKeyFile                   string                   `json:"signingKeyFile"`
 	PublicKeysFile                   string                   `json:"publicKeysFile"`
 	SecretsFile                      string                   `json:"secretsFile"`
-	ClientsFile                      string                   `json:"clientsFile"`
+	ClientsFile                      string                   `json:"clientsFile,omitempty"`
 }
 
 type Secrets struct {
@@ -42,26 +39,13 @@ type Secrets struct {
 	ManagementSecretSHA256 string `json:"managementSecretSha256"`
 }
 
-// Client is operator-controlled registration, not a dynamic registration endpoint.
-type Client struct {
-	ID                     string   `json:"client_id"`
-	SecretSHA256           string   `json:"secret_sha256"`
-	RedirectURIs           []string `json:"redirect_uris"`
-	PostLogoutRedirectURIs []string `json:"post_logout_redirect_uris,omitempty"`
-	AccountReturnURIs      []string `json:"accountReturnUris,omitempty"`
-	OrganizationID         string   `json:"organizationId,omitempty"`
-	SubjectKind            string   `json:"subjectKind"`
-	EvidenceScope          string   `json:"evidenceScope,omitempty"`
-	EvidenceAudience       string   `json:"evidenceAudience,omitempty"`
-	Refresh                bool     `json:"refresh,omitempty"`
-	Preauthorized          bool     `json:"preauthorized,omitempty"`
-}
+// Client is the registration format used by legacy installation backups.
+type Client = identity.OIDCClient
 
 type Loaded struct {
 	Installation
 	SAMLSigning *SAMLSigning
 	Secrets     Secrets
-	Clients     []Client
 	SigningKey  *rsa.PrivateKey
 	KeyID       string
 	PublicKeys  map[string]*rsa.PublicKey
@@ -121,12 +105,6 @@ func load(directory string, samlOverride *SAML, inspectSigning bool) (*Loaded, e
 	if err := result.Secrets.Validate(); err != nil {
 		return nil, err
 	}
-	if err := ReadJSON(filepath.Join(directory, result.ClientsFile), &result.Clients); err != nil {
-		return nil, err
-	}
-	if err := ValidateClients(result.Clients, result.AllowLoopbackHTTP); err != nil {
-		return nil, err
-	}
 	var err error
 	result.SigningKey, err = ReadSigningKey(filepath.Join(directory, result.SigningKeyFile))
 	if err != nil {
@@ -162,14 +140,17 @@ func (installation Installation) Validate() error {
 			return errors.New("phone trusted proxies must be explicit IPv4 or IPv6 CIDRs, not all addresses")
 		}
 	}
-	issuer, err := exactURL(installation.Issuer, installation.AllowLoopbackHTTP)
+	issuer, err := identity.ParseExactURL(installation.Issuer, installation.AllowLoopbackHTTP)
 	if err != nil || issuer.Path != "" || issuer.RawQuery != "" || issuer.ForceQuery {
 		return errors.New("issuer must be an exact HTTPS origin; loopback HTTP requires explicit development configuration")
 	}
-	for _, file := range []string{installation.SigningKeyFile, installation.PublicKeysFile, installation.SecretsFile, installation.ClientsFile} {
+	for _, file := range []string{installation.SigningKeyFile, installation.PublicKeysFile, installation.SecretsFile} {
 		if file == "" || filepath.IsAbs(file) || filepath.Base(file) != file || file == "." || file == ".." || strings.ContainsAny(file, `/\:`) {
 			return errors.New("configuration references must be local file names")
 		}
+	}
+	if file := installation.ClientsFile; file != "" && (filepath.IsAbs(file) || filepath.Base(file) != file || file == "." || file == ".." || strings.ContainsAny(file, `/\:`)) {
+		return errors.New("configuration references must be local file names")
 	}
 	return nil
 }
@@ -187,65 +168,23 @@ func (secrets Secrets) Validate() error {
 	return nil
 }
 
-var clientID = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
-var evidenceScope = regexp.MustCompile(`^[a-z][a-z0-9:_-]{0,127}$`)
-
-func ValidateClients(clients []Client, allowLoopback bool) error {
-	seen := map[string]bool{}
-	for _, client := range clients {
-		if !clientID.MatchString(client.ID) || seen[client.ID] || !validHash(client.SecretSHA256) {
-			return errors.New("invalid or repeated client identifier or credential verifier")
-		}
-		seen[client.ID] = true
-		if client.SubjectKind != "member" && client.SubjectKind != "factor" {
-			return errors.New("client subjectKind must be member or factor")
-		}
-		if client.OrganizationID != "" && !identity.ValidID(client.OrganizationID, identity.OrganizationKind) {
-			return errors.New("invalid client organization restriction")
-		}
-		if len(client.RedirectURIs) == 0 {
-			return errors.New("client requires an exact redirect URI")
-		}
-		for _, list := range [][]string{client.RedirectURIs, client.PostLogoutRedirectURIs, client.AccountReturnURIs} {
-			locations := map[string]bool{}
-			for _, location := range list {
-				if _, err := exactURL(location, allowLoopback); err != nil || locations[location] {
-					return errors.New("client return locations must be distinct exact HTTPS URLs or explicitly enabled loopback HTTP")
-				}
-				locations[location] = true
-			}
-		}
-		if (client.EvidenceScope == "") != (client.EvidenceAudience == "") {
-			return errors.New("evidence scope and audience must be configured together")
-		}
-		if client.EvidenceScope != "" {
-			if !evidenceScope.MatchString(client.EvidenceScope) || strings.Contains(" openid profile email phone address offline_access ", " "+client.EvidenceScope+" ") {
-				return errors.New("evidence scope must be a distinct custom scope")
-			}
-			audience, err := exactURL(client.EvidenceAudience, allowLoopback)
-			if err != nil || audience.RawQuery != "" || audience.ForceQuery {
-				return errors.New("evidence audience must be an exact resource URL")
-			}
-		}
-		if client.SubjectKind == "factor" && (client.OrganizationID != "" || client.EvidenceScope == "") {
-			return errors.New("factor clients require explicit evidence policy and cannot claim organization membership")
-		}
+// LoadLegacyClients reads the installation-bound registry for a schema 26–28 backup.
+func LoadLegacyClients(directory string, installation Installation) ([]Client, error) {
+	if installation.ClientsFile == "" {
+		return nil, errors.New("legacy installation must reference its OIDC client registry")
 	}
-	return nil
+	var clients []Client
+	if err := ReadJSON(filepath.Join(directory, installation.ClientsFile), &clients); err != nil {
+		return nil, err
+	}
+	if err := ValidateClients(clients, installation.AllowLoopbackHTTP); err != nil {
+		return nil, err
+	}
+	return clients, nil
 }
 
-func exactURL(raw string, allowLoopback bool) (*url.URL, error) {
-	parsed, err := url.Parse(raw)
-	if err != nil || parsed.Host == "" || parsed.Hostname() == "" || parsed.User != nil || parsed.Fragment != "" || strings.ContainsAny(raw, "*#\\\r\n\t ") || parsed.Opaque != "" || (parsed.Scheme != "https" && !(allowLoopback && parsed.Scheme == "http" && parsed.Hostname() == "127.0.0.1")) {
-		return nil, errors.New("invalid URL")
-	}
-	if parsed.Port() != "" {
-		var port int
-		if _, err := fmt.Sscanf(parsed.Port(), "%d", &port); err != nil || port < 1 || port > 65535 {
-			return nil, errors.New("invalid URL port")
-		}
-	}
-	return parsed, nil
+func ValidateClients(clients []Client, allowLoopback bool) error {
+	return identity.ValidateOIDCClients(clients, allowLoopback)
 }
 
 func validHash(value string) bool {

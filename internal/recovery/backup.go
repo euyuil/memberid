@@ -136,7 +136,7 @@ func Create(ctx context.Context, databaseURL, directory, destination, pgDump, sn
 	if snapshot == "" {
 		return receipt, errors.New("an exported database snapshot is required")
 	}
-	if _, err := config.Load(directory); err != nil {
+	if err := validateRecoveryInstallation(directory, schemaVersion); err != nil {
 		return receipt, err
 	}
 	before, err := inventory(directory, false)
@@ -246,7 +246,7 @@ func Verify(directory string) (Manifest, identity.UpgradeBackup, error) {
 	if len(files) < 2 || files["database.dump"] == "" || !reflect.DeepEqual(files, manifest.Files) {
 		return manifest, receipt, errors.New("recovery file checksums do not match")
 	}
-	if _, err := config.Load(filepath.Join(directory, "installation")); err != nil {
+	if err := validateRecoveryInstallation(filepath.Join(directory, "installation"), manifest.SchemaVersion); err != nil {
 		return manifest, receipt, fmt.Errorf("recovery configuration: %w", err)
 	}
 	digest, err := fileHash(filepath.Join(directory, "manifest.json"))
@@ -255,4 +255,15 @@ func Verify(directory string) (Manifest, identity.UpgradeBackup, error) {
 	}
 	receipt = identity.UpgradeBackup{ID: manifest.ID, SHA256: digest}
 	return manifest, receipt, nil
+}
+
+func validateRecoveryInstallation(directory string, version int) error {
+	installation, err := config.Load(directory)
+	if err != nil {
+		return err
+	}
+	if version <= 28 {
+		_, err = config.LoadLegacyClients(directory, installation.Installation)
+	}
+	return err
 }

@@ -29,7 +29,7 @@ func feishuAccountFixture(t *testing.T) (*fixture, *testFeishu, string, reply) {
 	if err := f.store.SetAdministrator(t.Context(), identity.OperatorPrincipal(), f.member.OrganizationID, f.member.ID, true); err != nil {
 		t.Fatal(err)
 	}
-	f.service.configuration.Clients[0].AccountReturnURIs = []string{accountReturn}
+	f.updateClient("example-web", func(c *config.Client) { c.AccountReturnURIs = []string{accountReturn} })
 	login, verifier := f.loginPage("example-web", "openid offline_access")
 	login = f.verifyPhone(login)
 	f.status(f.exchange("example-web", f.complete(login, f.member.ID), verifier), 200)
@@ -250,7 +250,7 @@ func TestFeishuAccountRejectsPolicyChangesDuringVerification(t *testing.T) {
 				case "cancel":
 					query = "UPDATE account_link_requests SET state='canceled'"
 				case "return":
-					f.service.configuration.Clients[0].AccountReturnURIs = nil
+					f.updateClient("example-web", func(c *config.Client) { c.AccountReturnURIs = nil })
 					return
 				case "expiry":
 					query = "UPDATE account_link_requests SET expires_at=clock_timestamp()-interval '1 second'"

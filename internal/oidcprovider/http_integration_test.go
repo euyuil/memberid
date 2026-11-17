@@ -118,13 +118,16 @@ func newFixtureWithInitializer(t *testing.T, refreshEnabled bool, initialize fun
 			t.Fatal(err)
 		}
 	}
-	configuration.Clients = []config.Client{
+	clients := []config.Client{
 		{ID: "example-web", SecretSHA256: config.SecretHash(secret), RedirectURIs: []string{callback}, PostLogoutRedirectURIs: []string{"http://127.0.0.1:8484/signed-out"}, SubjectKind: "member", OrganizationID: organization.ID},
 		{ID: "second-web", SecretSHA256: config.SecretHash(secret), RedirectURIs: []string{callback}, SubjectKind: "member", OrganizationID: other.ID, Preauthorized: true},
 		{ID: "registration", SecretSHA256: config.SecretHash(secret), RedirectURIs: []string{callback}, SubjectKind: "factor", EvidenceScope: "registration_identity", EvidenceAudience: "https://registration.example.test", Preauthorized: true},
 	}
-	configuration.Clients[0].Refresh = refreshEnabled
-	configuration.Clients[1].Refresh = refreshEnabled
+	clients[0].Refresh = refreshEnabled
+	clients[1].Refresh = refreshEnabled
+	for _, registration := range clients {
+		seedOIDCClient(t, store, registration, false)
+	}
 	key, _ := base64.StdEncoding.DecodeString(configuration.Secrets.PhoneCodeKey)
 	sender := new(testSender)
 	phone, err := identity.NewPhoneVerifier(store, key, sender, configuration.PhoneSendLimitsPerHour)
@@ -140,6 +143,25 @@ func newFixtureWithInitializer(t *testing.T, refreshEnabled bool, initialize fun
 	t.Cleanup(server.Close)
 	return &fixture{t, server, service, store, sender, browserClient(), member, otherMember, secret}
 }
+func seedOIDCClient(t *testing.T, store *identity.Store, client config.Client, system bool) {
+	t.Helper()
+	if _, err := store.Database().Exec(t.Context(), "INSERT INTO oidc_clients(client_id,display_name,enabled,system,revision,registration) VALUES($1,$1,true,$2,1,$3)", client.ID, system, client); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func (f *fixture) updateClient(id string, change func(*config.Client)) {
+	f.t.Helper()
+	registration, err := f.store.OIDCClient(f.t.Context(), id)
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	change(&registration.Client)
+	if _, err := f.store.Database().Exec(f.t.Context(), "UPDATE oidc_clients SET registration=$2 WHERE client_id=$1", id, registration.Client); err != nil {
+		f.t.Fatal(err)
+	}
+}
+
 func (f *fixture) call(client *http.Client, method, path string, form url.Values, headers map[string]string) reply {
 	f.t.Helper()
 	if strings.HasPrefix(path, "/") {

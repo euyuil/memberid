@@ -1,6 +1,7 @@
 package oidcprovider
 
 import (
+	"context"
 	"net"
 	"net/http"
 	"net/netip"
@@ -64,7 +65,7 @@ func (service *Service) rejectPhoneSend(r *http.Request, event authevent.Event) 
 	service.events.Offer(event)
 }
 
-func (service *Service) loginEvent(request *authorizationRequest) authevent.Event {
+func (service *Service) loginEvent(ctx context.Context, request *authorizationRequest) authevent.Event {
 	// Only an operator-registered organization restriction owns this shared phone
 	// workflow. A phone number or an arbitrary organization hint establishes none.
 	event := authevent.Event{InteractionID: request.InteractionID, ClientID: request.ClientID, Purpose: "login"}
@@ -72,7 +73,7 @@ func (service *Service) loginEvent(request *authorizationRequest) authevent.Even
 		event.OrganizationID = request.SAML.OrganizationID
 		return event
 	}
-	if registered, err := service.storage.client(request.ClientID); err == nil {
+	if registered, err := service.storage.client(ctx, request.ClientID); err == nil {
 		event.OrganizationID = registered.registration.OrganizationID
 	}
 	return event

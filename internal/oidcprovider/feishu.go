@@ -83,7 +83,7 @@ func (service *Service) feishuCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	attempt := request.Feishu
-	event = service.loginEvent(request)
+	event = service.loginEvent(r.Context(), request)
 	if attempt != nil {
 		event.OrganizationID = attempt.OrganizationID
 		event.ProviderID = attempt.ProviderID

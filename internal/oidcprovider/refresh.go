@@ -40,7 +40,7 @@ func (s *storage) TokenRequestByRefreshToken(ctx context.Context, secret string)
 func (s *storage) CreateAccessAndRefreshTokens(ctx context.Context, input op.TokenRequest, secret string) (string, string, time.Time, error) {
 	switch request := input.(type) {
 	case *authorizationRequest:
-		registered, err := s.client(request.ClientID)
+		registered, err := s.client(ctx, request.ClientID)
 		if err != nil || !registered.registration.Refresh || !slices.Contains(request.Scopes, "offline_access") || secret != "" {
 			return "", "", time.Time{}, oidc.ErrInvalidGrant()
 		}
@@ -70,17 +70,20 @@ func (s *storage) rotateRefresh(ctx context.Context, request *refreshRequest, se
 	if !sameSecret(request.secretHash, config.SecretHash(secret)) {
 		return "", "", time.Time{}, oidc.ErrInvalidGrant()
 	}
-	registered, err := s.client(request.ClientID)
-	if err != nil || !registered.registration.Refresh {
-		return "", "", time.Time{}, oidc.ErrInvalidGrant()
-	}
 	now := s.service.now()
 	accessID, nextSecret := newID(), config.RandomSecret()
 	expiry := minimum(now.Add(accessLifetime), request.AbsoluteExpiry)
 	replayed, revoked, commitReady := false, false, false
 	var reuse authevent.Event
 	observation, observationErr := s.observeDirectory(ctx, &request.grant)
-	err = pgx.BeginFunc(ctx, s.service.store.Database(), func(tx pgx.Tx) error {
+	err := pgx.BeginFunc(ctx, s.service.store.Database(), func(tx pgx.Tx) error {
+		registered, err := s.issuanceClient(ctx, tx, request.ClientID)
+		if err != nil {
+			return err
+		}
+		if !registered.registration.Refresh {
+			return oidc.ErrInvalidGrant()
+		}
 		var sessionID string
 		// A refresh does not depend on a browser cookie or the browser SSO idle deadline.
 		// Lock sessions before grants, matching code issuance and RP-initiated logout.

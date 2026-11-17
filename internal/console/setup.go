@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"slices"
 	"time"
 
 	"github.com/euyuil/memberid/internal/config"
@@ -26,18 +27,12 @@ func New(ctx context.Context, store *identity.Store, installation *config.Loaded
 	if u.Scheme != "https" && !(installation.AllowLoopbackHTTP && u.Scheme == "http" && net.ParseIP(u.Hostname()).IsLoopback()) {
 		return nil, errors.New("console HTTP requires explicit loopback development configuration")
 	}
-	registered := false
-	for _, c := range installation.Clients {
-		if c.ID == settings.ClientID && c.SubjectKind == "member" && c.OrganizationID == "" && c.SecretSHA256 == config.SecretHash(secret) {
-			for _, redirect := range c.RedirectURIs {
-				if redirect == settings.Origin+"/auth/callback" {
-					registered = true
-				}
-			}
-		}
-	}
-	if !registered {
-		return nil, errors.New("console requires its own registered all-organization Member client and exact callback")
+	registered, err := store.OIDCClient(ctx, settings.ClientID)
+	client := registered.Client
+	if err != nil || !registered.Enabled || !registered.System || client.SubjectKind != "member" ||
+		client.OrganizationID != "" || client.SecretSHA256 != config.SecretHash(secret) ||
+		!slices.Contains(client.RedirectURIs, settings.Origin+"/auth/callback") {
+		return nil, errors.New("console requires its own protected all-organization Member client and exact callback")
 	}
 	party, err := rp.NewRelyingPartyOIDC(ctx, installation.Issuer, settings.ClientID, secret, settings.Origin+"/auth/callback", []string{"openid", "profile"}, rp.WithHTTPClient(&http.Client{Timeout: 15 * time.Second}), rp.WithAuthStyle(oauth2.AuthStyleInHeader), rp.WithVerifierOpts(rp.WithNonce(func(ctx context.Context) string { value, _ := ctx.Value(nonceKey{}).(string); return value }), rp.WithSupportedSigningAlgorithms("RS256")))
 	if err != nil {
@@ -90,6 +85,7 @@ func New(ctx context.Context, store *identity.Store, installation *config.Loaded
 	s.routes.HandleFunc("GET /api/organizations/{organizationId}/authentication-events/{eventId}", s.authenticationEvent)
 	s.registerProviderRoutes(installation)
 	s.registerSAMLRoutes()
+	s.registerOIDCApplicationRoutes(installation)
 	static, _ := fs.Sub(assets, "static")
 	registerPages(s.routes, static)
 	return s, nil

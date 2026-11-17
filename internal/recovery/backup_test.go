@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/euyuil/memberid/internal/config"
+	"github.com/euyuil/memberid/internal/identity"
 )
 
 func TestRecoveryRejectsChangedMissingAndExtraFiles(t *testing.T) {
@@ -23,7 +24,7 @@ func TestRecoveryRejectsChangedMissingAndExtraFiles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	manifest := Manifest{Version: 1, ID: "synthetic-recovery", SchemaVersion: 26, CreatedAt: time.Now().UTC(), Files: files}
+	manifest := Manifest{Version: 1, ID: "synthetic-recovery", SchemaVersion: identity.SchemaVersion, CreatedAt: time.Now().UTC(), Files: files}
 	data, err := json.Marshal(manifest)
 	if err != nil {
 		t.Fatal(err)

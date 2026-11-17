@@ -28,7 +28,7 @@ func TestManagementRotationPreservesInstallation(t *testing.T) {
 		t.Fatal(err)
 	}
 	unchanged := map[string]string{}
-	for _, name := range []string{"memberid.json", "clients.json", "signing-key.pem", "public-keys.pem", "management-secret"} {
+	for _, name := range []string{"memberid.json", "signing-key.pem", "public-keys.pem", "management-secret"} {
 		data, err := os.ReadFile(filepath.Join(directory, name))
 		if err != nil {
 			t.Fatal(err)
@@ -104,7 +104,7 @@ func TestManagementRotationRefusesUnsafeChanges(t *testing.T) {
 			case "locked":
 				err = os.WriteFile(lockFile, []byte("another operator"), 0600)
 			case "invalid configuration":
-				err = os.WriteFile(filepath.Join(directory, "clients.json"), []byte("invalid"), 0600)
+				err = os.WriteFile(filepath.Join(directory, "memberid.json"), []byte("invalid"), 0600)
 			}
 			if err != nil {
 				t.Fatal(err)

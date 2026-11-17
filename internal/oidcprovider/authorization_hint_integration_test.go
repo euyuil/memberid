@@ -3,6 +3,7 @@
 package oidcprovider
 
 import (
+	"github.com/euyuil/memberid/internal/config"
 	"github.com/euyuil/memberid/internal/identity"
 	"net/url"
 	"testing"
@@ -22,8 +23,8 @@ func requireAuthorizationError(t *testing.T, response reply, kind string) {
 func TestMemberLoginHintRequiresCurrentBindingAndClientPolicy(t *testing.T) {
 	f := newFixture(t)
 	original := f.tokens()
-	f.service.configuration.Clients[0].OrganizationID = ""
-	f.service.configuration.Clients[0].Preauthorized = true
+	f.updateClient("example-web", func(c *config.Client) { c.OrganizationID = "" })
+	f.updateClient("example-web", func(c *config.Client) { c.Preauthorized = true })
 	extra := url.Values{"prompt": {"none"}, "login_hint": {f.otherMember.ID}}
 	r, verifier := f.authorization("example-web", "openid", extra)
 	f.status(r, 302)
@@ -40,13 +41,13 @@ func TestMemberLoginHintRequiresCurrentBindingAndClientPolicy(t *testing.T) {
 	}
 	for _, condition := range []string{"client restriction", "missing binding", "subject hint conflict", "missing authentication"} {
 		t.Run(condition, func(t *testing.T) {
-			f.service.configuration.Clients[0].OrganizationID = ""
+			f.updateClient("example-web", func(c *config.Client) { c.OrganizationID = "" })
 			extra.Del("id_token_hint")
 			extra.Set("login_hint", f.otherMember.ID)
 			want := "interaction_required"
 			switch condition {
 			case "client restriction":
-				f.service.configuration.Clients[0].OrganizationID = f.member.OrganizationID
+				f.updateClient("example-web", func(c *config.Client) { c.OrganizationID = f.member.OrganizationID })
 			case "missing binding":
 				id, _ := identity.NewID(identity.MemberKind)
 				extra.Set("login_hint", id)
@@ -103,7 +104,7 @@ func TestAuthorizationHintBindsSubject(t *testing.T) {
 	r = f.submit(page.body, "continue", url.Values{"member": {member.ID}, "consent": {"yes"}})
 	requireAuthorizationError(t, r, "login_required")
 
-	f.service.configuration.Clients[0].Preauthorized = true
+	f.updateClient("example-web", func(c *config.Client) { c.Preauthorized = true })
 	extra.Set("prompt", "none")
 	r, _ = f.authorization("example-web", "openid", extra)
 	f.status(r, 302)

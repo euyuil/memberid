@@ -44,6 +44,8 @@ const (
 	authenticationEventResource              managementResource = authenticationEventsResource + "/{eventId}"
 	organizationAuthenticationEventsResource managementResource = organizationResource + "/authenticationEvents"
 	organizationAuthenticationEventResource  managementResource = organizationAuthenticationEventsResource + "/{eventId}"
+	oidcClientsResource                      managementResource = "oidcApplications"
+	oidcClientResource                       managementResource = oidcClientsResource + "/{clientId}"
 )
 
 // Registered operations constrain even a platform-wide wildcard. Adding a
@@ -72,6 +74,8 @@ var managementOperations = map[managementResource][]string{
 	authenticationEventResource:              {actionGet},
 	organizationAuthenticationEventsResource: {actionList},
 	organizationAuthenticationEventResource:  {actionGet},
+	oidcClientsResource:                      {actionCreate, actionList},
+	oidcClientResource:                       {actionUpdate, actionStatusUpdate, "credential.rotate"},
 }
 
 func (resource managementResource) require(action string, ids ...string) authorization.Requirement {
@@ -155,6 +159,8 @@ func validManagementPart(template, value string) bool {
 		return validText(value, 128)
 	case "{serviceProviderId}":
 		return validSAMLServiceProviderID(value)
+	case "{clientId}":
+		return validOIDCClientID(value)
 	default:
 		return template == value
 	}

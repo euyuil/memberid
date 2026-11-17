@@ -1,7 +1,6 @@
 package config
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -15,7 +14,7 @@ func TestInstallationDoesNotOverwrite(t *testing.T) {
 		t.Fatal(err)
 	}
 	loaded, err := Load(directory)
-	if err != nil || len(loaded.Clients) != 0 || loaded.SigningKey.N.BitLen() != 3072 {
+	if err != nil || loaded.SigningKey.N.BitLen() != 3072 {
 		t.Fatalf("installation load: %v", err)
 	}
 	before, err := os.ReadFile(filepath.Join(directory, "signing-key.pem"))
@@ -34,7 +33,7 @@ func TestInstallationDoesNotOverwrite(t *testing.T) {
 		t.Fatal("management verifier mismatch")
 	}
 	if runtime.GOOS != "windows" {
-		for _, file := range []string{"signing-key.pem", "secrets.json", "clients.json", "management-secret"} {
+		for _, file := range []string{"signing-key.pem", "secrets.json", "management-secret"} {
 			info, err := os.Stat(filepath.Join(directory, file))
 			if err != nil || info.Mode().Perm() != 0600 {
 				t.Fatalf("unprotected file %s: %v", file, err)
@@ -126,38 +125,6 @@ func TestInvalidConfigurationIsRedacted(t *testing.T) {
 	err := ReadJSON(file, &target)
 	if err == nil || strings.Contains(err.Error(), sensitive) {
 		t.Fatal("invalid configuration was accepted or disclosed")
-	}
-}
-
-func TestClientMutationRefusesLocksAndInvalidUpdates(t *testing.T) {
-	directory := filepath.Join(t.TempDir(), "installation")
-	if err := Initialize(directory, "https://login.example.invalid", false); err != nil {
-		t.Fatal(err)
-	}
-	registry := filepath.Join(directory, "clients.json")
-	before, _ := os.ReadFile(registry)
-	err := ChangeClients(directory, func(clients []Client) ([]Client, error) { return append(clients, Client{ID: "invalid"}), nil })
-	if err == nil {
-		t.Fatal("accepted invalid registry update")
-	}
-	after, _ := os.ReadFile(registry)
-	if string(before) != string(after) {
-		t.Fatal("invalid update changed the registry")
-	}
-	lock := filepath.Join(directory, ".clients.lock")
-	if err := os.WriteFile(lock, []byte("owned by another operator"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	called := false
-	if ChangeClients(directory, func(clients []Client) ([]Client, error) { called = true; return clients, nil }) == nil || called {
-		t.Fatal("ignored another operator's lock")
-	}
-	if _, err := os.Stat(lock); err != nil {
-		t.Fatal("removed another operator's lock")
-	}
-	var clients []Client
-	if json.Unmarshal(after, &clients) != nil || len(clients) != 0 {
-		t.Fatal("changed registry")
 	}
 }
 

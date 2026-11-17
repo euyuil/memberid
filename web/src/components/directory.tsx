@@ -126,8 +126,10 @@ export function RecordIdentifier({
       </InputGroup>
       <p className="identifier-feedback" role="status">
         {copyResult.status === "failed" &&
-          "无法自动复制，请选中上方 ID 手动复制。"}
-        {copyResult.status === "copied" && <span className="sr-only">已复制</span>}
+          "无法自动复制，请选中上方内容手动复制。"}
+        {copyResult.status === "copied" && (
+          <span className="sr-only">已复制</span>
+        )}
       </p>
     </div>
   )

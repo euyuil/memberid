@@ -24,6 +24,8 @@ func TestManagementOperationMatrix(t *testing.T) {
 			target                 string
 			supported, admin, self []string
 		}{
+			{oidcClientsResource, nil, "oidcApplications", []string{"create", "list"}, nil, nil},
+			{oidcClientResource, []string{"example-client"}, "oidcApplications/example-client", []string{"update", "status.update", "credential.rotate"}, nil, nil},
 			{organizationsResource, nil, "organizations", []string{"create", "list"}, nil, nil},
 			{organizationResource, []string{targetOrganization}, base, []string{"get", "update", "status.update"}, []string{"get", "update"}, nil},
 			{membersResource, []string{targetOrganization}, base + "/members", []string{"create", "list"}, []string{"create", "list"}, nil},
@@ -59,7 +61,7 @@ func TestManagementOperationMatrix(t *testing.T) {
 			if !slices.Equal(registered, expected) {
 				t.Errorf("%s: registered actions %v, want %v", test.resource, registered, expected)
 			}
-			for _, action := range []string{"create", "list", "get", "update", "delete", "status.update", "read", "unknown", "*", "?"} {
+			for _, action := range []string{"create", "list", "get", "update", "delete", "status.update", "credential.rotate", "read", "unknown", "*", "?"} {
 				required := authorization.Requirement{Target: test.target, Action: action}
 				supported := slices.Contains(test.supported, action)
 				built := test.resource.require(action, test.ids...)

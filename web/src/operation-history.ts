@@ -107,6 +107,19 @@ export function describeEvent(event: ManagementEvent) {
     case "binding.revoke":
       label = "撤销绑定"
       break
+    case "oidc.application.create":
+      label = "添加 OIDC 应用"
+      break
+    case "oidc.application.update":
+      label = "编辑 OIDC 应用"
+      break
+    case "oidc.application.status.update":
+      label = changes.enabled ? "启用 OIDC 应用" : "停用 OIDC 应用"
+      field("enabled", label, enabled)
+      break
+    case "oidc.application.credential.rotate":
+      label = "轮换 OIDC 应用密钥"
+      break
     case "saml.nameId.provision":
       label = "预设 SAML NameID"
       break
@@ -171,6 +184,7 @@ export function describeEvent(event: ManagementEvent) {
       break
   }
   const provider = action === "provider.configure"
+  const oidc = action.startsWith("oidc.application.")
   const saml = action === "saml.serviceProvider.configure"
   const providerId =
     provider && typeof changes.providerId === "string"
@@ -182,7 +196,8 @@ export function describeEvent(event: ManagementEvent) {
       : action === "member.create" ||
           action === "member.update" ||
           provider ||
-          saml
+          saml ||
+          oidc
         ? name(changes.displayName)
         : undefined
   return {
@@ -196,25 +211,27 @@ export function describeEvent(event: ManagementEvent) {
           : snapshot.actorName || "姓名未记录",
     organizationName: snapshot.organizationName || "组织名称未记录",
     targetName: snapshot.targetName || recordedName || "名称未记录",
-    targetURL: saml
-      ? routeURL({
-          org: event.organizationId,
-          view: "saml-service-providers",
-          serviceProvider: name(changes.id),
-        })
-      : provider
-        ? providerId
-          ? routeURL({
-              org: event.organizationId,
-              view: "providers",
-              provider: providerId,
-            })
-          : undefined
-        : routeURL({
+    targetURL: oidc
+      ? routeURL({ view: "oidc-applications" })
+      : saml
+        ? routeURL({
             org: event.organizationId,
-            view: event.memberId ? "members" : "organization",
-            member: event.memberId,
-          }),
+            view: "saml-service-providers",
+            serviceProvider: name(changes.id),
+          })
+        : provider
+          ? providerId
+            ? routeURL({
+                org: event.organizationId,
+                view: "providers",
+                provider: providerId,
+              })
+            : undefined
+          : routeURL({
+              org: event.organizationId,
+              view: event.memberId ? "members" : "organization",
+              member: event.memberId,
+            }),
     providerId,
   }
 }
