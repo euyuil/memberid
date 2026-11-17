@@ -60,7 +60,7 @@ func (s *storage) CreateAuthRequest(ctx context.Context, input *oidc.AuthRequest
 	if registered.registration.EvidenceScope != "" && slices.Contains(input.Scopes, registered.registration.EvidenceScope) {
 		audience = registered.registration.EvidenceAudience
 	}
-	request := &authorizationRequest{ClientRevision: registered.revision, grant: grant{InteractionID: newID(), ID: newID(), ClientID: input.ClientID, Scopes: input.Scopes, Audience: []string{audience}}, Input: *input, HintSubject: hintSubject, Interaction: browserauth.Interaction{BrowserHash: config.SecretHash(browser), CSRF: config.RandomSecret()}}
+	request := &authorizationRequest{ClientRevision: registered.revision, grant: grant{InteractionID: newID(), ID: newID(), ClientID: input.ClientID, ClientName: registered.displayName, Scopes: input.Scopes, Audience: []string{audience}}, Input: *input, HintSubject: hintSubject, Interaction: browserauth.Interaction{BrowserHash: config.SecretHash(browser), CSRF: config.RandomSecret()}}
 	data, err := json.Marshal(request)
 	if err != nil {
 		return nil, err

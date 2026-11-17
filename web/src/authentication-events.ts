@@ -9,6 +9,7 @@ export type AuthenticationEvent = {
   organizationId?: string
   memberId?: string
   clientId?: string
+  clientName?: string
   factorId?: string
   bindingId?: string
   sessionId?: string

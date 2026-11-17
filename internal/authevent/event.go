@@ -7,6 +7,8 @@ import (
 	"crypto/rand"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 )
 
 type Actor struct {
@@ -29,6 +31,7 @@ type Event struct {
 	OrganizationID string    `json:"organizationId,omitempty"`
 	MemberID       string    `json:"memberId,omitempty"`
 	ClientID       string    `json:"clientId,omitempty"`
+	ClientName     string    `json:"clientName,omitempty"`
 	FactorID       string    `json:"factorId,omitempty"`
 	BindingID      string    `json:"bindingId,omitempty"`
 	SessionID      string    `json:"sessionId,omitempty"`
@@ -63,6 +66,11 @@ func (event Event) valid() bool {
 		return false
 	}
 	if (event.Actor.Kind == "") != (event.Actor.ID == "") || event.OccurredAt.IsZero() || event.EventID == "" {
+		return false
+	}
+	if event.ClientName != "" && (event.ClientID == "" || !utf8.ValidString(event.ClientName) ||
+		strings.TrimSpace(event.ClientName) == "" || utf8.RuneCountInString(event.ClientName) > 128 ||
+		strings.IndexFunc(event.ClientName, unicode.IsControl) != -1) {
 		return false
 	}
 	for _, value := range []string{event.EventID, event.InteractionID, event.RequestID, event.Actor.ID, event.OrganizationID, event.MemberID, event.ClientID, event.FactorID, event.BindingID, event.SessionID, event.GrantID, event.CausationID, event.ProviderID} {

@@ -79,7 +79,20 @@ func (filter AuthenticationEventFilter) validate() (from, to time.Time, cursor e
 	return from, to, cursor, nil
 }
 
-const authenticationEventColumns = `e.event_id,e.event_type,e.outcome,e.organization_id,e.member_id,e.client_id,e.interaction_id,e.request_id,e.occurred_at,e.recorded_at,e.data,
+// Older OIDC events can use the current registry name when the protocol is
+// known. SMS and verification are shared with SAML, so establish OIDC from a
+// visible correlated grant before resolving their legacy client IDs.
+const authenticationEventClientName = `COALESCE(NULLIF(e.data->>'clientName',''),(
+ SELECT c.display_name FROM oidc_clients c WHERE c.client_id=e.client_id AND (
+   e.event_type LIKE 'oidc.%' OR e.event_type='grant.revoke' OR e.data->>'purpose'='accountLinking'
+   OR (e.event_type IN ('sms.send','authentication.verify') AND e.interaction_id<>'' AND EXISTS(
+    SELECT 1 FROM authentication_events related
+    WHERE related.interaction_id=e.interaction_id AND related.client_id=e.client_id
+      AND related.event_type='oidc.grant.issue' AND ($1='' OR related.organization_id=$1) AND related.occurred_at>$2
+   ))
+ )),'')`
+
+const authenticationEventColumns = `e.event_id,e.event_type,e.outcome,e.organization_id,e.member_id,e.client_id,e.interaction_id,e.request_id,e.occurred_at,e.recorded_at,e.data,` + authenticationEventClientName + `,
  ($1='' OR EXISTS(SELECT 1 FROM authentication_events cause WHERE cause.event_id=e.data->>'causationId' AND cause.organization_id=$1 AND cause.occurred_at>$2))`
 const authenticationEventWhere = ` FROM authentication_events e WHERE ($1='' OR e.organization_id=$1) AND e.occurred_at>$2`
 
@@ -87,7 +100,7 @@ func readAuthenticationEvent(row pgx.Row, organizationView bool) (authevent.Even
 	var columns, event authevent.Event
 	var data []byte
 	var visibleCause bool
-	err := row.Scan(&columns.EventID, &columns.Type, &columns.Outcome, &columns.OrganizationID, &columns.MemberID, &columns.ClientID, &columns.InteractionID, &columns.RequestID, &columns.OccurredAt, &columns.RecordedAt, &data, &visibleCause)
+	err := row.Scan(&columns.EventID, &columns.Type, &columns.Outcome, &columns.OrganizationID, &columns.MemberID, &columns.ClientID, &columns.InteractionID, &columns.RequestID, &columns.OccurredAt, &columns.RecordedAt, &data, &columns.ClientName, &visibleCause)
 	if err != nil {
 		return event, storageError(err)
 	}
@@ -98,6 +111,7 @@ func readAuthenticationEvent(row pgx.Row, organizationView bool) (authevent.Even
 	// timestamp precision, rather than potentially different JSON timestamps.
 	event.EventID, event.Type, event.Outcome = columns.EventID, columns.Type, columns.Outcome
 	event.OrganizationID, event.MemberID, event.ClientID = columns.OrganizationID, columns.MemberID, columns.ClientID
+	event.ClientName = columns.ClientName
 	event.InteractionID, event.RequestID = columns.InteractionID, columns.RequestID
 	event.OccurredAt, event.RecordedAt = columns.OccurredAt.UTC(), columns.RecordedAt.UTC()
 	if organizationView {

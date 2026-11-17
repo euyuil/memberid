@@ -19,7 +19,7 @@ var loginPage = template.Must(template.ParseFS(pageFiles, "login.html"))
 type memberChoice struct{ ID, Label string }
 type pageData struct {
 	Request                                                        *authorizationRequest
-	ClientID, Scopes, Message, Nonce                               string
+	ApplicationName, Scopes, Message, Nonce                        string
 	Members                                                        []memberChoice
 	Verified, Pending, PhonePending, FactorClient, ConsentRequired bool
 	PhoneEnabled, ProviderEnabled, OrganizationRestricted          bool
@@ -59,8 +59,12 @@ func (service *Service) renderLogin(w http.ResponseWriter, r *http.Request, requ
 	if !verified && request.phonePending() && request.ChallengeID == "" && message == "" {
 		message = "Phone verification is pending. Cancel verification to start again."
 	}
+	applicationName := client.displayName
+	if applicationName == "" {
+		applicationName = client.registration.ID
+	}
 	data := pageData{
-		Request: request, ClientID: client.registration.ID, Scopes: client.registration.IdentityInformation, Message: message,
+		Request: request, ApplicationName: applicationName, Scopes: client.registration.IdentityInformation, Message: message,
 		Nonce: config.RandomSecret(), Members: choices, Verified: verified,
 		Pending: request.phonePending() || request.externalPending(), PhonePending: request.ChallengeID != "",
 		PhoneEnabled: service.phone != nil, ProviderEnabled: client.registration.SubjectKind == "member" && (service.dingtalk != nil || service.feishu != nil),
