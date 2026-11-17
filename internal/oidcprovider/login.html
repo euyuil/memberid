@@ -4,15 +4,110 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Sign in · MemberID</title>
 <style nonce="{{.Nonce}}">
-:root{font-family:system-ui,sans-serif;color:#172a34;background:#f3f6f7;color-scheme:light}
-*{box-sizing:border-box}body{margin:0;padding:2rem 1rem}main{max-width:30rem;margin:auto;background:white;border:1px solid #d8e2e6;border-radius:1rem;padding:1.5rem}
-h1{margin:0 0 .5rem;font-size:1.6rem}p{line-height:1.5}label{display:block;margin:.7rem 0 .3rem}input,select,button{font:inherit;min-height:2.75rem;border:1px solid #9aadb7;border-radius:.4rem;padding:.5rem .7rem;width:100%}button{background:#17566b;color:white;border-color:#17566b;cursor:pointer;margin:.6rem 0}button:disabled{background:#dce5e9;border-color:#dce5e9;color:#586b75;cursor:default}input:disabled,select:disabled{background:#f1f4f5}input[readonly]{background:#f1f4f5}.secondary{background:white;color:#17566b}.feedback{min-height:6rem;overflow-wrap:anywhere;color:#304d5c;font-size:.95rem;margin:.6rem 0}.consent{min-height:3.5rem;display:flex;gap:.5rem;align-items:flex-start;line-height:1.5}.consent input{width:1.1rem;min-height:1.1rem;margin:.2rem 0}small{color:#4c626d;overflow-wrap:anywhere}.section{border-top:1px solid #e1e7ea;padding-top:.6rem;margin-top:.6rem}a{color:#17566b}
-.password-login .feedback{min-height:2.5rem;margin:.5rem 0}
+:root {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  color: oklch(0.205 0 0);
+  background: oklch(0.982 0.003 265);
+  color-scheme: light;
+  --primary: oklch(0.51 0.19 265);
+  --primary-hover: oklch(0.46 0.18 265);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.48 0 0);
+  --border: oklch(0.9 0.008 265);
+  --ring: oklch(0.6 0.15 265 / 18%);
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  min-height: 100vh;
+  min-height: 100svh;
+  padding: 2rem 1rem;
+  display: grid;
+  background: radial-gradient(circle at 50% 0, oklch(0.94 0.035 265 / 55%), transparent 32rem), oklch(0.982 0.003 265);
+  font-size: 15px;
+  -webkit-font-smoothing: antialiased;
+}
+main {
+  width: min(100%, 27rem);
+  margin: auto;
+  padding: 2rem;
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 1.25rem;
+  box-shadow: 0 24px 64px -36px oklch(0.35 0.08 265 / 35%), 0 2px 8px oklch(0.2 0.02 265 / 4%);
+}
+.brand { display: flex; align-items: center; gap: 0.875rem; margin-bottom: 1.25rem; }
+.brand > div:last-child { min-width: 0; }
+.brand-mark {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 0.875rem;
+  background: linear-gradient(145deg, oklch(0.58 0.2 265), var(--primary));
+  box-shadow: 0 7px 18px -8px oklch(0.51 0.19 265 / 65%);
+  color: white;
+  font-size: 1.2rem;
+  font-weight: 750;
+  letter-spacing: -0.04em;
+}
+h1 { margin: 0 0 0.2rem; font-size: 1.5rem; font-weight: 700; letter-spacing: -0.035em; line-height: 1.25; }
+p { margin: 0; color: var(--muted-foreground); line-height: 1.5; overflow-wrap: anywhere; }
+p strong { color: oklch(0.3 0.01 265); font-weight: 600; }
+form { margin: 0; }
+form + form { margin-top: 0.75rem; }
+label { display: block; margin: 1rem 0 0.4rem; font-size: 0.875rem; font-weight: 550; }
+input, select, button {
+  font: inherit;
+  width: 100%;
+  min-height: 2.875rem;
+  border: 1px solid var(--border);
+  border-radius: 0.625rem;
+  padding: 0.625rem 0.8rem;
+}
+input, select { background: white; color: inherit; }
+input::placeholder { color: oklch(0.6 0 0); }
+input:focus, select:focus { border-color: var(--primary); outline: 3px solid var(--ring); outline-offset: 1px; }
+input:disabled, select:disabled, input[readonly] { background: var(--muted); color: var(--muted-foreground); }
+button {
+  margin: 0.875rem 0 0;
+  border-color: var(--primary);
+  background: var(--primary);
+  color: white;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 1px 2px oklch(0.2 0.02 265 / 8%);
+}
+button:hover:not(:disabled) { background: var(--primary-hover); border-color: var(--primary-hover); }
+button:focus-visible { outline: 3px solid var(--ring); outline-offset: 2px; }
+button:disabled { background: var(--muted); border-color: var(--border); color: var(--muted-foreground); cursor: default; box-shadow: none; }
+.secondary { background: white; color: var(--primary); border-color: var(--border); box-shadow: none; }
+.secondary:hover:not(:disabled) { background: var(--muted); border-color: oklch(0.82 0.015 265); }
+.feedback { min-height: 6rem; display: flex; align-items: center; margin: 0.5rem 0; color: oklch(0.4 0.025 265); font-size: 0.875rem; line-height: 1.5; overflow-wrap: anywhere; }
+.feedback:not(:empty) { padding: 0.75rem; border-radius: 0.625rem; background: var(--muted); }
+.consent { min-height: 3.5rem; display: flex; gap: 0.625rem; align-items: flex-start; margin-top: 1rem; color: var(--muted-foreground); font-weight: 400; line-height: 1.5; }
+.consent input { flex: 0 0 auto; width: 1rem; height: 1rem; min-height: 1rem; margin: 0.2rem 0 0; padding: 0; accent-color: var(--primary); }
+small { display: block; color: var(--muted-foreground); line-height: 1.5; overflow-wrap: anywhere; }
+form.section, div.section { border-top: 1px solid var(--border); padding-top: 0.25rem; margin-top: 1.25rem; }
+.identity-note { margin: 1.5rem 0 0; padding-top: 1.25rem; border-top: 1px solid var(--border); text-align: center; font-size: 0.75rem; }
+a { color: var(--primary); }
+.password-login .feedback { min-height: 2.5rem; margin: 0.5rem 0; }
+@media (max-width: 32rem) {
+  body { padding: 1rem; }
+  main { padding: 1.5rem; border-radius: 1rem; }
+  .brand-mark { width: 2.5rem; height: 2.5rem; border-radius: 0.75rem; }
+}
 </style>
 </head>
 <body><main{{if .PasswordEnabled}} class="password-login"{{end}}>
+<header class="brand">
+<div class="brand-mark" aria-hidden="true">M</div>
+<div>
 <h1>MemberID</h1>
 <p>Sign in to <strong>{{.ApplicationName}}</strong>.</p>
+</div>
+</header>
 {{if .ConsentRequired}}<small>Requested identity information: {{.Scopes}}</small>{{end}}
 <div class="feedback" role="status" aria-live="polite">{{.Message}}</div>
 {{if and .PasswordEnabled (not .Verified)}}
@@ -77,5 +172,5 @@ h1{margin:0 0 .5rem;font-size:1.6rem}p{line-height:1.5}label{display:block;margi
 <button name="action" value="continue" {{if not .Verified}}disabled{{end}}>Continue to application</button>
 </form>
 {{end}}
-<small>Each organization has an independent Member identity.</small>
+<small class="identity-note">Each organization has an independent Member identity.</small>
 </main></body></html>
