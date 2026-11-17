@@ -53,6 +53,8 @@ export type ProviderDirectory = {
   items: Provider[]
   dingTalkCallback: string
   feishuCallback: string
+  dingTalkLinkCallback: string
+  feishuLinkCallback: string
 }
 
 const names = { dingtalk: "钉钉", feishu: "飞书" }
@@ -197,6 +199,14 @@ export function Providers({
                 />
               </dd>
             </dl>
+            <ProviderSetup directory={directory} kind={viewing.type} />
+            <ProviderCheck
+              key={viewing.id}
+              item={viewing}
+              base={base}
+              csrf={csrf}
+              save={save}
+            />
           </DialogContent>
         </Dialog>
       )}
@@ -246,8 +256,6 @@ function ProviderDialog({
   const availableTypes = system
     ? providerTypes.filter(({ value }) => value === "dingtalk")
     : providerTypes
-  const callback =
-    kind === "feishu" ? directory.feishuCallback : directory.dingTalkCallback
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (pending) return
@@ -367,12 +375,7 @@ function ProviderDialog({
                   readOnly={pending}
                 />
               </Field>
-              <Field>
-                <FieldLabel htmlFor="provider-callback">
-                  OAuth 回调地址
-                </FieldLabel>
-                <Input id="provider-callback" value={callback} readOnly />
-              </Field>
+              <ProviderSetup directory={directory} kind={kind} />
               <Field orientation="horizontal" data-disabled={pending}>
                 <Checkbox
                   id="provider-enabled"
@@ -411,5 +414,118 @@ function ProviderDialog({
         </form>
       </DialogContent>
     </Dialog>
+  )
+}
+
+function ProviderSetup({
+  directory,
+  kind,
+}: {
+  directory: ProviderDirectory
+  kind: Kind
+}) {
+  return (
+    <dl>
+      <dt>登录回调地址</dt>
+      <dd>
+        <RecordIdentifier
+          value={
+            kind === "feishu"
+              ? directory.feishuCallback
+              : directory.dingTalkCallback
+          }
+          label="登录回调地址"
+        />
+      </dd>
+      <dt>账号绑定回调地址</dt>
+      <dd>
+        <RecordIdentifier
+          value={
+            kind === "feishu"
+              ? directory.feishuLinkCallback
+              : directory.dingTalkLinkCallback
+          }
+          label="账号绑定回调地址"
+        />
+      </dd>
+      <dt>所需上游权限</dt>
+      <dd>
+        {kind === "feishu"
+          ? "用户身份、通讯录基本信息、用户受雇信息；可见范围包含预期成员"
+          : "openid corpid、用户资料和员工通讯录；可见范围包含预期成员"}
+      </dd>
+    </dl>
+  )
+}
+
+type CredentialCheck = {
+  status: "accepted" | "denied" | "unavailable"
+  revision: number
+  checkedAt: string
+}
+const checkMessages = {
+  accepted: "应用凭据检查通过",
+  denied: "上游拒绝应用授权",
+  unavailable: "检查未完成，请检查应用凭据或稍后重试",
+}
+
+function ProviderCheck({
+  item,
+  base,
+  csrf,
+  save,
+}: {
+  item: Provider
+  base: string
+  csrf: string
+  save: (path: string, init: RequestInit) => Promise<unknown>
+}) {
+  const [pending, setPending] = useState(false)
+  const [result, setResult] = useState<CredentialCheck>()
+  const [error, setError] = useState("")
+  async function check() {
+    if (pending) return
+    setPending(true)
+    setResult(undefined)
+    setError("")
+    try {
+      setResult(
+        (await save(
+          `${base}/providers/${item.type}/${encodeURIComponent(item.id)}/check`,
+          { method: "POST", headers: { "X-CSRF-Token": csrf } }
+        )) as CredentialCheck
+      )
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setPending(false)
+    }
+  }
+  return (
+    <div>
+      <Button variant="outline" onClick={() => void check()} disabled={pending}>
+        {pending ? "正在检查…" : "检查已保存凭据"}
+      </Button>
+      <div className="form-feedback" role="status" aria-live="polite">
+        {error && (
+          <Alert variant="destructive">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+        {result && (
+          <Alert>
+            <AlertDescription>
+              <span>
+                {checkMessages[result.status]}（配置版本 {result.revision}）
+              </span>
+              <RecordTime value={result.checkedAt} />
+              <span>
+                通讯录权限、成员可见范围、企业身份和回调配置仍需通过实际登录验证。
+              </span>
+            </AlertDescription>
+          </Alert>
+        )}
+      </div>
+    </div>
   )
 }

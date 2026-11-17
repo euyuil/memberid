@@ -143,3 +143,69 @@ func TestProviderStatusPreservesLastAdministrator(t *testing.T) {
 		t.Fatal("denied status update was not atomic", current, err)
 	}
 }
+
+func TestProviderCredentialCheckIsReadOnlyAndScoped(t *testing.T) {
+	for _, kind := range []string{"feishu", "dingtalk"} {
+		t.Run(kind, func(t *testing.T) {
+			s, dingTalk, org, key := applicationFixture(t)
+			otherOrg, _ := organizationAndMember(t, s)
+			member, factor := administratorMember(t, s, org.ID, 91)
+			administratorMember(t, s, org.ID, 92)
+			principal := administratorActor(t, s, member, factor).Principal()
+			calls := 0
+			onCheck := func() error { calls++; return nil }
+			dingTalk.checker = checkDingTalkFunc(func(context.Context, string, string, string) error { return onCheck() })
+			feishuApps, err := NewFeishuApplications(s, key, checkFeishuFunc(func(context.Context, string, string) error { return onCheck() }))
+			if err != nil {
+				t.Fatal(err)
+			}
+			service := NewManagementService(s, dingTalk, feishuApps, time.Hour)
+			enabled := false
+			input := ProviderInput{DisplayName: "Example check", TenantID: "example-tenant", ClientID: "cli_example", ClientSecret: "synthetic-provider-secret", Enabled: &enabled}
+			app, err := service.ConfigureProvider(t.Context(), principal, org.ID, kind, "", input)
+			if err != nil {
+				t.Fatal(err)
+			}
+			eventsBefore, _ := s.ManagementEvents(t.Context(), org.ID, "", 0)
+			before, _ := s.Providers(t.Context(), org.ID)
+			calls = 0
+			if _, err := service.CheckProviderCredentials(t.Context(), principal, otherOrg.ID, kind, app.ID); !errors.Is(err, ErrForbidden) || calls != 0 {
+				t.Fatal("foreign check", err, calls)
+			}
+			if _, err := service.CheckProviderCredentials(t.Context(), OperatorPrincipal(), org.ID, kind, app.ID); !errors.Is(err, ErrForbidden) || calls != 0 {
+				t.Fatal("operator entered console boundary", err, calls)
+			}
+			for _, tc := range []struct {
+				status string
+				err    error
+			}{{"accepted", nil}, {"denied", feishu.ErrAuthorizationDenied}, {"unavailable", errors.New("private synthetic-provider-secret upstream response")}} {
+				onCheck = func() error { calls++; return tc.err }
+				result, err := service.CheckProviderCredentials(t.Context(), principal, org.ID, kind, app.ID)
+				if err != nil || result.Status != tc.status || result.Revision != app.Revision || result.CheckedAt.IsZero() {
+					t.Fatal(result, err)
+				}
+				encoded, _ := json.Marshal(result)
+				if strings.Contains(string(encoded), "secret") || strings.Contains(string(encoded), "private") {
+					t.Fatal("upstream data leaked")
+				}
+			}
+			after, _ := s.Providers(t.Context(), org.ID)
+			eventsAfter, _ := s.ManagementEvents(t.Context(), org.ID, "", 0)
+			if len(after) != 1 || before[0] != after[0] || len(eventsBefore) != len(eventsAfter) {
+				t.Fatal("check changed provider or history")
+			}
+			onCheck = func() error {
+				input.ExpectedRevision, input.ClientSecret, input.DisplayName = app.Revision, "", "Changed during check"
+				_, err := service.ConfigureProvider(t.Context(), principal, org.ID, kind, app.ID, input)
+				return err
+			}
+			if _, err := service.CheckProviderCredentials(t.Context(), principal, org.ID, kind, app.ID); !errors.Is(err, ErrConflict) {
+				t.Fatal("stale result", err)
+			}
+			onCheck = func() error { return s.SetAdministrator(t.Context(), OperatorPrincipal(), org.ID, member.ID, false) }
+			if _, err := service.CheckProviderCredentials(t.Context(), principal, org.ID, kind, app.ID); !errors.Is(err, ErrForbidden) {
+				t.Fatal("authority revoked during check", err)
+			}
+		})
+	}
+}
