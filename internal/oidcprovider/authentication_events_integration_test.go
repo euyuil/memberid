@@ -4,12 +4,13 @@ package oidcprovider
 
 import (
 	"encoding/json"
-	"github.com/euyuil/memberid/internal/config"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/euyuil/memberid/internal/authevent"
+	"github.com/euyuil/memberid/internal/config"
 )
 
 func enableAuthenticationEvents(t *testing.T, f *fixture) *authevent.Recorder {
@@ -90,5 +91,37 @@ func TestSMSAccountEventUsesValidatedMember(t *testing.T) {
 	event := events[0]
 	if event.Type != "sms.send" || event.Outcome != "succeeded" || event.Purpose != "accountLinking" || event.OrganizationID == "" || event.MemberID == "" || event.Actor.Kind != "member" || event.Actor.ID != event.MemberID || event.SessionID == "" || event.FactorID == "" || event.InteractionID == "" || event.RequestID == "" {
 		t.Fatal(event)
+	}
+}
+
+func TestOIDCApplicationNameOnLoginConsentAndEvents(t *testing.T) {
+	f := newFixture(t)
+	const name = "Member portal <demo>"
+	if _, err := f.store.Database().Exec(t.Context(), "UPDATE oidc_clients SET display_name=$2 WHERE client_id=$1", "example-web", name); err != nil {
+		t.Fatal(err)
+	}
+	recorder := enableAuthenticationEvents(t, f)
+	page, verifier := f.loginPage("example-web", "openid profile")
+	assertName := func(body string) {
+		t.Helper()
+		if !strings.Contains(body, "Sign in to <strong>Member portal &lt;demo&gt;</strong>") {
+			t.Fatal("application name was missing or was not escaped")
+		}
+	}
+	assertName(page.body)
+	page = f.verifyPhone(page)
+	assertName(page.body)
+	code := f.complete(page, f.member.ID)
+	f.status(f.exchange("example-web", code, verifier), 200)
+	recorder.Close(time.Second)
+	seen := map[string]bool{}
+	for _, event := range authenticationEvents(t, f) {
+		if event.ClientID != "example-web" || event.ClientName != name {
+			t.Fatalf("incorrect application context on %s", event.Type)
+		}
+		seen[event.Type] = true
+	}
+	if !seen["authentication.verify"] || !seen["oidc.grant.issue"] {
+		t.Fatal("verification or issuance record missing", seen)
 	}
 }

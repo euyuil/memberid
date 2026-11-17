@@ -12,7 +12,7 @@ h1{margin:0 0 .5rem;font-size:1.6rem}p{line-height:1.5}label{display:block;margi
 </head>
 <body><main{{if .PasswordEnabled}} class="password-login"{{end}}>
 <h1>MemberID</h1>
-<p>Sign in to <strong>{{.ClientID}}</strong>.</p>
+<p>Sign in to <strong>{{.ApplicationName}}</strong>.</p>
 {{if .ConsentRequired}}<small>Requested identity information: {{.Scopes}}</small>{{end}}
 <div class="feedback" role="status" aria-live="polite">{{.Message}}</div>
 {{if and .PasswordEnabled (not .Verified)}}

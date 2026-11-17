@@ -13,7 +13,10 @@ import (
 	"github.com/zitadel/oidc/v3/pkg/oidc"
 )
 
-type loginPolicy struct{ registration browserauth.Policy }
+type loginPolicy struct {
+	registration browserauth.Policy
+	displayName  string
+}
 
 func (service *Service) loginPolicy(ctx context.Context, request *authorizationRequest) (loginPolicy, error) {
 	if request.SAML != nil {
@@ -27,7 +30,7 @@ func (service *Service) loginPolicy(ctx context.Context, request *authorizationR
 		if !sp.Enabled || sp.Retired || sp.Revision != request.SAML.Revision {
 			return loginPolicy{}, identity.ErrIneligible
 		}
-		return loginPolicy{browserauth.Policy{ID: sp.ID, OrganizationID: sp.OrganizationID, SubjectKind: "member", Preauthorized: sp.Preauthorized, ReturnURI: sp.ACSURL, IdentityInformation: strings.Join(append([]string{"persistent identifier"}, sp.Attributes...), ", ")}}, nil
+		return loginPolicy{registration: browserauth.Policy{ID: sp.ID, OrganizationID: sp.OrganizationID, SubjectKind: "member", Preauthorized: sp.Preauthorized, ReturnURI: sp.ACSURL, IdentityInformation: strings.Join(append([]string{"persistent identifier"}, sp.Attributes...), ", ")}}, nil
 	}
 	registered, err := service.storage.client(ctx, request.ClientID)
 	if err != nil {
@@ -37,7 +40,10 @@ func (service *Service) loginPolicy(ctx context.Context, request *authorizationR
 		return loginPolicy{}, identity.ErrIneligible
 	}
 	c := registered.registration
-	return loginPolicy{browserauth.Policy{ID: c.ID, OrganizationID: c.OrganizationID, SubjectKind: c.SubjectKind, Preauthorized: c.Preauthorized, ReturnURI: request.Input.RedirectURI, IdentityInformation: strings.Join(request.Scopes, ", ")}}, nil
+	return loginPolicy{
+		registration: browserauth.Policy{ID: c.ID, OrganizationID: c.OrganizationID, SubjectKind: c.SubjectKind, Preauthorized: c.Preauthorized, ReturnURI: request.Input.RedirectURI, IdentityInformation: strings.Join(request.Scopes, ", ")},
+		displayName:  registered.displayName,
+	}, nil
 }
 
 func (request *authorizationRequest) prompts() []string {

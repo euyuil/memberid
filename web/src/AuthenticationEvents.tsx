@@ -294,6 +294,12 @@ function EventDetail({
               </div>
             ) : null
           })}
+          {event.clientName && (
+            <div>
+              <dt>应用名称</dt>
+              <dd className="wrap-anywhere">{event.clientName}</dd>
+            </div>
+          )}
           {Object.entries(references).map(([key, label]) => {
             const value = event[key as keyof typeof references]
             return value ? (
@@ -427,12 +433,26 @@ export function AuthenticationEvents({
                     </TableCell>
                   )}
                   <TableCell>
-                    <span
-                      className="block max-w-40 truncate"
-                      title={event.clientId}
-                    >
-                      {event.clientId ?? "—"}
-                    </span>
+                    <div className="min-w-0">
+                      {event.clientName && (
+                        <span
+                          className="block max-w-48 truncate font-medium"
+                          title={event.clientName}
+                        >
+                          {event.clientName}
+                        </span>
+                      )}
+                      <span
+                        className={
+                          event.clientName
+                            ? "block max-w-48 truncate text-xs text-muted-foreground"
+                            : "block max-w-48 truncate"
+                        }
+                        title={event.clientId}
+                      >
+                        {event.clientId ?? "—"}
+                      </span>
+                    </div>
                   </TableCell>
                   <TableCell>
                     <Button

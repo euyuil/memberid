@@ -32,7 +32,7 @@ func revokedGrantEvent(ctx context.Context, id string, data []byte, actor authev
 func grantEvent(ctx context.Context, g *grant) authevent.Event {
 	return authevent.Event{
 		RequestID: authevent.FromContext(ctx).RequestID, InteractionID: g.InteractionID,
-		OrganizationID: g.OrganizationID, MemberID: g.MemberID, ClientID: g.ClientID,
+		OrganizationID: g.OrganizationID, MemberID: g.MemberID, ClientID: g.ClientID, ClientName: g.ClientName,
 		FactorID: g.FactorID, BindingID: g.BindingID, SessionID: g.SessionID,
 		GrantID: g.ID, Method: g.Method,
 	}

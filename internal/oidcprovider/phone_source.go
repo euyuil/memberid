@@ -68,13 +68,16 @@ func (service *Service) rejectPhoneSend(r *http.Request, event authevent.Event) 
 func (service *Service) loginEvent(ctx context.Context, request *authorizationRequest) authevent.Event {
 	// Only an operator-registered organization restriction owns this shared phone
 	// workflow. A phone number or an arbitrary organization hint establishes none.
-	event := authevent.Event{InteractionID: request.InteractionID, ClientID: request.ClientID, Purpose: "login"}
+	event := authevent.Event{InteractionID: request.InteractionID, ClientID: request.ClientID, ClientName: request.ClientName, Purpose: "login"}
 	if request.SAML != nil {
 		event.OrganizationID = request.SAML.OrganizationID
 		return event
 	}
 	if registered, err := service.storage.client(ctx, request.ClientID); err == nil {
 		event.OrganizationID = registered.registration.OrganizationID
+		if event.ClientName == "" {
+			event.ClientName = registered.displayName
+		}
 	}
 	return event
 }

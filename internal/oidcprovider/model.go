@@ -28,6 +28,7 @@ const maximumLifetime = 365 * 24 * time.Hour
 
 type client struct {
 	registration config.Client
+	displayName  string
 	revision     int64
 	loopback     bool
 }
@@ -73,6 +74,7 @@ type grant struct {
 	InteractionID  string    `json:"interactionId,omitempty"`
 	ID             string    `json:"id"`
 	ClientID       string    `json:"clientId"`
+	ClientName     string    `json:"clientName,omitempty"`
 	SessionID      string    `json:"sessionId"`
 	FactorID       string    `json:"factorId"`
 	FactorType     string    `json:"factorType"`
@@ -192,7 +194,10 @@ func (s *storage) registeredClient(registration identity.OIDCClientRegistration,
 	if err != nil {
 		return client{}, oidc.ErrServerError()
 	}
-	return client{registration.Client, registration.Revision, s.service.configuration.AllowLoopbackHTTP}, nil
+	return client{
+		registration: registration.Client, displayName: registration.DisplayName,
+		revision: registration.Revision, loopback: s.service.configuration.AllowLoopbackHTTP,
+	}, nil
 }
 
 func (s *storage) issuanceClient(ctx context.Context, tx pgx.Tx, id string) (client, error) {

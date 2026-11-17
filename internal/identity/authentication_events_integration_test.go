@@ -139,3 +139,38 @@ func TestAuthenticationEventsDeduplicateAndExpire(t *testing.T) {
 		t.Fatal("retry changed original insertion", err)
 	}
 }
+
+func TestAuthenticationEventClientNamesPreserveHistoryAndProtocol(t *testing.T) {
+	store := testStore(t)
+	ctx := t.Context()
+	const clientID = "shared-client-id"
+	_, err := store.pool.Exec(ctx, `INSERT INTO oidc_clients(client_id,display_name,enabled,system,revision,registration)
+ VALUES($1,'Current OIDC name',true,false,1,jsonb_build_object('client_id',$1::text))`, clientID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cases := []struct {
+		id, kind, interaction, name, expected string
+	}{
+		{"old-grant", "oidc.grant.issue", "oidc-login", "", "Current OIDC name"},
+		{"old-verify", "authentication.verify", "oidc-login", "", "Current OIDC name"},
+		{"saml-assertion", "saml.assertion.issue", "saml-login", "", ""},
+		{"saml-verify", "authentication.verify", "saml-login", "", ""},
+		{"unattributed", "sms.send", "", "", ""},
+		{"named-grant", "oidc.grant.issue", "renamed-login", "Original OIDC name", "Original OIDC name"},
+	}
+	for _, test := range cases {
+		_, err := store.pool.Exec(ctx, `INSERT INTO authentication_events(event_id,event_type,outcome,occurred_at,client_id,interaction_id,data)
+ VALUES($1,$2,'succeeded',clock_timestamp(),$3,$4,jsonb_build_object('clientName',$5::text))`, test.id, test.kind, clientID, test.interaction, test.name)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	query := "SELECT " + authenticationEventColumns + authenticationEventWhere + " AND e.event_id=$3"
+	for _, test := range cases {
+		event, err := readAuthenticationEvent(store.pool.QueryRow(ctx, query, "", time.Now().Add(-time.Hour), test.id), false)
+		if err != nil || event.ClientID != clientID || event.ClientName != test.expected {
+			t.Errorf("%s = %q, want %q: %v", test.id, event.ClientName, test.expected, err)
+		}
+	}
+}
