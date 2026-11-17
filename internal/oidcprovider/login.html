@@ -66,7 +66,12 @@ h1{margin:0 0 .5rem;font-size:1.6rem}p{line-height:1.5}label{display:block;margi
 <form method="post" action="/login" class="section">
 <input type="hidden" name="request" value="{{.Request.ID}}"><input type="hidden" name="csrf" value="{{.Request.CSRF}}">
 <label for="member">Organization identity</label><select id="member" name="member" {{if or (not .Verified) .FactorClient}}disabled{{else}}required{{end}}>
-{{if .FactorClient}}<option>Verified phone identity</option>{{else}}<option value="">Select a Member</option>{{range .Members}}<option value="{{.ID}}">{{.Label}}</option>{{end}}{{end}}
+{{if .FactorClient}}<option>Verified phone identity</option>{{else}}
+<option value="">Select a Member</option>
+{{range .Members}}
+<option value="{{.ID}}"{{if eq .ID $.SelectedMemberID}} selected{{end}}>{{.Label}}</option>
+{{end}}
+{{end}}
 </select>
 <label class="consent"><input name="consent" type="checkbox" value="yes" {{if not .Verified}}disabled{{end}} {{if .ConsentRequired}}required{{else}}checked{{end}}>Allow this application to receive the requested identity information.</label>
 <button name="action" value="continue" {{if not .Verified}}disabled{{end}}>Continue to application</button>
