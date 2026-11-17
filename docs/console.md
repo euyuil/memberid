@@ -139,7 +139,7 @@ and Member IDs identify resources; names do not participate in routing.
 | `/authentication-events` | Platform authentication events. |
 | `/organizations/{organizationId}/authentication-events` | Organization authentication events. |
 | `/providers` | Organization picker for provider management (platform administrators). |
-| `/oidc-applications` | Installation OIDC application management (platform administrators). |
+| `/oidc-applications` | Installation OIDC application management (platform administrators). An optional `organizationId` query retains the selected management scope without filtering the directory or changing application login policy. |
 | `/saml-service-providers` | Organization picker for SAML application management (platform administrators). |
 | `/organizations/{organizationId}/saml-service-providers` | Organization SAML applications; `after` cursor and optional `serviceProviderId` detail selection. |
 
