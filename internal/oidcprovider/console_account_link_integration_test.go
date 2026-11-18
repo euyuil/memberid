@@ -36,7 +36,7 @@ func TestConsoleAccountLinkRequiresFreshSameMember(t *testing.T) {
 			f.status(r, 302)
 			r = f.call(f.browser, "GET", r.header.Get("Location"), nil, nil)
 			f.status(r, 200)
-			if !strings.Contains(r.body, `name="member" disabled`) {
+			if !strings.Contains(r.body, `id="phone"`) {
 				t.Fatal("existing SSO bypassed fresh authentication")
 			}
 			r = f.verifyPhone(r)
