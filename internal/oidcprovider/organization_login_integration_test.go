@@ -43,6 +43,9 @@ func TestOrganizationFirstLoginBindsMethodsAndMembers(t *testing.T) {
 	if !strings.Contains(r.body, `action="`+organizationPath+`"`) || !strings.Contains(r.body, "Example Team") || !strings.Contains(r.body, `id="username"`) || strings.Contains(r.body, `id="password_organization"`) {
 		t.Fatal("organization login did not show only the selected organization's methods")
 	}
+	if strings.Contains(r.body, "Use a different organization") {
+		t.Fatal("organization-specific login offered a conflicting organization switch")
+	}
 	otherPath := "/login/" + f.otherMember.OrganizationID + "?request=" + url.QueryEscape(hidden(t, r.body, "request"))
 	f.status(f.call(f.browser, "GET", otherPath, nil, nil), http.StatusBadRequest)
 

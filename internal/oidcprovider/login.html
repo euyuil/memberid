@@ -154,12 +154,6 @@ a { color: var(--primary); }
 {{end}}
 </div>
 {{end}}
-{{if and .ProviderOrganizationID (or .Direct (not .OrganizationRestricted)) (not .Pending) (not .Verified)}}
-<form method="post" action="{{.Action}}">
-<input type="hidden" name="request" value="{{.Request.ID}}"><input type="hidden" name="csrf" value="{{.Request.CSRF}}">
-<button class="secondary" name="action" value="cancel">Use a different organization</button>
-</form>
-{{end}}
 {{if or .Pending .Verified}}
 <form method="post" action="{{.Action}}">
 <input type="hidden" name="request" value="{{.Request.ID}}"><input type="hidden" name="csrf" value="{{.Request.CSRF}}">
