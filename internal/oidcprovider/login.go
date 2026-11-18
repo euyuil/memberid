@@ -37,6 +37,9 @@ func (service *Service) loadSession(r *http.Request, request *authorizationReque
 	if request.SAML == nil && request.Input.MaxAge != nil && service.now().Sub(verified.AuthenticatedAt) > time.Duration(*request.Input.MaxAge)*time.Second {
 		return false
 	}
+	if request.ClientID == "" && !service.freshAccountSession(accountSession{verified: verified}) {
+		return false
+	}
 	factor, err := service.store.Factor(r.Context(), verified.Factor.ID)
 	if err != nil || factor.Status != "active" {
 		return false
