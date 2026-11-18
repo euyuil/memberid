@@ -230,12 +230,6 @@ func (f *fixture) selectOrganization(page reply, organizationID string) reply {
 	if strings.Contains(page.body, `action="/login/`+organizationID+`"`) {
 		return page
 	}
-	if strings.Contains(page.body, "Use a different organization") {
-		result := f.submit(page.body, "cancel", nil)
-		f.status(result, http.StatusSeeOther)
-		page = f.call(f.browser, "GET", result.header.Get("Location"), nil, nil)
-		f.status(page, 200)
-	}
 	if !strings.Contains(page.body, `value="choose-organization"`) {
 		return page
 	}
@@ -256,7 +250,15 @@ func (f *fixture) loginPage(client, scopes string) (reply, string) {
 	if r.header.Get("Referrer-Policy") != "same-origin" {
 		f.t.Fatal("login policy must preserve same-origin form Origin and suppress cross-origin referrers")
 	}
-	r = f.selectOrganization(r, f.member.OrganizationID)
+	organizationID := f.member.OrganizationID
+	registered, err := f.store.OIDCClient(f.t.Context(), client)
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	if registered.Client.OrganizationID != "" {
+		organizationID = registered.Client.OrganizationID
+	}
+	r = f.selectOrganization(r, organizationID)
 	return r, verifier
 }
 func (f *fixture) verifyPhone(page reply) reply {
