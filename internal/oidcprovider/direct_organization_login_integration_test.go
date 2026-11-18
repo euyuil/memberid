@@ -66,4 +66,20 @@ func TestBookmarkableOrganizationLoginReusesSessionWithoutClientConsent(t *testi
 	result = f.submit(page.body, "continue", url.Values{"member": {f.member.ID}})
 	f.status(result, http.StatusSeeOther)
 	f.status(f.call(f.browser, "GET", result.header.Get("Location"), nil, nil), http.StatusOK)
+
+	if _, err := f.store.Database().Exec(t.Context(), "UPDATE authentication_sessions SET verification=jsonb_set(verification,'{authenticatedAt}',to_jsonb(clock_timestamp()-interval '6 minutes'))"); err != nil {
+		t.Fatal(err)
+	}
+	page = f.call(f.browser, "GET", "/login/"+f.member.OrganizationID, nil, nil)
+	f.status(page, http.StatusOK)
+	if strings.Contains(page.body, "Continue to account") || !strings.Contains(page.body, `id="phone"`) {
+		t.Fatal("stale SSO bypassed fresh account authentication")
+	}
+	password, err := f.store.SetMemberPassword(t.Context(), identity.OperatorPrincipal(), f.member.OrganizationID, f.member.ID, "example")
+	if err != nil {
+		t.Fatal(err)
+	}
+	result = f.submit(page.body, "password", url.Values{"username": {"example"}, "password": {password}})
+	f.status(result, http.StatusSeeOther)
+	f.status(f.call(f.browser, "GET", result.header.Get("Location"), nil, nil), http.StatusOK)
 }
