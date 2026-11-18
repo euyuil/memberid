@@ -110,23 +110,24 @@ a { color: var(--primary); }
 </header>
 {{if .ConsentRequired}}<small>Requested identity information: {{.Scopes}}</small>{{end}}
 <div class="feedback" role="status" aria-live="polite">{{.Message}}</div>
-{{if and .PasswordEnabled (not .Verified)}}
+{{if and .PasswordEnabled (not .Verified) (not .Pending)}}
 <form method="post" action="/login" {{if or .PhoneEnabled .ProviderEnabled}}class="section"{{end}}>
 <input type="hidden" name="request" value="{{.Request.ID}}"><input type="hidden" name="csrf" value="{{.Request.CSRF}}">
 {{if not .OrganizationRestricted}}
-<label for="password_organization">Organization ID</label><input id="password_organization" name="password_organization" autocomplete="off" pattern="org_([0-9bcdfghjkmnpqrstvwxz]{27}|system)" maxlength="31" value="{{.PasswordOrganization}}" required {{if .Pending}}readonly{{end}}>
+<label for="password_organization">Organization ID</label><input id="password_organization" name="password_organization" autocomplete="off" pattern="org_([0-9bcdfghjkmnpqrstvwxz]{27}|system)" maxlength="31" value="{{.PasswordOrganization}}" required>
 {{end}}
-<label for="username">Username</label><input id="username" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" pattern="[a-z0-9][a-z0-9._\-]{0,63}" maxlength="64" value="{{.PasswordUsername}}" required {{if .Pending}}readonly{{end}}>
-<label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" maxlength="1024" required {{if .Pending}}disabled{{else if .PasswordUsername}}autofocus{{end}}>
-<button name="action" value="password" {{if .Pending}}disabled{{end}}>Sign in with password</button>
+<label for="username">Username</label><input id="username" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" pattern="[a-z0-9][a-z0-9._\-]{0,63}" maxlength="64" value="{{.PasswordUsername}}" required>
+<label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" maxlength="1024" required {{if .PasswordUsername}}autofocus{{end}}>
+<button name="action" value="password">Sign in with password</button>
 </form>
 {{end}}
-{{if .PhoneEnabled}}
+{{if and .PhoneEnabled (not .Verified) (or (not .Pending) .PhonePending)}}
 <form method="post" action="/login">
 <input type="hidden" name="request" value="{{.Request.ID}}"><input type="hidden" name="csrf" value="{{.Request.CSRF}}">
 <label for="phone">Phone number</label><input id="phone" name="phone" type="tel" autocomplete="tel" placeholder="+86 mobile number" pattern="(\+86)?1[3-9][0-9]{9}" value="{{.Request.PhoneNumber}}" required {{if or .Pending .Verified}}readonly{{end}}>
 <button name="action" value="send" {{if or .Pending .Verified}}disabled{{end}}>Send verification code</button>
 </form>
+{{if .PhonePending}}
 <form method="post" action="/login">
 <input type="hidden" name="request" value="{{.Request.ID}}"><input type="hidden" name="csrf" value="{{.Request.CSRF}}">
 <label for="code">Verification code</label><input id="code" name="code" autocomplete="one-time-code" inputmode="numeric" pattern="[0-9]{6}" minlength="6" maxlength="6" required {{if or (not .PhonePending) .Verified}}disabled{{end}}>
@@ -134,7 +135,8 @@ a { color: var(--primary); }
 
 </form>
 {{end}}
-{{if .ProviderEnabled}}
+{{end}}
+{{if and .ProviderEnabled (not .Verified) (not .Pending)}}
 <div class="section">
 {{if not .OrganizationRestricted}}
 <form method="post" action="/login">
@@ -153,14 +155,16 @@ a { color: var(--primary); }
 {{end}}
 </div>
 {{end}}
-{{if or .PhoneEnabled .ProviderEnabled .Verified .FactorClient}}
+{{if or .Pending .Verified}}
 <form method="post" action="/login">
 <input type="hidden" name="request" value="{{.Request.ID}}"><input type="hidden" name="csrf" value="{{.Request.CSRF}}">
-<button class="secondary" name="action" value="cancel" {{if and (not .Pending) (not .Verified)}}disabled{{end}}>Cancel verification</button>
+<button class="secondary" name="action" value="cancel">Cancel verification</button>
 </form>
+{{end}}
+{{if .Verified}}
 <form method="post" action="/login" class="section">
 <input type="hidden" name="request" value="{{.Request.ID}}"><input type="hidden" name="csrf" value="{{.Request.CSRF}}">
-<label for="member">Organization identity</label><select id="member" name="member" {{if or (not .Verified) .FactorClient}}disabled{{else}}required{{end}}>
+<label for="member">Organization identity</label><select id="member" name="member" {{if .FactorClient}}disabled{{else}}required{{end}}>
 {{if .FactorClient}}<option>Verified phone identity</option>{{else}}
 <option value="">Select a Member</option>
 {{range .Members}}
@@ -168,8 +172,8 @@ a { color: var(--primary); }
 {{end}}
 {{end}}
 </select>
-<label class="consent"><input name="consent" type="checkbox" value="yes" {{if not .Verified}}disabled{{end}} {{if .ConsentRequired}}required{{else}}checked{{end}}>Allow this application to receive the requested identity information.</label>
-<button name="action" value="continue" {{if not .Verified}}disabled{{end}}>Continue to application</button>
+<label class="consent"><input name="consent" type="checkbox" value="yes" {{if .ConsentRequired}}required{{else}}checked{{end}}>Allow this application to receive the requested identity information.</label>
+<button name="action" value="continue">Continue to application</button>
 </form>
 {{end}}
 <small class="identity-note">Each organization has an independent Member identity.</small>
