@@ -19,6 +19,9 @@ type loginPolicy struct {
 }
 
 func (service *Service) loginPolicy(ctx context.Context, request *authorizationRequest) (loginPolicy, error) {
+	if request.ClientID == "" {
+		return loginPolicy{registration: browserauth.Policy{ID: "MemberID account", OrganizationID: request.ProviderOrganizationID, SubjectKind: "member", Preauthorized: true}, displayName: "MemberID account"}, nil
+	}
 	if request.SAML != nil {
 		if service.saml == nil {
 			return loginPolicy{}, identity.ErrIneligible
@@ -59,6 +62,16 @@ func (request *authorizationRequest) prompts() []string {
 // Recheck the protocol admission inside the transaction that establishes fresh
 // authentication, including after external provider I/O.
 func (service *Service) validateLoginPolicy(ctx context.Context, tx pgx.Tx, request *authorizationRequest) error {
+	if request.ClientID == "" {
+		var status string
+		if err := tx.QueryRow(ctx, "SELECT status FROM organizations WHERE id=$1", request.ProviderOrganizationID).Scan(&status); err != nil {
+			return err
+		}
+		if status != "enabled" {
+			return identity.ErrIneligible
+		}
+		return nil
+	}
 	if request.SAML == nil {
 		client, err := service.storage.clientAt(ctx, tx, request.ClientID)
 		if err != nil {

@@ -105,6 +105,9 @@ func (service *Service) members(r *http.Request, request *authorizationRequest, 
 }
 
 func (service *Service) finish(w http.ResponseWriter, r *http.Request, request *authorizationRequest) error {
+	if request.ClientID == "" {
+		return service.finishDirectLogin(w, r, request)
+	}
 	if request.SAML != nil {
 		return service.finishSAML(w, r, request, "")
 	}
@@ -164,12 +167,30 @@ func (service *Service) login(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	input, err := service.storage.loginRequestByID(r.Context(), r.Form.Get("request"))
-	if err != nil {
-		http.Error(w, "Invalid or expired login transaction", http.StatusBadRequest)
+	pathOrganizationID, validPath := organizationFromLoginPath(r.URL.Path)
+	if !validPath {
+		http.NotFound(w, r)
 		return
 	}
-	request := input
+	var request *authorizationRequest
+	var err error
+	if r.Method == http.MethodGet && r.Form.Get("request") == "" {
+		request, err = service.createDirectLogin(r, pathOrganizationID)
+		if err != nil {
+			if errors.Is(err, identity.ErrIneligible) {
+				http.Error(w, "Organization login is unavailable", http.StatusNotFound)
+			} else {
+				http.Error(w, "Login temporarily unavailable", http.StatusServiceUnavailable)
+			}
+			return
+		}
+	} else {
+		request, err = service.storage.loginRequestByID(r.Context(), r.Form.Get("request"))
+		if err != nil {
+			http.Error(w, "Invalid or expired login transaction", http.StatusBadRequest)
+			return
+		}
+	}
 	if request.Complete {
 		http.Error(w, "Login transaction has already completed", http.StatusBadRequest)
 		return
@@ -177,11 +198,6 @@ func (service *Service) login(w http.ResponseWriter, r *http.Request) {
 	registered, err := service.loginPolicy(r.Context(), request)
 	if err != nil {
 		http.Error(w, "Invalid client", http.StatusBadRequest)
-		return
-	}
-	pathOrganizationID, validPath := organizationFromLoginPath(r.URL.Path)
-	if !validPath {
-		http.NotFound(w, r)
 		return
 	}
 	if pathOrganizationID != "" {
@@ -327,7 +343,7 @@ func (service *Service) login(w http.ResponseWriter, r *http.Request) {
 			request.SessionID = ""
 			request.Fresh = true
 			request.FactorID, request.MemberID, request.OrganizationID, request.BindingID = "", "", "", ""
-			if registered.registration.OrganizationID == "" {
+			if request.ClientID == "" || registered.registration.OrganizationID == "" {
 				request.ProviderOrganizationID = ""
 				if err := service.storage.saveRequest(r.Context(), request); err != nil {
 					http.Error(w, "Login transaction expired", http.StatusBadRequest)

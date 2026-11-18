@@ -23,6 +23,7 @@ type pageData struct {
 	Action, SelectedMemberID                                       string
 	Members                                                        []memberChoice
 	Verified, Pending, PhonePending, FactorClient, ConsentRequired bool
+	Direct                                                         bool
 	PhoneEnabled, ProviderEnabled, OrganizationRestricted          bool
 	OrganizationRequired, PasswordEnabled                          bool
 	PasswordUsername                                               string
@@ -66,7 +67,7 @@ func (service *Service) renderLogin(w http.ResponseWriter, r *http.Request, requ
 	}
 	data := pageData{
 		Request: request, ApplicationName: applicationName, Scopes: client.registration.IdentityInformation, Message: message,
-		Action: r.URL.Path, Nonce: config.RandomSecret(), Members: choices, Verified: verified,
+		Action: r.URL.Path, Nonce: config.RandomSecret(), Members: choices, Verified: verified, Direct: request.ClientID == "",
 		OrganizationRequired: client.registration.SubjectKind == "member" && loginOrganizationID(request, client) == "" && !verified,
 		Pending:              request.phonePending() || request.externalPending(), PhonePending: request.ChallengeID != "",
 		PhoneEnabled: service.phone != nil, ProviderEnabled: client.registration.SubjectKind == "member" && (service.dingtalk != nil || service.feishu != nil),
