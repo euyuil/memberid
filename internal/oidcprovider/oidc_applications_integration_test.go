@@ -54,7 +54,7 @@ func TestManageOIDCApplicationWithoutRestart(t *testing.T) {
 	// already serving before it was registered. Keep the independent console grant.
 	f.secret = firstSecret
 	page, verifier := f.loginPage("managed", "openid profile offline_access")
-	if strings.Contains(page.body, `name="member" disabled`) {
+	if strings.Contains(page.body, `id="phone"`) {
 		page = f.verifyPhone(page)
 	}
 	code := f.complete(page, f.member.ID)
@@ -117,10 +117,10 @@ func TestOIDCApplicationPolicyManagement(t *testing.T) {
 	}
 	f.secret = created["clientSecret"].(string)
 	page, _ := f.loginPage("policy", "openid profile")
-	if strings.Contains(page.body, `name="member" disabled`) {
+	if strings.Contains(page.body, `id="phone"`) {
 		page = f.verifyPhone(page)
 	}
-	if !strings.Contains(page.body, `name="consent" type="checkbox" value="yes"  checked`) {
+	if !strings.Contains(page.body, `name="consent" type="checkbox" value="yes" checked`) {
 		t.Fatal("live policy did not skip consent")
 	}
 	update := map[string]any{"expectedRevision": 1, "displayName": "Updated policy", "organizationId": f.member.OrganizationID, "redirectUris": []string{callback}}
@@ -150,7 +150,7 @@ func TestOIDCApplicationPolicyManagement(t *testing.T) {
 		t.Fatal("explicit policy removal ignored")
 	}
 	page, _ = f.loginPage("policy", "openid profile")
-	if !strings.Contains(page.body, `name="consent" type="checkbox" value="yes"  required`) {
+	if !strings.Contains(page.body, `name="consent" type="checkbox" value="yes" required`) {
 		t.Fatal("live policy did not restore consent")
 	}
 	consoleJSON(t, f, server, "PATCH", base+"/policy", csrf, `{"expectedRevision":3,"enabled":false,"preauthorized":true}`, 400)

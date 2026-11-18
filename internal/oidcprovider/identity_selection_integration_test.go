@@ -23,7 +23,7 @@ func TestOIDCIdentityPreselectionKeepsConsentExplicit(t *testing.T) {
 		if !strings.Contains(page.body, selected) {
 			t.Fatal("sole eligible identity is not selected after verification")
 		}
-		if !strings.Contains(page.body, `name="consent" type="checkbox" value="yes"  required`) {
+		if !strings.Contains(page.body, `name="consent" type="checkbox" value="yes" required`) {
 			t.Fatal("consent control must require explicit confirmation")
 		}
 		refused := f.submit(page.body, "continue", url.Values{"member": {f.member.ID}})

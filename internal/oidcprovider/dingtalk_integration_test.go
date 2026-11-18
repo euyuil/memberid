@@ -182,10 +182,12 @@ func TestDingTalkOnlyOIDCLoginRefreshAndIndependentSubjects(t *testing.T) {
 	}
 	// A DingTalk SSO session cannot serve the phone-only factor registration profile.
 	page, _ = f.loginPage("registration", "openid registration_identity")
-	if strings.Contains(page.body, "Sign in with DingTalk") {
-		t.Fatal("factor client offered DingTalk login")
+	if strings.Contains(page.body, "Sign in with DingTalk") || !strings.Contains(page.body, "No sign-in methods have been configured.") {
+		t.Fatal("factor client offered an unavailable login method")
 	}
-	f.status(f.submit(page.body, "continue", url.Values{"consent": {"yes"}}), 200)
+	if strings.Contains(page.body, `value="continue"`) {
+		t.Fatal("unverified factor client offered continuation")
+	}
 	if _, err := f.store.SetManualBlock(t.Context(), identity.OperatorPrincipal(), f.member.OrganizationID, memberID, true); err != nil {
 		t.Fatal(err)
 	}

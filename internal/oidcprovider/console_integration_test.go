@@ -49,8 +49,8 @@ func consoleLoginTo(t *testing.T, f *fixture, server *httptest.Server, member, r
 	f.status(r, 302)
 	r = f.call(f.browser, "GET", r.header.Get("Location"), nil, nil)
 	f.status(r, 200)
-	// Reused SSO enables identity selection without a verification message.
-	if strings.Contains(r.body, `name="member" disabled`) {
+	// Reused SSO skips the phone form and enables identity selection immediately.
+	if strings.Contains(r.body, `id="phone"`) {
 		r = f.verifyPhone(r)
 	}
 	r = f.submit(r.body, "continue", url.Values{"member": {member}, "consent": {"yes"}})
