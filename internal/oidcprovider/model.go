@@ -48,7 +48,21 @@ func (c client) GrantTypes() []oidc.GrantType {
 	}
 	return grants
 }
-func (c client) LoginURL(id string) string           { return "/login?request=" + url.QueryEscape(id) }
+func organizationLoginURL(organizationID, requestID string) string {
+	path := "/login"
+	if organizationID != "" {
+		path += "/" + organizationID
+	}
+	return path + "?request=" + url.QueryEscape(requestID)
+}
+
+func requestLoginURL(request *authorizationRequest) string {
+	return organizationLoginURL(request.ProviderOrganizationID, request.ID)
+}
+
+func (c client) LoginURL(id string) string {
+	return organizationLoginURL(c.registration.OrganizationID, id)
+}
 func (c client) AccessTokenType() op.AccessTokenType { return op.AccessTokenTypeJWT }
 func (c client) IDTokenLifetime() time.Duration      { return 5 * time.Minute }
 func (c client) DevMode() bool                       { return c.loopback }

@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+
+	"github.com/euyuil/memberid/internal/identity"
 )
 
 func TestLoginPageShowsOnlyCurrentStep(t *testing.T) {
@@ -14,10 +16,16 @@ func TestLoginPageShowsOnlyCurrentStep(t *testing.T) {
 		hidden  []string
 	}{
 		{
-			name:    "initial choices",
-			data:    pageData{PasswordEnabled: true, PhoneEnabled: true, ProviderEnabled: true},
-			visible: []string{`id="username"`, `id="phone"`, `id="organization"`},
-			hidden:  []string{`id="code"`, `id="member"`, `value="cancel"`, `value="continue"`},
+			name:    "organization selection",
+			data:    pageData{PasswordEnabled: true, PhoneEnabled: true, ProviderEnabled: true, OrganizationRequired: true},
+			visible: []string{`id="organization"`, `value="choose-organization"`},
+			hidden:  []string{`id="username"`, `id="phone"`, `id="code"`, `id="member"`, `value="cancel"`, `value="continue"`},
+		},
+		{
+			name:    "authentication choices",
+			data:    pageData{PasswordEnabled: true, PhoneEnabled: true, ProviderEnabled: true, Action: "/login/org_example", Providers: []identity.Provider{{ID: "provider", Type: "dingtalk", DisplayName: "DingTalk"}}},
+			visible: []string{`id="username"`, `id="phone"`},
+			hidden:  []string{`id="organization"`, `id="code"`, `id="member"`, `value="cancel"`, `value="continue"`},
 		},
 		{
 			name:    "phone verification",

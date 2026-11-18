@@ -279,7 +279,14 @@ func TestSAMLCurrentEligibility(t *testing.T) {
 					s.invalidate(kind, "dingtalk")
 				}
 				if when == "before login" {
-					page = samlPage(t, s.fixture, s.sp)
+					response := s.fixture.call(s.fixture.browser, "GET", samlURL(t, s.fixture, s.sp, nil), nil, nil)
+					s.fixture.status(response, 303)
+					page = s.fixture.call(s.fixture.browser, "GET", response.header.Get("Location"), nil, nil)
+					if kind == "organization" {
+						s.fixture.status(page, 404)
+						return
+					}
+					s.fixture.status(page, 200)
 				}
 				result := s.completeSAML(page)
 				if strings.Contains(result.body, "SAMLResponse") {

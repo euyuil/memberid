@@ -40,7 +40,7 @@ func TestAuthorizationRejectsRequestURI(t *testing.T) {
 	r, _ = f.authorization("example-web", "openid", extra)
 	f.status(r, 302)
 	location, _ := url.Parse(r.header.Get("Location"))
-	if location.Path != "/login" {
+	if location.Path != "/login/"+f.member.OrganizationID {
 		t.Fatal("empty request_uri must be treated as absent")
 	}
 }

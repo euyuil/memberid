@@ -175,7 +175,7 @@ func (service *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		r.PostForm.Del("token_type_hint")
 	}
 	browser := service.cookieValue(r, "browser")
-	interactive := r.URL.Path == samlprovider.SSOPath || r.URL.Path == "/account" || (r.URL.Path == accountPath || r.URL.Path == feishuAccountPath) || r.URL.Path == "/login" || r.URL.Path == "/oauth/logout" || strings.HasPrefix(r.URL.Path, "/oauth/authorize")
+	interactive := r.URL.Path == samlprovider.SSOPath || r.URL.Path == "/account" || (r.URL.Path == accountPath || r.URL.Path == feishuAccountPath) || r.URL.Path == "/login" || strings.HasPrefix(r.URL.Path, "/login/org_") || r.URL.Path == "/oauth/logout" || strings.HasPrefix(r.URL.Path, "/oauth/authorize")
 	if interactive && len(browser) != 43 {
 		browser = config.RandomSecret()
 		service.cookie(w, "browser", browser, sessionIdleLifetime)
@@ -258,6 +258,10 @@ func (service *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "/signed-out":
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		_, _ = w.Write([]byte("Signed out of MemberID. You may close this page.\n"))
+		return
+	}
+	if strings.HasPrefix(r.URL.Path, "/login/") {
+		service.login(w, r)
 		return
 	}
 	if r.URL.Path == "/oauth/authorize" && (r.Form.Has("resource") || r.Form.Has("audience")) {

@@ -20,12 +20,12 @@ type memberChoice struct{ ID, Label string }
 type pageData struct {
 	Request                                                        *authorizationRequest
 	ApplicationName, Scopes, Message, Nonce                        string
-	SelectedMemberID                                               string
+	Action, SelectedMemberID                                       string
 	Members                                                        []memberChoice
 	Verified, Pending, PhonePending, FactorClient, ConsentRequired bool
 	PhoneEnabled, ProviderEnabled, OrganizationRestricted          bool
-	PasswordEnabled                                                bool
-	PasswordOrganization, PasswordUsername                         string
+	OrganizationRequired, PasswordEnabled                          bool
+	PasswordUsername                                               string
 	ProviderOrganizationID, ProviderOrganizationName               string
 	Providers                                                      []identity.Provider
 }
@@ -66,8 +66,9 @@ func (service *Service) renderLogin(w http.ResponseWriter, r *http.Request, requ
 	}
 	data := pageData{
 		Request: request, ApplicationName: applicationName, Scopes: client.registration.IdentityInformation, Message: message,
-		Nonce: config.RandomSecret(), Members: choices, Verified: verified,
-		Pending: request.phonePending() || request.externalPending(), PhonePending: request.ChallengeID != "",
+		Action: r.URL.Path, Nonce: config.RandomSecret(), Members: choices, Verified: verified,
+		OrganizationRequired: client.registration.SubjectKind == "member" && loginOrganizationID(request, client) == "" && !verified,
+		Pending:              request.phonePending() || request.externalPending(), PhonePending: request.ChallengeID != "",
 		PhoneEnabled: service.phone != nil, ProviderEnabled: client.registration.SubjectKind == "member" && (service.dingtalk != nil || service.feishu != nil),
 		OrganizationRestricted: client.registration.OrganizationID != "", ProviderOrganizationID: client.registration.OrganizationID,
 		FactorClient: client.registration.SubjectKind == "factor", ConsentRequired: !client.registration.Preauthorized || slices.Contains(request.prompts(), "consent"),
@@ -79,19 +80,19 @@ func (service *Service) renderLogin(w http.ResponseWriter, r *http.Request, requ
 		data.ProviderOrganizationID = request.ProviderOrganizationID
 	}
 	if client.registration.SubjectKind == "member" {
-		data.PasswordEnabled, err = service.store.HasPasswordCredentials(r.Context(), client.registration.OrganizationID)
+		data.PasswordEnabled, err = service.store.HasPasswordCredentials(r.Context(), loginOrganizationID(request, client))
 		if err != nil {
 			http.Error(w, "Login temporarily unavailable", http.StatusServiceUnavailable)
 			return
 		}
 		if r.PostForm.Get("action") == "password" {
-			data.PasswordOrganization, data.PasswordUsername = r.PostForm.Get("password_organization"), r.PostForm.Get("username")
+			data.PasswordUsername = r.PostForm.Get("username")
 		}
 	}
-	if !verified && !data.PhoneEnabled && !data.ProviderEnabled && !data.PasswordEnabled && data.Message == "" {
+	if !data.OrganizationRequired && !verified && !data.PhoneEnabled && !data.ProviderEnabled && !data.PasswordEnabled && data.Message == "" {
 		data.Message = "No sign-in methods have been configured."
 	}
-	if data.ProviderEnabled && data.ProviderOrganizationID != "" {
+	if data.ProviderOrganizationID != "" {
 		ctx := r.Context()
 		organization, err := service.store.Organization(ctx, data.ProviderOrganizationID)
 		if err != nil {
@@ -99,7 +100,7 @@ func (service *Service) renderLogin(w http.ResponseWriter, r *http.Request, requ
 			return
 		}
 		data.ProviderOrganizationName = organization.Name
-		if organization.Status == "enabled" {
+		if data.ProviderEnabled && organization.Status == "enabled" {
 			providers, err := service.store.Providers(ctx, organization.ID)
 			if err != nil {
 				http.Error(w, "Login temporarily unavailable", http.StatusServiceUnavailable)
