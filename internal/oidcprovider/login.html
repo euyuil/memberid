@@ -154,7 +154,7 @@ a { color: var(--primary); }
 {{end}}
 </div>
 {{end}}
-{{if and .ProviderOrganizationID (not .OrganizationRestricted) (not .Pending) (not .Verified)}}
+{{if and .ProviderOrganizationID (or .Direct (not .OrganizationRestricted)) (not .Pending) (not .Verified)}}
 <form method="post" action="{{.Action}}">
 <input type="hidden" name="request" value="{{.Request.ID}}"><input type="hidden" name="csrf" value="{{.Request.CSRF}}">
 <button class="secondary" name="action" value="cancel">Use a different organization</button>
@@ -177,8 +177,8 @@ a { color: var(--primary); }
 {{end}}
 {{end}}
 </select>
-<label class="consent"><input name="consent" type="checkbox" value="yes" {{if .ConsentRequired}}required{{else}}checked{{end}}>Allow this application to receive the requested identity information.</label>
-<button name="action" value="continue">Continue to application</button>
+{{if not .Direct}}<label class="consent"><input name="consent" type="checkbox" value="yes" {{if .ConsentRequired}}required{{else}}checked{{end}}>Allow this application to receive the requested identity information.</label>{{end}}
+<button name="action" value="continue">{{if .Direct}}Continue to account{{else}}Continue to application{{end}}</button>
 </form>
 {{end}}
 {{end}}
