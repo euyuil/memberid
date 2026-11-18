@@ -23,8 +23,8 @@ func (service *Service) startFeishu(w http.ResponseWriter, r *http.Request, requ
 		http.Error(w, "Feishu login is unavailable for this transaction.", http.StatusBadRequest)
 		return
 	}
-	organizationID, providerID := r.PostForm.Get("organization"), r.PostForm.Get("provider")
-	if providerID == "" || registered.registration.OrganizationID != "" && registered.registration.OrganizationID != organizationID {
+	organizationID, providerID := loginOrganizationID(request, registered), r.PostForm.Get("provider")
+	if providerID == "" || organizationID == "" || r.PostForm.Get("organization") != organizationID {
 		http.Error(w, "Invalid Feishu provider selection", http.StatusBadRequest)
 		return
 	}

@@ -30,7 +30,9 @@ Authorization requests using `request_uri` receive `request_uri_not_supported`, 
 
 ## Login and independent subjects
 
-The browser follows the application's authorization redirect to MemberID. MemberID binds the login transaction to an HttpOnly browser cookie and verifies login form submissions with an exact Origin and transaction-specific CSRF value. Password, phone, DingTalk, or Feishu verification then establishes a server-side SSO session. A password identifies one bound Member in the supplied or client-restricted organization. Other methods may require the user to select from multiple eligible Members.
+The browser follows the application's authorization redirect to MemberID. MemberID binds the login transaction to an HttpOnly browser cookie and verifies login form submissions with an exact Origin and transaction-specific CSRF value. A Member client without a registered organization first asks for an Organization ID at `/login?request=…`. A valid selection redirects to `/login/{organizationID}?request=…`; clients with a registered organization use that organization path directly. The transaction binds this selection on the server. Authentication actions cannot switch to another organization, and changing organizations explicitly resets the selection before returning to `/login`.
+
+Password, phone, DingTalk, or Feishu verification then establishes a server-side SSO session. A password identifies one bound Member in the selected or client-restricted organization. Other methods may require the user to select from multiple eligible Members, but only within the selected organization. The organization path scopes an active login transaction; it does not by itself replace the standard application authorization request.
 
 The stable account key is `(iss, sub)`, where ordinary clients receive the independent Member identifier as `sub`. Two Members using the same verified phone remain two subjects. Display names and contact attributes must not be used for account matching. Missing verified email is omitted, not manufactured from a phone number or Member identifier.
 

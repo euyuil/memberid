@@ -6,8 +6,6 @@ import (
 	"net/url"
 	"strings"
 	"testing"
-
-	"github.com/euyuil/memberid/internal/config"
 )
 
 func TestOIDCIdentityPreselectionKeepsConsentExplicit(t *testing.T) {
@@ -36,15 +34,4 @@ func TestOIDCIdentityPreselectionKeepsConsentExplicit(t *testing.T) {
 		f.status(f.exchange("example-web", code, verifier), 200)
 	})
 
-	t.Run("multiple eligible Members", func(t *testing.T) {
-		f := newFixture(t)
-		f.updateClient("example-web", func(c *config.Client) { c.OrganizationID = "" })
-		page, _ := f.loginPage("example-web", "openid profile")
-		page = f.verifyPhone(page)
-		if strings.Contains(page.body, " selected>") ||
-			!strings.Contains(page.body, `<option value="`+f.member.ID+`">`) ||
-			!strings.Contains(page.body, `<option value="`+f.otherMember.ID+`">`) {
-			t.Fatal("more than one eligible Member must require an explicit choice")
-		}
-	})
 }

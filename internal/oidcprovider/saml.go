@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"net/url"
 	"slices"
 	"time"
 
@@ -48,7 +47,7 @@ func (service *Service) samlSSO(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	browser, _ := r.Context().Value(browserKey{}).(string)
-	request := &authorizationRequest{grant: grant{ID: newID(), InteractionID: newID(), ClientID: sp.ID}, Interaction: browserauth.Interaction{Revision: 1, BrowserHash: config.SecretHash(browser), CSRF: config.RandomSecret()}, SAML: txn}
+	request := &authorizationRequest{grant: grant{ID: newID(), InteractionID: newID(), ClientID: sp.ID}, Interaction: browserauth.Interaction{Revision: 1, BrowserHash: config.SecretHash(browser), CSRF: config.RandomSecret(), ProviderOrganizationID: sp.OrganizationID}, SAML: txn}
 	data, err := json.Marshal(request)
 	if err != nil {
 		http.Error(w, "SAML unavailable", 503)
@@ -72,7 +71,7 @@ func (service *Service) samlSSO(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	http.Redirect(w, r, "/login?request="+url.QueryEscape(request.ID), http.StatusSeeOther)
+	http.Redirect(w, r, requestLoginURL(request), http.StatusSeeOther)
 }
 
 func (service *Service) finishSAML(w http.ResponseWriter, r *http.Request, request *authorizationRequest, status string) error {

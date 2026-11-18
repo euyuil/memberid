@@ -49,6 +49,11 @@ func consoleLoginTo(t *testing.T, f *fixture, server *httptest.Server, member, r
 	f.status(r, 302)
 	r = f.call(f.browser, "GET", r.header.Get("Location"), nil, nil)
 	f.status(r, 200)
+	var organizationID string
+	if err := f.store.Database().QueryRow(t.Context(), "SELECT organization_id FROM members WHERE id=$1", member).Scan(&organizationID); err != nil {
+		t.Fatal(err)
+	}
+	r = f.selectOrganization(r, organizationID)
 	// Reused SSO skips the phone form and enables identity selection immediately.
 	if strings.Contains(r.body, `id="phone"`) {
 		r = f.verifyPhone(r)

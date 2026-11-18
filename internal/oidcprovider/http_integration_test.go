@@ -225,6 +225,28 @@ func (f *fixture) submit(page, action string, extra url.Values) reply {
 	}
 	return f.call(f.browser, "POST", "/login", form, map[string]string{"Origin": f.server.URL})
 }
+func (f *fixture) selectOrganization(page reply, organizationID string) reply {
+	f.t.Helper()
+	if strings.Contains(page.body, `action="/login/`+organizationID+`"`) {
+		return page
+	}
+	if strings.Contains(page.body, "Use a different organization") {
+		result := f.submit(page.body, "cancel", nil)
+		f.status(result, http.StatusSeeOther)
+		page = f.call(f.browser, "GET", result.header.Get("Location"), nil, nil)
+		f.status(page, 200)
+	}
+	if !strings.Contains(page.body, `value="choose-organization"`) {
+		return page
+	}
+	result := f.submit(page.body, "choose-organization", url.Values{"organization": {organizationID}})
+	if result.status == http.StatusSeeOther {
+		result = f.call(f.browser, "GET", result.header.Get("Location"), nil, nil)
+	}
+	f.status(result, 200)
+	return result
+}
+
 func (f *fixture) loginPage(client, scopes string) (reply, string) {
 	f.t.Helper()
 	r, verifier := f.authorization(client, scopes, nil)
@@ -234,6 +256,7 @@ func (f *fixture) loginPage(client, scopes string) (reply, string) {
 	if r.header.Get("Referrer-Policy") != "same-origin" {
 		f.t.Fatal("login policy must preserve same-origin form Origin and suppress cross-origin referrers")
 	}
+	r = f.selectOrganization(r, f.member.OrganizationID)
 	return r, verifier
 }
 func (f *fixture) verifyPhone(page reply) reply {

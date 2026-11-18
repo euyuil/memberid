@@ -7,10 +7,12 @@ import (
 	"net/http"
 	"net/url"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/euyuil/memberid/internal/config"
 	"github.com/euyuil/memberid/internal/identity"
+	"github.com/jackc/pgx/v5"
 	"github.com/zitadel/oidc/v3/pkg/oidc"
 	"github.com/zitadel/oidc/v3/pkg/op"
 )
@@ -49,13 +51,14 @@ func (service *Service) loadSession(r *http.Request, request *authorizationReque
 			return false
 		}
 	}
+	organizationID := loginOrganizationID(request, registered)
 	switch factor.Type {
 	case "dingtalk":
 		if service.dingtalk == nil {
 			return false
 		}
-		if registered.registration.OrganizationID != "" {
-			if _, err := service.dingtalk.ApplicationSource(r.Context(), registered.registration.OrganizationID, factor.Namespace); err != nil {
+		if organizationID != "" {
+			if _, err := service.dingtalk.ApplicationSource(r.Context(), organizationID, factor.Namespace); err != nil {
 				return false
 			}
 		}
@@ -63,8 +66,8 @@ func (service *Service) loadSession(r *http.Request, request *authorizationReque
 		if service.feishu == nil {
 			return false
 		}
-		if registered.registration.OrganizationID != "" {
-			if _, _, err := service.feishu.LoginSource(r.Context(), registered.registration.OrganizationID, factor.Namespace); err != nil {
+		if organizationID != "" {
+			if _, _, err := service.feishu.LoginSource(r.Context(), organizationID, factor.Namespace); err != nil {
 				return false
 			}
 		}
@@ -90,9 +93,10 @@ func (service *Service) members(r *http.Request, request *authorizationRequest, 
 	if err != nil {
 		return nil, err
 	}
+	organizationID := loginOrganizationID(request, client)
 	filtered := members[:0]
 	for _, member := range members {
-		if (client.registration.OrganizationID == "" || member.OrganizationID == client.registration.OrganizationID) &&
+		if (organizationID == "" || member.OrganizationID == organizationID) &&
 			(request.SAML != nil || !identity.ValidID(request.Input.LoginHint, identity.MemberKind) || member.ID == request.Input.LoginHint) {
 			filtered = append(filtered, member)
 		}
@@ -139,6 +143,21 @@ func (service *Service) loginError(w http.ResponseWriter, r *http.Request, reque
 	op.AuthRequestError(w, r.WithContext(op.ContextWithIssuer(r.Context(), service.configuration.Issuer)), &request.Input, protocolError, service.protocol)
 }
 
+func loginOrganizationID(request *authorizationRequest, registered loginPolicy) string {
+	if registered.registration.OrganizationID != "" {
+		return registered.registration.OrganizationID
+	}
+	return request.ProviderOrganizationID
+}
+
+func organizationFromLoginPath(path string) (string, bool) {
+	if path == "/login" {
+		return "", true
+	}
+	organizationID := strings.TrimPrefix(path, "/login/")
+	return organizationID, identity.ValidID(organizationID, identity.OrganizationKind)
+}
+
 func (service *Service) login(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodPost {
 		w.Header().Set("Allow", "GET, POST")
@@ -160,14 +179,63 @@ func (service *Service) login(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid client", http.StatusBadRequest)
 		return
 	}
+	pathOrganizationID, validPath := organizationFromLoginPath(r.URL.Path)
+	if !validPath {
+		http.NotFound(w, r)
+		return
+	}
+	if pathOrganizationID != "" {
+		selectedOrganizationID := loginOrganizationID(request, registered)
+		if registered.registration.SubjectKind != "member" || selectedOrganizationID != "" && selectedOrganizationID != pathOrganizationID {
+			http.Error(w, "Invalid organization selection", http.StatusBadRequest)
+			return
+		}
+		organization, err := service.store.Organization(r.Context(), pathOrganizationID)
+		if err != nil || organization.Status != "enabled" {
+			http.Error(w, "Organization login is unavailable", http.StatusNotFound)
+			return
+		}
+		if request.ProviderOrganizationID == "" {
+			if (r.Method != http.MethodGet && registered.registration.OrganizationID == "") || request.Verification != nil || request.phonePending() || request.externalPending() {
+				http.Error(w, "Invalid organization selection", http.StatusBadRequest)
+				return
+			}
+			request.ProviderOrganizationID = pathOrganizationID
+			if r.Method == http.MethodGet {
+				if err := service.storage.saveRequest(r.Context(), request); err != nil {
+					http.Error(w, "Login transaction expired", http.StatusBadRequest)
+					return
+				}
+			}
+		}
+	} else if r.Method == http.MethodGet && request.ProviderOrganizationID != "" {
+		http.Redirect(w, r, requestLoginURL(request), http.StatusSeeOther)
+		return
+	}
 	message := ""
+	if r.Method == http.MethodGet && registered.registration.SubjectKind == "member" && loginOrganizationID(request, registered) == "" && slices.Contains(request.prompts(), "none") && request.SAML == nil && identity.ValidID(request.Input.LoginHint, identity.MemberKind) {
+		var organizationID string
+		err := service.store.Database().QueryRow(r.Context(), "SELECT organization_id FROM members WHERE id=$1", request.Input.LoginHint).Scan(&organizationID)
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			http.Error(w, "Login temporarily unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		if err == nil {
+			request.ProviderOrganizationID = organizationID
+		}
+	}
 	if r.Method == http.MethodPost {
 		mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
 		if err != nil || mediaType != "application/x-www-form-urlencoded" || r.Header.Get("Origin") != service.configuration.Issuer || !sameSecret(request.CSRF, r.PostForm.Get("csrf")) {
 			http.Error(w, "Invalid login submission", http.StatusForbidden)
 			return
 		}
-		switch r.PostForm.Get("action") {
+		action := r.PostForm.Get("action")
+		if registered.registration.SubjectKind == "member" && loginOrganizationID(request, registered) == "" && action != "choose-organization" && action != "cancel" {
+			http.Error(w, "Select an organization before continuing", http.StatusBadRequest)
+			return
+		}
+		switch action {
 		case "password":
 			service.passwordLogin(w, r, request, registered)
 			return
@@ -179,11 +247,17 @@ func (service *Service) login(w http.ResponseWriter, r *http.Request) {
 			}
 			organization, err := service.store.Organization(r.Context(), r.PostForm.Get("organization"))
 			if err != nil || organization.Status != "enabled" {
-				message = "Login providers are unavailable for that organization."
+				message = "Enter a valid organization ID."
 				service.renderLogin(w, r, request, registered, message)
 				return
 			}
 			request.ProviderOrganizationID = organization.ID
+			if err := service.storage.saveRequest(r.Context(), request); err != nil {
+				http.Error(w, "Login transaction expired", http.StatusBadRequest)
+				return
+			}
+			http.Redirect(w, r, requestLoginURL(request), http.StatusSeeOther)
+			return
 		case "feishu":
 			service.startFeishu(w, r, request, registered)
 			return
@@ -253,6 +327,15 @@ func (service *Service) login(w http.ResponseWriter, r *http.Request) {
 			request.SessionID = ""
 			request.Fresh = true
 			request.FactorID, request.MemberID, request.OrganizationID, request.BindingID = "", "", "", ""
+			if registered.registration.OrganizationID == "" {
+				request.ProviderOrganizationID = ""
+				if err := service.storage.saveRequest(r.Context(), request); err != nil {
+					http.Error(w, "Login transaction expired", http.StatusBadRequest)
+					return
+				}
+				http.Redirect(w, r, requestLoginURL(request), http.StatusSeeOther)
+				return
+			}
 		case "continue":
 			if request.Verification == nil {
 				message = "Verify your identity before continuing."
@@ -298,7 +381,7 @@ func (service *Service) login(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Login transaction expired", http.StatusBadRequest)
 			return
 		}
-	} else if request.Verification == nil {
+	} else if request.Verification == nil && (registered.registration.SubjectKind == "factor" || loginOrganizationID(request, registered) != "" || slices.Contains(request.prompts(), "none")) {
 		if service.loadSession(r, request) {
 			if err := service.storage.saveRequest(r.Context(), request); err != nil {
 				http.Error(w, "Login transaction expired", http.StatusBadRequest)

@@ -89,6 +89,7 @@ func enableDingTalk(t *testing.T, f *fixture, phone bool) (*testDingTalk, *ident
 func beginDingTalk(t *testing.T, f *fixture, client, scopes, organization string) (reply, string, string) {
 	t.Helper()
 	page, verifier := f.loginPage(client, scopes)
+	page = f.selectOrganization(page, organization)
 	started := f.submit(page.body, "dingtalk", url.Values{"organization": {organization}})
 	f.status(started, 303)
 	location, err := url.Parse(started.header.Get("Location"))

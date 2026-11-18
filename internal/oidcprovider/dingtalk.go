@@ -37,8 +37,8 @@ func (service *Service) startDingTalk(w http.ResponseWriter, r *http.Request, re
 		http.Error(w, "Cancel the current verification before starting DingTalk login.", http.StatusBadRequest)
 		return
 	}
-	organizationID := r.PostForm.Get("organization")
-	if registered.registration.OrganizationID != "" && organizationID != registered.registration.OrganizationID {
+	organizationID := loginOrganizationID(request, registered)
+	if organizationID == "" || r.PostForm.Get("organization") != organizationID {
 		http.Error(w, "Invalid organization", http.StatusBadRequest)
 		return
 	}
@@ -193,5 +193,5 @@ func (service *Service) completeExternalLogin(w http.ResponseWriter, r *http.Req
 	completed.Revision++
 	*request = completed
 	service.cookie(w, "session", secret, expires.Sub(service.now()))
-	http.Redirect(w, r, "/login?request="+url.QueryEscape(request.ID), http.StatusSeeOther)
+	http.Redirect(w, r, requestLoginURL(request), http.StatusSeeOther)
 }

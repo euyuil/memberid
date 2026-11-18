@@ -22,7 +22,7 @@ func TestConsoleFirstLoginAndMemberPasswordManagement(t *testing.T) {
 	})
 	server := consoleFixture(t, f)
 	f.status(f.call(f.browser, "GET", server.URL+"/setup", nil, nil), 404)
-	loginPage := func() reply {
+	loginPage := func(organizationID string) reply {
 		t.Helper()
 		response := f.call(f.browser, "GET", server.URL+"/auth/login", nil, nil)
 		f.status(response, 303)
@@ -30,7 +30,7 @@ func TestConsoleFirstLoginAndMemberPasswordManagement(t *testing.T) {
 		f.status(response, 302)
 		response = f.call(f.browser, "GET", response.header.Get("Location"), nil, nil)
 		f.status(response, 200)
-		return response
+		return f.selectOrganization(response, organizationID)
 	}
 	finishLogin := func(response reply) {
 		t.Helper()
@@ -40,8 +40,8 @@ func TestConsoleFirstLoginAndMemberPasswordManagement(t *testing.T) {
 		response = f.call(f.browser, "GET", response.header.Get("Location"), nil, nil)
 		f.status(response, 303)
 	}
-	fields := url.Values{"password_organization": {identity.SystemOrganizationID}, "username": {identity.RootUsername}, "password": {"incorrect"}}
-	login := f.submit(loginPage().body, "password", fields)
+	fields := url.Values{"username": {identity.RootUsername}, "password": {"incorrect"}}
+	login := f.submit(loginPage(identity.SystemOrganizationID).body, "password", fields)
 	f.status(login, 200)
 	if !strings.Contains(login.body, "password is incorrect") {
 		t.Fatal("wrong password was not rejected")
@@ -80,8 +80,8 @@ func TestConsoleFirstLoginAndMemberPasswordManagement(t *testing.T) {
 	consoleJSON(t, f, server, "PUT", target+"/administrator", csrf, `{"enabled":true}`, 200)
 	rootBrowser := f.browser
 	f.browser = browserClient()
-	memberFields := url.Values{"password_organization": {f.otherMember.OrganizationID}, "username": {"example"}, "password": {generated}}
-	memberLogin := f.submit(loginPage().body, "password", memberFields)
+	memberFields := url.Values{"username": {"example"}, "password": {generated}}
+	memberLogin := f.submit(loginPage(f.otherMember.OrganizationID).body, "password", memberFields)
 	f.status(memberLogin, 200)
 	if !strings.Contains(memberLogin.body, "password is incorrect") {
 		t.Fatal("the old Member username was accepted")
@@ -99,7 +99,7 @@ func TestConsoleFirstLoginAndMemberPasswordManagement(t *testing.T) {
 	consoleJSON(t, f, server, "PATCH", rootCredential, csrf, `{"expectedUsername":"root","username":"stale-replacement"}`, 409)
 	consoleJSON(t, f, server, "GET", "/api/session", "", "", 200)
 	f.browser = browserClient()
-	login = f.submit(loginPage().body, "password", fields)
+	login = f.submit(loginPage(identity.SystemOrganizationID).body, "password", fields)
 	f.status(login, 200)
 	if !strings.Contains(login.body, "password is incorrect") {
 		t.Fatal("the old root username was accepted")
@@ -128,7 +128,7 @@ func TestConsoleFirstLoginAndMemberPasswordManagement(t *testing.T) {
 	}
 	consoleJSON(t, f, server, "GET", "/api/session", "", "", 401)
 	f.browser = browserClient()
-	login = f.submit(loginPage().body, "password", fields)
+	login = f.submit(loginPage(identity.SystemOrganizationID).body, "password", fields)
 	f.status(login, 200)
 	if !strings.Contains(login.body, "password is incorrect") {
 		t.Fatal("old root password was accepted after rotation")
@@ -160,7 +160,7 @@ func TestConsoleFirstLoginAndMemberPasswordManagement(t *testing.T) {
 	}
 	f.browser = browserClient()
 	fields.Set("password", recovered.Password)
-	finishLogin(f.submit(loginPage().body, "password", fields))
+	finishLogin(f.submit(loginPage(identity.SystemOrganizationID).body, "password", fields))
 	who = consoleJSON(t, f, server, "GET", "/api/session", "", "", 200)["actor"].(map[string]any)
 	if who["memberId"] != rootMemberID || who["platform"] != true {
 		t.Fatal("local recovery changed the selected administrator")
@@ -179,7 +179,7 @@ func TestPasswordLoginOrganizationIsolationAndRefreshRevocation(t *testing.T) {
 		t.Fatal(err)
 	}
 	page, verifier := f.loginPage("second-web", "openid offline_access")
-	form := url.Values{"password_organization": {f.member.OrganizationID}, "username": {"example"}, "password": {first}}
+	form := url.Values{"username": {"example"}, "password": {first}}
 	page = f.submit(page.body, "password", form)
 	f.status(page, 200)
 	if !strings.Contains(page.body, "password is incorrect") {

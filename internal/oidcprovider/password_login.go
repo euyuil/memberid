@@ -18,9 +18,10 @@ func (service *Service) passwordLogin(w http.ResponseWriter, r *http.Request, re
 		http.Error(w, "Password login is unavailable for this request", http.StatusBadRequest)
 		return
 	}
-	organizationID := r.PostForm.Get("password_organization")
-	if restricted := registered.registration.OrganizationID; restricted != "" {
-		organizationID = restricted
+	organizationID := loginOrganizationID(request, registered)
+	if organizationID == "" {
+		http.Error(w, "Select an organization before password login", http.StatusBadRequest)
+		return
 	}
 	username := r.PostForm.Get("username")
 	event := service.loginEvent(r.Context(), request)
