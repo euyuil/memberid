@@ -2,7 +2,7 @@
 
 ## Setup
 
-Use Git, Go 1.27.4, Node.js 26.13.1 LTS with npm 11.20.0, a POSIX shell, and Gitleaks 8.30.1. On Windows, Git Bash provides the shell. Reuse persistent toolchain installations; do not install local toolchains in temporary directories. The frontend lockfile is `web/package-lock.json`.
+Use Git, Go 1.27.4, Node.js 26.13.1 LTS with npm 11.20.0, a POSIX shell, and Gitleaks 8.x (8.30.1 or newer). On Windows, Git Bash provides the shell. Prioritize reusing existing persistent toolchain installations in system or user scopes (on PATH, via environment package managers, or managed by tools such as mise for Go and Node via the repository `.mise.toml`) that satisfy these requirements; do not install local toolchains in temporary directories or duplicate existing installations. The frontend lockfile is `web/package-lock.json`.
 
 From the repository root, enable the versioned hooks:
 
@@ -10,7 +10,7 @@ From the repository root, enable the versioned hooks:
 git config --local core.hooksPath .githooks
 ```
 
-Inspect any existing hooks configuration before changing it. The hooks require Gitleaks on Git's PATH and reject whitespace errors, detected secrets, and known coding-agent attribution patterns. They do not modify the staged content.
+Inspect any existing hooks configuration before changing it. The hooks require Gitleaks on Git's PATH and reject whitespace errors, detected secrets, and known coding-agent attribution patterns. Bypassing hooks (`--no-verify`) is prohibited; false positives in synthetic credentials or fixtures must be explicitly allowed through reviewed `.gitleaksignore` or `.gitleaks.toml` configurations. They do not modify the staged content.
 
 ## Local development stack
 
@@ -49,7 +49,7 @@ Direct pushes and force pushes to `main` are prohibited. Other branches may be m
 
 GitHub must retain the four required checks: `Build and test (ubuntu-24.04)`, `Build and test (windows-2025)`, `Repository security`, and `PostgreSQL integration`. Keep "Require branches to be up to date before merging" disabled and the PR branch-update option enabled. A newer `main` commit alone does not require updating or replacing the PR. Resolve merge conflicts or incompatible changes in the existing PR, and wait for required checks on its latest revision before squash merging.
 
-CI runs the build and tests on Linux and Windows, Linux race tests, and full-history secret scanning. The security job checks the pinned Gitleaks archive checksum before execution. Workflow dependencies are pinned to reviewed revisions.
+CI runs the build and tests on Linux and Windows, Linux race tests, and full-history secret scanning. The security job checks the pinned Gitleaks baseline archive checksum before execution. Workflow dependencies are pinned to reviewed revisions.
 
 Before committing, inspect the full staged diff and verify the configured human author and committer. Run the staged secret scan; do not bypass hooks. Before publication, review public text, Git metadata, configuration, examples, and build output for private information. Automated secret scanning does not establish that all sensitive information has been removed.
 
