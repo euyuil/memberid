@@ -175,29 +175,25 @@ func (service *Service) login(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	if r.Method == http.MethodGet && r.Form.Get("request") == "" {
-		if !service.directStarts.allow(accountBrowser(r), service.now()) {
-			w.Header().Set("Retry-After", "60")
-			http.Error(w, "Too many new login attempts. Try again later.", http.StatusTooManyRequests)
-			return
-		}
-		request, err := service.createDirectLogin(r, pathOrganizationID)
-		if err != nil {
-			if errors.Is(err, identity.ErrIneligible) {
-				http.Error(w, "Organization login is unavailable", http.StatusNotFound)
-			} else {
-				http.Error(w, "Login temporarily unavailable", http.StatusServiceUnavailable)
-			}
-			return
-		}
-		http.Redirect(w, r, requestLoginURL(request), http.StatusSeeOther)
+	id := r.Form.Get("request")
+	if r.Method == http.MethodGet && id == "" || r.Method == http.MethodPost && strings.HasPrefix(id, "direct.") {
+		service.directLogin(w, r, pathOrganizationID)
 		return
 	}
-	request, err := service.storage.loginRequestByID(r.Context(), r.Form.Get("request"))
+	request, err := service.storage.loginRequestByID(r.Context(), id)
 	if err != nil {
 		http.Error(w, "Invalid or expired login transaction", http.StatusBadRequest)
 		return
 	}
+	service.loginTransaction(w, r, request, pathOrganizationID)
+}
+
+func validLoginSubmission(r *http.Request, issuer, csrf string) bool {
+	mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	return err == nil && mediaType == "application/x-www-form-urlencoded" && r.Header.Get("Origin") == issuer && sameSecret(csrf, r.PostForm.Get("csrf"))
+}
+
+func (service *Service) loginTransaction(w http.ResponseWriter, r *http.Request, request *authorizationRequest, pathOrganizationID string) {
 	if request.Complete {
 		http.Error(w, "Login transaction has already completed", http.StatusBadRequest)
 		return
@@ -248,8 +244,7 @@ func (service *Service) login(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if r.Method == http.MethodPost {
-		mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
-		if err != nil || mediaType != "application/x-www-form-urlencoded" || r.Header.Get("Origin") != service.configuration.Issuer || !sameSecret(request.CSRF, r.PostForm.Get("csrf")) {
+		if !validLoginSubmission(r, service.configuration.Issuer, request.CSRF) {
 			http.Error(w, "Invalid login submission", http.StatusForbidden)
 			return
 		}
@@ -350,7 +345,7 @@ func (service *Service) login(w http.ResponseWriter, r *http.Request) {
 			request.SessionID = ""
 			request.Fresh = true
 			request.FactorID, request.MemberID, request.OrganizationID, request.BindingID = "", "", "", ""
-			if request.ClientID == "" || registered.registration.OrganizationID == "" {
+			if registered.registration.OrganizationID == "" {
 				request.ProviderOrganizationID = ""
 				if err := service.storage.saveRequest(r.Context(), request); err != nil {
 					http.Error(w, "Login transaction expired", http.StatusBadRequest)
