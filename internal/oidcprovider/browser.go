@@ -18,9 +18,13 @@ type loginPolicy struct {
 	displayName  string
 }
 
+func directLoginPolicy(organizationID string) loginPolicy {
+	return loginPolicy{registration: browserauth.Policy{ID: "MemberID account", OrganizationID: organizationID, SubjectKind: "member", Preauthorized: true}, displayName: "MemberID account"}
+}
+
 func (service *Service) loginPolicy(ctx context.Context, request *authorizationRequest) (loginPolicy, error) {
 	if request.ClientID == "" {
-		return loginPolicy{registration: browserauth.Policy{ID: "MemberID account", OrganizationID: request.ProviderOrganizationID, SubjectKind: "member", Preauthorized: true}, displayName: "MemberID account"}, nil
+		return directLoginPolicy(request.ProviderOrganizationID), nil
 	}
 	if request.SAML != nil {
 		if service.saml == nil {
