@@ -80,8 +80,7 @@ func (service *Service) logout(w http.ResponseWriter, r *http.Request) {
 	nonce := config.RandomSecret()
 	target, _ := url.Parse(validated.RedirectURI)
 	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'nonce-"+nonce+"'; form-action 'self' "+target.Scheme+"://"+target.Host+"; base-uri 'none'; frame-ancestors 'none'")
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_ = logoutPage.Execute(w, struct{ Request, Nonce string }{sealed, nonce})
+	writeHTMLPage(w, logoutPage, struct{ Request, Nonce string }{sealed, nonce})
 }
 
 func (service *Service) confirmLogout(w http.ResponseWriter, r *http.Request) {
