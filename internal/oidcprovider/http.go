@@ -31,6 +31,7 @@ type Service struct {
 	storage       *storage
 	now           func() time.Time
 	passwordWork  chan struct{}
+	directStarts  directLoginQuota
 }
 
 type browserKey struct{}
