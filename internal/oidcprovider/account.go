@@ -492,6 +492,5 @@ func (service *Service) renderAccount(w http.ResponseWriter, r *http.Request, re
 		data.Message = "No available application. Existing or revoked bindings require an administrator."
 	}
 	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'nonce-"+data.Nonce+"'; form-action 'self' "+formAction+"; base-uri 'none'; frame-ancestors 'none'")
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_ = accountPage.Execute(w, data)
+	writeHTMLPage(w, accountPage, data)
 }

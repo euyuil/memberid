@@ -243,6 +243,5 @@ func (service *Service) renderPhoneAccount(w http.ResponseWriter, r *http.Reques
 	}
 	data := phoneAccountPageData{Request: request, Member: member.DisplayName, Organization: organization.Name, Message: message, Nonce: config.RandomSecret(), ReopenURI: accountAddress(request.accountDetails), CanSend: available && fresh && !occupied && request.State == "ready", CanVerify: available && fresh && !occupied && request.State == "pending" && request.ChallengeID != "", CanCancel: available && (request.State == "pending" || request.State == "consumed"), NumberLocked: request.State != "ready" || occupied || !fresh}
 	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'nonce-"+data.Nonce+"'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'")
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_ = phoneAccountPage.Execute(w, data)
+	writeHTMLPage(w, phoneAccountPage, data)
 }

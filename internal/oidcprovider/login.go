@@ -1,6 +1,7 @@
 package oidcprovider
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"mime"
@@ -164,6 +165,41 @@ func organizationFromLoginPath(path string) (string, bool) {
 	return organizationID, identity.ValidID(organizationID, identity.OrganizationKind)
 }
 
+func (service *Service) requireLoginOrganization(ctx context.Context, organizationID string) error {
+	organization, err := service.store.Organization(ctx, organizationID)
+	if errors.Is(err, identity.ErrNotFound) {
+		return identity.ErrIneligible
+	}
+	if err != nil {
+		return err
+	}
+	if organization.Status != "enabled" {
+		return identity.ErrIneligible
+	}
+	return nil
+}
+
+func writeLoginOrganizationError(w http.ResponseWriter, err error) {
+	if errors.Is(err, identity.ErrIneligible) {
+		http.Error(w, "Organization login is unavailable", http.StatusNotFound)
+		return
+	}
+	http.Error(w, "Login temporarily unavailable", http.StatusServiceUnavailable)
+}
+
+func (service *Service) selectedLoginOrganization(w http.ResponseWriter, r *http.Request, request *authorizationRequest, policy loginPolicy) string {
+	id := r.PostForm.Get("organization")
+	if err := service.requireLoginOrganization(r.Context(), id); err != nil {
+		if errors.Is(err, identity.ErrInvalid) || errors.Is(err, identity.ErrIneligible) {
+			service.renderLogin(w, r, request, policy, "Enter a valid organization ID.")
+		} else {
+			writeLoginOrganizationError(w, err)
+		}
+		return ""
+	}
+	return id
+}
+
 func (service *Service) login(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodPost {
 		w.Header().Set("Allow", "GET, POST")
@@ -209,9 +245,8 @@ func (service *Service) loginTransaction(w http.ResponseWriter, r *http.Request,
 			http.Error(w, "Invalid organization selection", http.StatusBadRequest)
 			return
 		}
-		organization, err := service.store.Organization(r.Context(), pathOrganizationID)
-		if err != nil || organization.Status != "enabled" {
-			http.Error(w, "Organization login is unavailable", http.StatusNotFound)
+		if err := service.requireLoginOrganization(r.Context(), pathOrganizationID); err != nil {
+			writeLoginOrganizationError(w, err)
 			return
 		}
 		if request.ProviderOrganizationID == "" {
@@ -263,13 +298,11 @@ func (service *Service) loginTransaction(w http.ResponseWriter, r *http.Request,
 				http.Error(w, "Invalid organization selection", http.StatusBadRequest)
 				return
 			}
-			organization, err := service.store.Organization(r.Context(), r.PostForm.Get("organization"))
-			if err != nil || organization.Status != "enabled" {
-				message = "Enter a valid organization ID."
-				service.renderLogin(w, r, request, registered, message)
+			organizationID := service.selectedLoginOrganization(w, r, request, registered)
+			if organizationID == "" {
 				return
 			}
-			request.ProviderOrganizationID = organization.ID
+			request.ProviderOrganizationID = organizationID
 			if err := service.storage.saveRequest(r.Context(), request); err != nil {
 				http.Error(w, "Login transaction expired", http.StatusBadRequest)
 				return

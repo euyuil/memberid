@@ -65,9 +65,8 @@ func (service *Service) directLogin(w http.ResponseWriter, r *http.Request, orga
 		return
 	}
 	if organizationID != "" {
-		organization, err := service.store.Organization(r.Context(), organizationID)
-		if err != nil || organization.Status != "enabled" {
-			http.Error(w, "Organization login is unavailable", http.StatusNotFound)
+		if err := service.requireLoginOrganization(r.Context(), organizationID); err != nil {
+			writeLoginOrganizationError(w, err)
 			return
 		}
 	}
@@ -91,12 +90,11 @@ func (service *Service) directLogin(w http.ResponseWriter, r *http.Request, orga
 			http.Error(w, "Select an organization before continuing", http.StatusBadRequest)
 			return
 		}
-		organization, err := service.store.Organization(r.Context(), r.PostForm.Get("organization"))
-		if err != nil || organization.Status != "enabled" {
-			service.renderLogin(w, r, request, policy, "Enter a valid organization ID.")
+		selected := service.selectedLoginOrganization(w, r, request, policy)
+		if selected == "" {
 			return
 		}
-		http.Redirect(w, r, "/login/"+organization.ID, http.StatusSeeOther)
+		http.Redirect(w, r, "/login/"+selected, http.StatusSeeOther)
 		return
 	}
 	switch action {
