@@ -1,6 +1,6 @@
 # Console dependency inventory
 
-Resolved from `web/package-lock.json`. All 403 package records, including nested versions and optional native/WASM platforms, were inspected. The frontend uses system fonts; no font binaries are bundled. This table records upstream terms, not the MemberID project license.
+Resolved from `web/package-lock.json`. All 407 package records, including nested versions and optional native/WASM platforms, were inspected. The frontend uses system fonts; no font binaries are bundled. This table records upstream terms, not the MemberID project license.
 
 The UI uses shadcn 4.23.0 Base Nova components, adapted for MemberID navigation, localization and forms. The package MIT license covers the copied component source and stylesheet. Retained UI notices are in `third_party/web/NOTICES.txt`; distribution packaging includes them. Lucide includes ISC and MIT notices for inherited Feather icons.
 
@@ -45,7 +45,9 @@ Optional WASM packages are neither used by the supported native Linux/Windows x6
 
 Additional bundled notices in Vite/Rolldown and package license files were reviewed. Their MIT/BSD/ISC/Apache material stays within unmodified build tools. Retain the complete upstream notices if redistributing those tools. Future dependency changes require a renewed exact-version review.
 
-As of this implementation's audit, `npm audit --omit=dev` reports no known runtime dependency advisories. The full graph reports 15 affected package entries from two build-only issues: [minimatch pattern amplification](https://github.com/advisories/GHSA-g3hv-75wg-m249) and [deepmerge prototype poisoning](https://github.com/advisories/GHSA-gcqx-w48m-w2h4). These paths belong to ESLint/TypeScript tooling and the shadcn CLI, not the browser bundle or Go server. The current upstream dependency ranges do not select the patched minimatch major; deepmerge has no published patched version in the advisory. Keep those tools limited to reviewed source/configuration and official registry inputs. Do not apply the audit tool's proposed unrelated major downgrades. Recheck upstream fixes before updating the toolchain.
+On 2026-11-19, `npm --prefix web audit --omit=dev` reported zero advisories. The full audit reported four moderate package entries for one [minimatch advisory](https://github.com/advisories/GHSA-g3hv-75wg-m249). ESLint 10.15.0 and TypeScript ESLint 8.73.0 use patched minimatch 11.0.9. GitHub withdrew the previously reported [picomatch](https://github.com/advisories/GHSA-fc5q-39xc-vjpf) and [deepmerge](https://github.com/advisories/GHSA-gcqx-w48m-w2h4) advisories.
+
+The remaining path is `shadcn@4.23.0 → ts-morph@26.0.0 → @ts-morph/common@0.27.0 → minimatch@10.2.6`. The current stable CLI requires ts-morph 26.x, whose common package requires minimatch 10.x. The advisory covers glob patterns supplied to the matcher. The CLI runs during component maintenance with repository configuration and reviewed registry inputs. The console build imports the shadcn stylesheet, and the deployed console serves static assets. Recheck the CLI's supported ranges when a new version is released.
 
 | Package | Version | Declared terms | Use | Inspected license evidence |
 | --- | --- | --- | --- | --- |
@@ -92,7 +94,7 @@ As of this implementation's audit, `npm audit --omit=dev` reports no known runti
 | @emnapi/wasi-threads | 2.2.0 | MIT | Build/development only | LICENSE |
 | @eslint-community/eslint-utils | 4.10.1 | MIT | Build/development only | LICENSE |
 | @eslint-community/regexpp | 4.12.3 | MIT | Build/development only | LICENSE |
-| @eslint/config-array | 0.23.5 | Apache-2.0 | Build/development only | LICENSE |
+| @eslint/config-array | 0.23.6 | Apache-2.0 | Build/development only | LICENSE |
 | @eslint/config-helpers | 0.7.0 | Apache-2.0 | Build/development only | LICENSE |
 | @eslint/core | 1.2.1 | Apache-2.0 | Build/development only | LICENSE |
 | @eslint/js | 10.0.1 | MIT | Build/development only | LICENSE |
@@ -107,6 +109,7 @@ As of this implementation's audit, `npm audit --omit=dev` reports no known runti
 | @humanfs/types | 0.15.0 | Apache-2.0 | Build/development only | Apache-2.0 declaration; same-revision packages/core/LICENSE |
 | @humanwhocodes/module-importer | 1.0.1 | Apache-2.0 | Build/development only | LICENSE |
 | @humanwhocodes/retry | 0.4.3 | Apache-2.0 | Build/development only | LICENSE |
+| @isaacs/nonrecursive-glob-match | 1.1.0 | BlueOak-1.0.0 | Build/development only | LICENSE.md |
 | @jridgewell/gen-mapping | 0.3.13 | MIT | Build/development only | LICENSE |
 | @jridgewell/remapping | 2.3.5 | MIT | Build/development only | LICENSE |
 | @jridgewell/resolve-uri | 3.1.3 | MIT | Build/development only | LICENSE |
@@ -167,16 +170,16 @@ As of this implementation's audit, `npm audit --omit=dev` reports no known runti
 | @types/react | 19.3.0 | MIT | Build/development only | LICENSE |
 | @types/react-dom | 19.3.0 | MIT | Build/development only | LICENSE |
 | @types/validate-npm-package-name | 4.0.2 | MIT | Build/development only | LICENSE |
-| @typescript-eslint/eslint-plugin | 8.72.2 | MIT | Build/development only | LICENSE |
-| @typescript-eslint/parser | 8.72.2 | MIT | Build/development only | LICENSE |
-| @typescript-eslint/project-service | 8.72.2 | MIT | Build/development only | LICENSE |
-| @typescript-eslint/scope-manager | 8.72.2 | MIT | Build/development only | LICENSE |
-| @typescript-eslint/tsconfig-utils | 8.72.2 | MIT | Build/development only | LICENSE |
-| @typescript-eslint/type-utils | 8.72.2 | MIT | Build/development only | LICENSE |
-| @typescript-eslint/types | 8.72.2 | MIT | Build/development only | LICENSE |
-| @typescript-eslint/typescript-estree | 8.72.2 | MIT | Build/development only | LICENSE |
-| @typescript-eslint/utils | 8.72.2 | MIT | Build/development only | LICENSE |
-| @typescript-eslint/visitor-keys | 8.72.2 | MIT | Build/development only | LICENSE |
+| @typescript-eslint/eslint-plugin | 8.73.0 | MIT | Build/development only | LICENSE |
+| @typescript-eslint/parser | 8.73.0 | MIT | Build/development only | LICENSE |
+| @typescript-eslint/project-service | 8.73.0 | MIT | Build/development only | LICENSE |
+| @typescript-eslint/scope-manager | 8.73.0 | MIT | Build/development only | LICENSE |
+| @typescript-eslint/tsconfig-utils | 8.73.0 | MIT | Build/development only | LICENSE |
+| @typescript-eslint/type-utils | 8.73.0 | MIT | Build/development only | LICENSE |
+| @typescript-eslint/types | 8.73.0 | MIT | Build/development only | LICENSE |
+| @typescript-eslint/typescript-estree | 8.73.0 | MIT | Build/development only | LICENSE |
+| @typescript-eslint/utils | 8.73.0 | MIT | Build/development only | LICENSE |
+| @typescript-eslint/visitor-keys | 8.73.0 | MIT | Build/development only | LICENSE |
 | @vitejs/plugin-react | 6.3.0 | MIT | Build/development only | LICENSE |
 | acorn | 8.19.0 | MIT | Build/development only | LICENSE |
 | acorn-jsx | 5.3.2 | MIT | Build/development only | LICENSE |
@@ -233,7 +236,7 @@ As of this implementation's audit, `npm audit --omit=dev` reports no known runti
 | env-paths | 2.2.1 | MIT | Build/development only | license |
 | escalade | 3.2.0 | MIT | Build/development only | license |
 | escape-string-regexp | 4.0.0 | MIT | Build/development only | license |
-| eslint | 10.14.0 | MIT | Build/development only | LICENSE |
+| eslint | 10.15.0 | MIT | Build/development only | LICENSE |
 | eslint-plugin-react-hooks | 7.1.1 | MIT | Build/development only | LICENSE |
 | eslint-plugin-react-refresh | 0.5.7 | MIT | Build/development only | LICENSE |
 | eslint-scope | 9.1.2 | BSD-2-Clause | Build/development only | LICENSE |
@@ -281,7 +284,7 @@ As of this implementation's audit, `npm audit --omit=dev` reports no known runti
 | human-signals | 2.1.0 | Apache-2.0 | Build/development only | LICENSE |
 | human-signals | 8.0.1 | Apache-2.0 | Build/development only | LICENSE |
 | ignore | 5.3.2 | MIT | Build/development only | LICENSE-MIT |
-| ignore | 7.0.14 | MIT | Build/development only | LICENSE-MIT |
+| ignore | 7.0.16 | MIT | Build/development only | LICENSE-MIT |
 | imurmurhash | 0.1.4 | MIT | Build/development only | MIT grant in README.md |
 | ip-address | 10.7.6 | MIT | Build/development only | LICENSE |
 | is-docker | 2.2.1 | MIT | Build/development only | license |
@@ -343,6 +346,7 @@ As of this implementation's audit, `npm audit --omit=dev` reports no known runti
 | mimic-fn | 3.1.0 | MIT | Build/development only | license |
 | mimic-function | 5.0.1 | MIT | Build/development only | license |
 | minimatch | 10.2.6 | BlueOak-1.0.0 | Build/development only | LICENSE.md |
+| minimatch | 11.0.9 | BlueOak-1.0.0 | Build/development only | LICENSE.md |
 | minimist | 1.2.8 | MIT | Build/development only | LICENSE |
 | ms | 2.1.3 | MIT | Build/development only | license.md |
 | nanoid | 3.3.20 | MIT | Build/development only | LICENSE |
@@ -431,7 +435,7 @@ As of this implementation's audit, `npm audit --omit=dev` reports no known runti
 | type-check | 0.4.0 | MIT | Build/development only | LICENSE |
 | type-fest | 4.41.0 | (MIT OR CC0-1.0) | Build/development only | license-cc0, license-mit |
 | typescript | 6.0.3 | Apache-2.0 | Build/development only | LICENSE.txt |
-| typescript-eslint | 8.72.2 | MIT | Build/development only | LICENSE |
+| typescript-eslint | 8.73.0 | MIT | Build/development only | LICENSE |
 | undici | 7.30.2 | MIT | Build/development only | lib/web/fetch/LICENSE, LICENSE |
 | undici-types | 7.24.6 | MIT | Build/development only | LICENSE |
 | unicorn-magic | 0.3.0 | MIT | Build/development only | license |

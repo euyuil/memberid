@@ -29,7 +29,7 @@ Upstream records labelled `other` were inspected individually: the reviewed `@ac
 
 CI downloads the exact Gitleaks Linux x64 archive and verifies SHA-256 `551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb`. The archive contains the binary, README, and upstream MIT license; those files remain together in the runner's tool directory. Its compiled dependency versions and inspected license families are recorded in [the scanner inventory](gitleaks-components.md), including the conditions for external-tool-only MPL-2.0 usage. Review changes to the scanner and its distribution before updating this pin.
 
-The administration console now includes reviewed shadcn component source (including the Base Nova Sidebar, Sheet, and Tooltip), React, Base UI, Lucide icons, and generated local CSS/JavaScript. It uses system fonts. Exact frontend/toolchain versions, transitive packages, platform-specific optional packages, and distribution boundaries are recorded in [the console inventory](web-components.md). Retained browser/source notices are in `third_party/web/NOTICES.txt` and accompany every distribution.
+The administration console now includes reviewed shadcn component source (including the Base Nova Sidebar, Sheet, and Tooltip), React, Base UI, Lucide icons, and generated local CSS/JavaScript. It uses system fonts. Exact frontend/toolchain versions, transitive packages, platform-specific optional packages, advisory assessments, and distribution boundaries are recorded in [the console inventory](web-components.md). Retained browser/source notices are in `third_party/web/NOTICES.txt` and accompany every distribution.
 
 ## Local Compose development
 
