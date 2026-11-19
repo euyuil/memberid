@@ -103,6 +103,10 @@ func TestOrganizationSlugLogin(t *testing.T) {
 	if !strings.Contains(page.body, name) || !strings.Contains(page.body, `value="dingtalk"`) {
 		t.Fatal("alias did not reflect the organization's current name and provider")
 	}
+	f.checkDirectCount(0)
+	f.status(f.submitDirect(page, "/login/"+f.otherMember.OrganizationID, "send", url.Values{"phone": {"19900000001"}}), http.StatusForbidden)
+	f.status(f.submitDirect(page, path, "send", url.Values{"phone": {"19900000001"}}), http.StatusOK)
+	f.checkDirectCount(1)
 	start, _ := f.authorization("example-web", "openid", nil)
 	f.status(start, http.StatusFound)
 	location, err := url.Parse(start.header.Get("Location"))
