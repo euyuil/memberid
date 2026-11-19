@@ -72,6 +72,9 @@ func databaseUpgrade(ctx context.Context, args []string, stdout, stderr io.Write
 		if err != nil {
 			return identity.UpgradePreparation{}, err
 		}
+		if version >= 29 {
+			return identity.UpgradePreparation{Backup: receipt}, nil
+		}
 		clients, err := legacyOIDCRegistrations(filepath.Join(backup, "installation"))
 		return identity.UpgradePreparation{Backup: receipt, OIDCClients: clients}, err
 	})

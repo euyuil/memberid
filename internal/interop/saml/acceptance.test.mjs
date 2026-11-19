@@ -907,7 +907,7 @@ test(
         const snapshot = () =>
           Object.fromEntries(
             pg(
-              "SELECT tablename FROM pg_tables WHERE schemaname='public' AND tablename NOT IN ('memberid_schema','database_upgrades','feishu_memberships','oidc_clients') ORDER BY tablename",
+              "SELECT tablename FROM pg_tables WHERE schemaname='public' AND tablename NOT IN ('memberid_schema','database_upgrades','feishu_memberships','oidc_clients','organization_login_slugs') ORDER BY tablename",
             )
               .split(/\r?\n/)
               .map((name) => {
@@ -1011,17 +1011,32 @@ test(
         ];
         const upgraded = JSON.parse(cli(...upgradeArgs));
         assert.equal(upgraded.upgraded, true);
-        assert.equal(upgraded.currentVersion, 29);
-        t.diagnostic("upgrade rehearsal: schema 29 committed");
+        assert.equal(upgraded.currentVersion, 30);
+        t.diagnostic("upgrade rehearsal: schema 30 committed");
         assert.deepEqual(snapshot(), before);
+        assert.equal(
+          Number(pg("SELECT count(*) FROM organization_login_slugs")),
+          0,
+        );
         assert.equal(JSON.parse(cli(...upgradeArgs)).upgraded, false);
         assert.equal(
           Number(pg("SELECT count(*) FROM database_upgrades")),
-          previousUpgrades + 29 - sourceSchemaVersion,
+          previousUpgrades + 30 - sourceSchemaVersion,
         );
         cli("database", "backup-check", "--backup-directory", recovery);
         assert.throws(() => command(oldExecutable, ["database", "check"], env));
+        cli(
+          "organization",
+          "set-slug",
+          "--organization",
+          organization.id,
+          "--slug",
+          "example-team",
+        );
         await startProvider();
+        const alias = await browser(`${issuer}/login/example-team`);
+        assert.equal(alias.status, 303);
+        assert.equal(alias.headers.location, `/login/${organization.id}`);
         const refreshed = await browser(
           discovery.token_endpoint,
           { grant_type: "refresh_token", refresh_token: tokens.refresh_token },

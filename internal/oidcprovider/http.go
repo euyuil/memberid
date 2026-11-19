@@ -262,6 +262,10 @@ func (service *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if strings.HasPrefix(r.URL.Path, "/login/") {
+		if slug := strings.TrimPrefix(r.URL.Path, "/login/"); identity.ValidOrganizationSlug(slug) {
+			service.organizationSlugLogin(w, r, slug)
+			return
+		}
 		service.login(w, r)
 		return
 	}

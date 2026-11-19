@@ -180,11 +180,30 @@ func (service *Service) requireLoginOrganization(ctx context.Context, organizati
 }
 
 func writeLoginOrganizationError(w http.ResponseWriter, err error) {
-	if errors.Is(err, identity.ErrIneligible) {
+	if errors.Is(err, identity.ErrIneligible) || errors.Is(err, identity.ErrNotFound) {
 		http.Error(w, "Organization login is unavailable", http.StatusNotFound)
 		return
 	}
 	http.Error(w, "Login temporarily unavailable", http.StatusServiceUnavailable)
+}
+
+// Slugs are bookmarkable aliases. Only the permanent ID enters a transaction.
+func (service *Service) organizationSlugLogin(w http.ResponseWriter, r *http.Request, slug string) {
+	if r.Method != http.MethodGet {
+		w.Header().Set("Allow", "GET")
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	id, err := service.store.LoginOrganizationIDBySlug(r.Context(), slug)
+	if err != nil {
+		writeLoginOrganizationError(w, err)
+		return
+	}
+	path := "/login/" + id
+	if requestID := r.Form.Get("request"); requestID != "" {
+		path = organizationLoginURL(id, requestID)
+	}
+	http.Redirect(w, r, path, http.StatusSeeOther)
 }
 
 func (service *Service) login(w http.ResponseWriter, r *http.Request) {
@@ -282,7 +301,7 @@ func (service *Service) login(w http.ResponseWriter, r *http.Request) {
 			return
 		case "choose-organization":
 			if request.Verification != nil || request.phonePending() || request.externalPending() ||
-				registered.registration.SubjectKind != "member" || registered.registration.OrganizationID != "" {
+				registered.registration.SubjectKind != "member" || loginOrganizationID(request, registered) != "" {
 				http.Error(w, "Invalid organization selection", http.StatusBadRequest)
 				return
 			}
@@ -372,7 +391,6 @@ func (service *Service) login(w http.ResponseWriter, r *http.Request) {
 			request.Fresh = true
 			request.FactorID, request.MemberID, request.OrganizationID, request.BindingID = "", "", "", ""
 			if request.ClientID == "" || registered.registration.OrganizationID == "" {
-				request.ProviderOrganizationID = ""
 				if err := service.storage.saveRequest(r.Context(), request); err != nil {
 					http.Error(w, "Login transaction expired", http.StatusBadRequest)
 					return

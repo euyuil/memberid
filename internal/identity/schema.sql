@@ -1,7 +1,7 @@
 CREATE TABLE memberid_schema (
-    version integer PRIMARY KEY CHECK (version = 29)
+    version integer PRIMARY KEY CHECK (version = 30)
 );
-INSERT INTO memberid_schema(version) VALUES (29);
+INSERT INTO memberid_schema(version) VALUES (30);
 
 CREATE TABLE database_upgrades (
     to_version integer PRIMARY KEY,
@@ -22,6 +22,15 @@ CREATE TABLE organizations (
     CHECK (id <> 'org_system' OR status = 'enabled')
 );
 INSERT INTO organizations(id,name) VALUES ('org_system','System organization');
+
+CREATE TABLE organization_login_slugs (
+    slug text COLLATE "C" PRIMARY KEY CHECK (
+        char_length(slug) BETWEEN 1 AND 63 AND slug ~ '^[a-z0-9]+(-[a-z0-9]+)*$'
+        AND slug NOT IN ('callback', 'dingtalk', 'feishu', 'system')
+    ),
+    organization_id text COLLATE "C" NOT NULL UNIQUE REFERENCES organizations(id) ON DELETE RESTRICT
+        CHECK (organization_id <> 'org_system')
+);
 
 CREATE TABLE members (
     id text COLLATE "C" PRIMARY KEY CHECK (id = 'mbr_root' OR id ~ '^mbr_[0-9bcdfghjkmnpqrstvwxz]{27}$'),

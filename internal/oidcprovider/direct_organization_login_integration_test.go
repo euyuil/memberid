@@ -46,6 +46,9 @@ func TestOrganizationLoginLookupErrors(t *testing.T) {
 		t.Fatal(err)
 	}
 	disabled := "disabled"
+	if err := f.store.AssignOrganizationSlug(t.Context(), identity.OperatorPrincipal(), f.otherMember.OrganizationID, "disabled-team"); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := f.store.UpdateOrganization(t.Context(), identity.OperatorPrincipal(), f.otherMember.OrganizationID, identity.OrganizationChange{Status: &disabled}); err != nil {
 		t.Fatal(err)
 	}
@@ -55,6 +58,7 @@ func TestOrganizationLoginLookupErrors(t *testing.T) {
 			checkResponse(f.call(f.browser, "GET", target, nil, nil), http.StatusNotFound, "Organization login is unavailable")
 		}
 	}
+	checkResponse(f.call(f.browser, "GET", "/login/disabled-team", nil, nil), http.StatusNotFound, "Organization login is unavailable")
 	for _, organizationID := range []string{"invalid id", unknownID, f.otherMember.OrganizationID} {
 		response := selectOrganization(organizationID)
 		f.status(response, http.StatusOK)
@@ -68,6 +72,7 @@ func TestOrganizationLoginLookupErrors(t *testing.T) {
 		t.Fatal(err)
 	}
 	path := "/login/" + f.member.OrganizationID
+	checkResponse(f.call(f.browser, "GET", "/login/disabled-team", nil, nil), http.StatusServiceUnavailable, "Login temporarily unavailable")
 	for _, target := range []string{path, path + requestQuery} {
 		checkResponse(f.call(f.browser, "GET", target, nil, nil), http.StatusServiceUnavailable, "Login temporarily unavailable")
 	}

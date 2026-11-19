@@ -30,7 +30,9 @@ Authorization requests using `request_uri` receive `request_uri_not_supported`, 
 
 ## Login and independent subjects
 
-The browser follows the application's authorization redirect to MemberID. MemberID binds the login transaction to an HttpOnly browser cookie and verifies login form submissions with an exact Origin and transaction-specific CSRF value. A Member client without a registered organization first asks for an Organization ID at `/login?request=…`. A valid selection redirects to `/login/{organizationID}?request=…`; clients with a registered organization use that organization path directly. The transaction binds this selection on the server. Authentication actions cannot switch to another organization, and changing organizations explicitly resets the selection before returning to `/login`.
+The browser follows the application's authorization redirect to MemberID. MemberID binds the login transaction to an HttpOnly browser cookie and verifies login form submissions with an exact Origin and transaction-specific CSRF value. A Member client without a registered organization first asks for an Organization ID at `/login?request=…`. A valid selection redirects to `/login/{organizationID}?request=…`; clients with a registered organization use that organization path directly. The transaction binds this selection on the server. Canceling verification retains the selected organization. To choose another organization, start a new direct login or have the application initiate a new authorization transaction.
+
+An operator-assigned `/login/{slug}` is a bookmarkable GET alias. It resolves the enabled organization and redirects to the same issuer’s permanent `/login/{organizationID}` path, forwarding only the `request` parameter. The ID path checks the browser transaction and the client’s registered organization before presenting authentication methods. See [slug assignment](operations.md#provision-identities).
 
 Organization login URLs return HTTP 404 for unknown or disabled organizations. If the organization lookup fails because of a database error, the login URL and organization selection form return HTTP 503.
 
@@ -133,7 +135,7 @@ memberid serve --directory .local/memberid --listen 127.0.0.1:8080
 
 Member clients can authenticate with an [organization-scoped password](administration.md#organization-scoped-passwords) and receive `amr=["pwd"]`. The username belongs to the password credential; subject and profile claims retain their existing Member semantics. The password form is part of the browser authorization flow. Token requests continue to use the documented Authorization Code and Refresh Token grants.
 
-Phone, DingTalk, and Feishu can be enabled independently of password login. Omitting `--directory` starts health-only mode. Local signing and installation configuration is loaded at startup. Client policy and organization provider credentials use the current database registrations. The current schema is version 29. Startup refuses older schemas and preserves existing database contents.
+Phone, DingTalk, and Feishu can be enabled independently of password login. Omitting `--directory` starts health-only mode. Local signing and installation configuration is loaded at startup. Client policy and organization provider credentials use the current database registrations. The current schema is version 30. Startup refuses older schemas and preserves existing database contents.
 
 For the first Member, create its organization and Member through the operator CLI, then let the person verify their phone in an application login. Verification creates only the factor. An authorized operator can inspect that existing factor and explicitly bind it:
 

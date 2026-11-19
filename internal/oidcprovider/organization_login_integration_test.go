@@ -53,10 +53,10 @@ func TestOrganizationFirstLoginBindsMethodsAndMembers(t *testing.T) {
 	f.status(changed, http.StatusSeeOther)
 	r = f.call(f.browser, "GET", changed.header.Get("Location"), nil, nil)
 	f.status(r, http.StatusOK)
-	if !strings.Contains(r.body, `value="choose-organization"`) {
-		t.Fatal("changing organization did not restore the selection step")
+	if !strings.Contains(r.body, `action="`+organizationPath+`"`) || strings.Contains(r.body, `value="choose-organization"`) {
+		t.Fatal("canceling verification lost the bound organization")
 	}
-	r = f.selectOrganization(r, f.member.OrganizationID)
+	f.status(f.submit(r.body, "choose-organization", url.Values{"organization": {f.otherMember.OrganizationID}}), http.StatusBadRequest)
 	r = f.submit(r.body, "password", url.Values{"username": {"example"}, "password": {password}})
 	f.status(r, http.StatusOK)
 	if !strings.Contains(r.body, `<option value="`+f.member.ID+`" selected>`) || strings.Contains(r.body, `<option value="`+f.otherMember.ID+`">`) {
@@ -64,4 +64,57 @@ func TestOrganizationFirstLoginBindsMethodsAndMembers(t *testing.T) {
 	}
 	code := f.complete(r, f.member.ID)
 	f.status(f.exchange("example-web", code, verifier), http.StatusOK)
+}
+
+func TestOrganizationSlugLogin(t *testing.T) {
+	f := newFixture(t)
+	_, apps := enableDingTalk(t, f, true)
+	id := f.member.OrganizationID
+	path := "/login/" + id
+	for slug, org := range map[string]string{"team-one": id, "team-two": f.otherMember.OrganizationID} {
+		if err := f.store.AssignOrganizationSlug(t.Context(), identity.OperatorPrincipal(), org, slug); err != nil {
+			t.Fatal(err)
+		}
+	}
+	alias := func(slug, query, want string) string {
+		t.Helper()
+		r := f.call(f.browser, "GET", "/login/"+slug+query, nil, nil)
+		f.status(r, http.StatusSeeOther)
+		if location := r.header.Get("Location"); location != want {
+			t.Fatalf("alias redirected to %q, want %q", location, want)
+		}
+		return want
+	}
+	f.openDirectLogin(alias("team-one", "?returnTo=https://example.invalid", path))
+	name := "Renamed team"
+	if _, err := f.store.UpdateOrganization(t.Context(), identity.OperatorPrincipal(), id, identity.OrganizationChange{Name: &name}); err != nil {
+		t.Fatal(err)
+	}
+	app, err := apps.Inspect(t.Context(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := apps.Configure(t.Context(), identity.OperatorPrincipal(), id, identity.DingTalkApplicationInput{
+		CorpID: app.CorpID, ClientID: app.ClientID, ClientSecret: config.RandomSecret(), ExpectedRevision: app.Revision,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	page := f.openDirectLogin(alias("team-one", "", path))
+	if !strings.Contains(page.body, name) || !strings.Contains(page.body, `value="dingtalk"`) {
+		t.Fatal("alias did not reflect the organization's current name and provider")
+	}
+	start, _ := f.authorization("example-web", "openid", nil)
+	f.status(start, http.StatusFound)
+	location, err := url.Parse(start.header.Get("Location"))
+	if err != nil || location.RawQuery == "" {
+		t.Fatal("missing authorization transaction", err)
+	}
+	query := "?" + location.RawQuery
+	other := alias("team-two", query, "/login/"+f.otherMember.OrganizationID+query)
+	f.status(f.call(f.browser, "GET", other, nil, nil), http.StatusBadRequest)
+	correct := alias("team-one", query, path+query)
+	f.status(f.call(browserClient(), "GET", correct, nil, nil), http.StatusBadRequest)
+	f.status(f.call(f.browser, "GET", correct, nil, nil), http.StatusOK)
+	f.status(f.call(f.browser, "GET", "/login/unknown-slug", nil, nil), http.StatusNotFound)
+	f.status(f.call(f.browser, "POST", "/login/team-one", nil, nil), http.StatusMethodNotAllowed)
 }
