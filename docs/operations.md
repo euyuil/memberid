@@ -10,7 +10,7 @@ memberid database init --initial-root-password-file /path/to/protected/initial-r
 
 This is an explicit installation operation. It refuses existing user relations and never resets, replaces, or migrates an existing database. Normal startup does not initialize schema.
 
-This command installs schema version 29 and provisions `org_system/root` with a generated password. The password output file must be new and in a protected directory. Running `database init` without the file option initializes only the schema and the reserved system organization. Existing schema 26–28 installations use [explicit forward upgrade and recovery](database-upgrades.md). See [first-time setup](administration.md#first-time-setup) for password delivery and recovery.
+This command installs schema version 30 and provisions `org_system/root` with a generated password. The password output file must be new and in a protected directory. Running `database init` without the file option initializes only the schema and the reserved system organization. Existing schema 26–29 installations use [explicit forward upgrade and recovery](database-upgrades.md). See [first-time setup](administration.md#first-time-setup) for password delivery and recovery.
 
 ## Check an existing database
 
@@ -36,12 +36,15 @@ an incompatible database and choose a separately prepared installation; retrying
 
 ```sh
 memberid organization create --name "Example organization"
+memberid organization set-slug --organization ORGANIZATION_ID --slug example-team
 memberid member create --organization ORGANIZATION_ID --name "Example member"
 memberid member block --organization ORGANIZATION_ID --member MEMBER_ID
 memberid member unblock --organization ORGANIZATION_ID --member MEMBER_ID
 ```
 
 Commands return JSON containing the affected identity. Use the identifiers returned by creation in subsequent commands. Names do not establish identity or verified contact ownership.
+
+An operator can assign one permanent login slug to an ordinary organization. Choose 1–63 lowercase ASCII letters or digits, optionally separated by single internal hyphens. Case variants and surrounding whitespace are rejected. The names `callback`, `dingtalk`, `feishu`, and `system` are reserved. The system organization uses `/login/org_system`. Assignment is explicit and final. Renaming or disabling an organization preserves its reservation, and its published slug can never be assigned to another organization. Organizations without a slug continue to use their ID URL.
 
 These commands use the operator's explicit database access. They do not create an end-user password, bypass an authentication provider, or grant permissions in another application. Manual unblocking preserves any external-departure block.
 
