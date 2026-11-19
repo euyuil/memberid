@@ -546,7 +546,11 @@ func TestFeishuDepartureBeforeAuthorizationCodePersistence(t *testing.T) {
 		t.Fatal("departed identity received an authorization code")
 	}
 	var issued bool
-	if err := f.store.Database().QueryRow(t.Context(), "SELECT code_hash IS NOT NULL FROM authentication_requests WHERE id=$1", hidden(t, page.body, "request")).Scan(&issued); err != nil || issued {
+	confirmationURL, err := url.Parse(confirmed.header.Get("Location"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.store.Database().QueryRow(t.Context(), "SELECT code_hash IS NOT NULL FROM authentication_requests WHERE id=$1", confirmationURL.Query().Get("id")).Scan(&issued); err != nil || issued {
 		t.Fatal("departure bypassed final code persistence check", err)
 	}
 }

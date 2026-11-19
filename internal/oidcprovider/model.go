@@ -57,7 +57,7 @@ func organizationLoginURL(organizationID, requestID string) string {
 }
 
 func requestLoginURL(request *authorizationRequest) string {
-	return organizationLoginURL(request.ProviderOrganizationID, request.ID)
+	return organizationLoginURL(request.ProviderOrganizationID, request.GetID())
 }
 
 func (c client) LoginURL(id string) string {
@@ -118,6 +118,8 @@ func (g *grant) SetCurrentScopes(scopes []string) { g.Scopes = scopes }
 type authorizationRequest struct {
 	browserauth.Interaction
 	grant
+	entry          *oidcLoginEntry
+	entryToken     string
 	ClientRevision int64                     `json:"clientRevision,omitempty"`
 	Input          oidc.AuthRequest          `json:"input,omitempty"`
 	HintSubject    string                    `json:"hintSubject,omitempty"`
@@ -126,7 +128,12 @@ type authorizationRequest struct {
 
 func (r *authorizationRequest) externalPending() bool { return r.DingTalk != nil || r.Feishu != nil }
 
-func (r *authorizationRequest) GetID() string  { return r.ID }
+func (r *authorizationRequest) GetID() string {
+	if r.entry != nil {
+		return r.entryToken
+	}
+	return r.ID
+}
 func (r *authorizationRequest) GetACR() string { return "" }
 func (r *authorizationRequest) GetCodeChallenge() *oidc.CodeChallenge {
 	return &oidc.CodeChallenge{Challenge: r.Input.CodeChallenge, Method: r.Input.CodeChallengeMethod}

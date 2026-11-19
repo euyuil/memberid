@@ -61,22 +61,24 @@ func (s *storage) CreateAuthRequest(ctx context.Context, input *oidc.AuthRequest
 		audience = registered.registration.EvidenceAudience
 	}
 	request := &authorizationRequest{ClientRevision: registered.revision, grant: grant{InteractionID: newID(), ID: newID(), ClientID: input.ClientID, ClientName: registered.displayName, Scopes: input.Scopes, Audience: []string{audience}}, Input: *input, HintSubject: hintSubject, Interaction: browserauth.Interaction{BrowserHash: config.SecretHash(browser), CSRF: config.RandomSecret()}}
-	data, err := json.Marshal(request)
-	if err != nil {
-		return nil, err
-	}
-	_, err = s.service.store.Database().Exec(ctx, "INSERT INTO authentication_requests(id,client_id,data,expires_at) VALUES($1,$2,$3,$4)", request.ID, request.ClientID, data, s.service.now().Add(10*time.Minute))
-	return request, err
+	request.Input.IDTokenHint = "" // The OP already validated the hint and supplied its subject.
+	request.ProviderOrganizationID = registered.registration.OrganizationID
+	request.entry = &oidcLoginEntry{Issuer: s.service.configuration.Issuer, ExpiresAt: s.service.now().Add(oidcLoginLifetime), Request: *request}
+	return request, s.service.sealLoginEntry(request)
 }
 
 func (s *storage) loadRequest(ctx context.Context, column string, value any) (*authorizationRequest, error) {
 	var data []byte
 	var revision int64
-	if err := s.service.store.Database().QueryRow(ctx, "SELECT data,revision FROM authentication_requests WHERE "+column+"=$1 AND expires_at>$2", value, s.service.now()).Scan(&data, &revision); err != nil {
+	var expiry time.Time
+	if err := s.service.store.Database().QueryRow(ctx, "SELECT data,revision,expires_at FROM authentication_requests WHERE "+column+"=$1", value).Scan(&data, &revision, &expiry); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, oidc.ErrInvalidGrant()
+			return nil, oidc.ErrInvalidGrant().WithParent(err)
 		}
 		return nil, oidc.ErrServerError()
+	}
+	if !expiry.After(s.service.now()) {
+		return nil, oidc.ErrInvalidGrant()
 	}
 	result := &authorizationRequest{Interaction: browserauth.Interaction{Revision: revision}}
 	if err := json.Unmarshal(data, result); err != nil {
@@ -154,6 +156,9 @@ func (s *storage) SaveAuthCode(ctx context.Context, id, code string) error {
 func (s *storage) DeleteAuthRequest(context.Context, string) error { return nil }
 
 func (s *storage) saveRequest(ctx context.Context, request *authorizationRequest) error {
+	if request.entry != nil {
+		return s.insertLoginEntry(ctx, request)
+	}
 	data, err := json.Marshal(request)
 	if err != nil {
 		return err

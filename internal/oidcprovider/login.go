@@ -235,9 +235,19 @@ func (service *Service) login(w http.ResponseWriter, r *http.Request) {
 		service.directLogin(w, r, pathOrganizationID)
 		return
 	}
-	request, err := service.storage.loginRequestByID(r.Context(), id)
+	var request *authorizationRequest
+	var err error
+	if strings.HasPrefix(id, oidcLoginPrefix) {
+		request, err = service.readLoginEntry(r.Context(), id)
+	} else {
+		request, err = service.storage.loginRequestByID(r.Context(), id)
+	}
 	if err != nil {
 		http.Error(w, "Invalid or expired login transaction", http.StatusBadRequest)
+		return
+	}
+	if strings.HasPrefix(id, oidcLoginPrefix) && request.entry == nil && r.PostForm.Get("action") == "continue" {
+		http.Error(w, "Login has progressed. Reopen the login page.", http.StatusBadRequest)
 		return
 	}
 	service.loginTransaction(w, r, request, pathOrganizationID)
@@ -275,7 +285,7 @@ func (service *Service) loginTransaction(w http.ResponseWriter, r *http.Request,
 			}
 			request.ProviderOrganizationID = pathOrganizationID
 			if r.Method == http.MethodGet {
-				if err := service.storage.saveRequest(r.Context(), request); err != nil {
+				if err := service.saveLoginNavigation(r.Context(), request); err != nil {
 					http.Error(w, "Login transaction expired", http.StatusBadRequest)
 					return
 				}
@@ -303,6 +313,13 @@ func (service *Service) loginTransaction(w http.ResponseWriter, r *http.Request,
 			return
 		}
 		action := r.PostForm.Get("action")
+		if request.entry != nil && request.SessionID != "" {
+			shownSession := request.SessionID
+			if !service.loadSession(r, request) || request.SessionID != shownSession {
+				http.Error(w, "Login session changed. Reopen the login page.", http.StatusBadRequest)
+				return
+			}
+		}
 		if registered.registration.SubjectKind == "member" && loginOrganizationID(request, registered) == "" && action != "choose-organization" && action != "cancel" {
 			http.Error(w, "Select an organization before continuing", http.StatusBadRequest)
 			return
@@ -322,7 +339,7 @@ func (service *Service) loginTransaction(w http.ResponseWriter, r *http.Request,
 				return
 			}
 			request.ProviderOrganizationID = organizationID
-			if err := service.storage.saveRequest(r.Context(), request); err != nil {
+			if err := service.saveLoginNavigation(r.Context(), request); err != nil {
 				http.Error(w, "Login transaction expired", http.StatusBadRequest)
 				return
 			}
@@ -398,7 +415,7 @@ func (service *Service) loginTransaction(w http.ResponseWriter, r *http.Request,
 			request.Fresh = true
 			request.FactorID, request.MemberID, request.OrganizationID, request.BindingID = "", "", "", ""
 			if registered.registration.OrganizationID == "" {
-				if err := service.storage.saveRequest(r.Context(), request); err != nil {
+				if err := service.saveLoginNavigation(r.Context(), request); err != nil {
 					http.Error(w, "Login transaction expired", http.StatusBadRequest)
 					return
 				}
@@ -446,13 +463,17 @@ func (service *Service) loginTransaction(w http.ResponseWriter, r *http.Request,
 			http.Error(w, "Invalid login action", http.StatusBadRequest)
 			return
 		}
-		if err := service.storage.saveRequest(r.Context(), request); err != nil {
+		if err := service.saveLoginNavigation(r.Context(), request); err != nil {
 			http.Error(w, "Login transaction expired", http.StatusBadRequest)
 			return
 		}
 	} else if request.Verification == nil && (registered.registration.SubjectKind == "factor" || loginOrganizationID(request, registered) != "" || slices.Contains(request.prompts(), "none")) {
-		if service.loadSession(r, request) {
-			if err := service.storage.saveRequest(r.Context(), request); err != nil {
+		hadSession := request.entry != nil && request.SessionID != ""
+		if hadSession {
+			request.SessionID = ""
+		}
+		if service.loadSession(r, request) || hadSession {
+			if err := service.saveLoginNavigation(r.Context(), request); err != nil {
 				http.Error(w, "Login transaction expired", http.StatusBadRequest)
 				return
 			}

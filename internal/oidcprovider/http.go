@@ -130,20 +130,34 @@ func (service *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		http.Error(w, description, http.StatusBadRequest)
 	}
-	if len(r.URL.RawQuery) > 32<<10 {
+	const formLimit = 32 << 10
+	limit := formLimit
+	if r.URL.Path == "/login" || strings.HasPrefix(r.URL.Path, "/login/") {
+		// JSON escaping and JWE encoding can expand a valid authorization request.
+		limit = 512 << 10
+	}
+	if len(r.URL.RawQuery) > limit {
 		invalidRequest("Request is too large")
 		return
 	}
-	r.Body = http.MaxBytesReader(w, r.Body, 32<<10)
+	r.Body = http.MaxBytesReader(w, r.Body, int64(limit))
 	if err := r.ParseForm(); err != nil {
 		invalidRequest("Invalid request")
 		return
 	}
-	for _, values := range r.Form {
+	formSize := 0
+	for key, values := range r.Form {
 		if len(values) != 1 {
 			invalidRequest("Repeated parameter")
 			return
 		}
+		if limit > formLimit && !(key == "request" && strings.HasPrefix(values[0], oidcLoginPrefix)) {
+			formSize += len(key) + len(values[0])
+		}
+	}
+	if formSize > formLimit {
+		invalidRequest("Request is too large")
+		return
 	}
 	if clientEndpoint {
 		w = clientAuthWriter{w}
@@ -301,10 +315,16 @@ func (service *Service) rejectAuthorization(w http.ResponseWriter, r *http.Reque
 }
 
 func (service *Service) Cleanup(ctx context.Context) error {
-	for _, table := range []string{"account_link_requests", "oidc_access_tokens", "authentication_requests", "oidc_grants", "password_attempt_windows"} {
+	for _, table := range []string{"account_link_requests", "oidc_access_tokens", "oidc_grants", "password_attempt_windows"} {
 		if _, err := service.store.Database().Exec(ctx, "DELETE FROM "+table+" WHERE expires_at<$1", service.now()); err != nil {
 			return err
 		}
+	}
+	// Code issuance shortens expires_at. Keep the unique request ID until
+	// every browser-held copy of the original interaction has expired.
+	now := service.now()
+	if _, err := service.store.Database().Exec(ctx, "DELETE FROM authentication_requests WHERE expires_at<$1 AND (code_hash IS NULL OR expires_at<$2)", now, now.Add(-oidcLoginLifetime)); err != nil {
+		return err
 	}
 	// Expired browser SSO does not end an actively renewed client grant.
 	if _, err := service.store.Database().Exec(ctx, "DELETE FROM authentication_sessions s WHERE s.absolute_expires_at<$1 OR (s.expires_at<$1 AND NOT EXISTS(SELECT 1 FROM oidc_grants g WHERE g.session_id=s.id))", service.now()); err != nil {

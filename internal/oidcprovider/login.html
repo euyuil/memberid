@@ -114,14 +114,14 @@ a { color: var(--primary); }
 <div class="feedback" role="status" aria-live="polite">{{.Message}}</div>
 {{if .OrganizationRequired}}
 <form method="post" action="{{.Action}}">
-<input type="hidden" name="request" value="{{.Request.ID}}"><input type="hidden" name="csrf" value="{{.Request.CSRF}}">
+<input type="hidden" name="request" value="{{.Request.GetID}}"><input type="hidden" name="csrf" value="{{.Request.CSRF}}">
 <label for="organization">Organization ID</label><input id="organization" name="organization" autocomplete="off" pattern="org_([0-9bcdfghjkmnpqrstvwxz]{27}|system)" maxlength="31" required autofocus>
 <button name="action" value="choose-organization">Continue</button>
 </form>
 {{else}}
 {{if and .PasswordEnabled (not .Verified) (not .Pending)}}
 <form method="post" action="{{.Action}}" {{if or .PhoneEnabled .ProviderEnabled}}class="section"{{end}}>
-<input type="hidden" name="request" value="{{.Request.ID}}"><input type="hidden" name="csrf" value="{{.Request.CSRF}}">
+<input type="hidden" name="request" value="{{.Request.GetID}}"><input type="hidden" name="csrf" value="{{.Request.CSRF}}">
 <label for="username">Username</label><input id="username" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" pattern="[a-z0-9][a-z0-9._\-]{0,63}" maxlength="64" value="{{.PasswordUsername}}" required>
 <label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" maxlength="1024" required {{if .PasswordUsername}}autofocus{{end}}>
 <button name="action" value="password">Sign in with password</button>
@@ -129,13 +129,13 @@ a { color: var(--primary); }
 {{end}}
 {{if and .PhoneEnabled (not .Verified) (or (not .Pending) .PhonePending)}}
 <form method="post" action="{{.Action}}">
-<input type="hidden" name="request" value="{{.Request.ID}}"><input type="hidden" name="csrf" value="{{.Request.CSRF}}">
+<input type="hidden" name="request" value="{{.Request.GetID}}"><input type="hidden" name="csrf" value="{{.Request.CSRF}}">
 <label for="phone">Phone number</label><input id="phone" name="phone" type="tel" autocomplete="tel" placeholder="+86 mobile number" pattern="(\+86)?1[3-9][0-9]{9}" value="{{.Request.PhoneNumber}}" required {{if or .Pending .Verified}}readonly{{end}}>
 <button name="action" value="send" {{if or .Pending .Verified}}disabled{{end}}>Send verification code</button>
 </form>
 {{if .PhonePending}}
 <form method="post" action="{{.Action}}">
-<input type="hidden" name="request" value="{{.Request.ID}}"><input type="hidden" name="csrf" value="{{.Request.CSRF}}">
+<input type="hidden" name="request" value="{{.Request.GetID}}"><input type="hidden" name="csrf" value="{{.Request.CSRF}}">
 <label for="code">Verification code</label><input id="code" name="code" autocomplete="one-time-code" inputmode="numeric" pattern="[0-9]{6}" minlength="6" maxlength="6" required {{if or (not .PhonePending) .Verified}}disabled{{end}}>
 <button name="action" value="verify" {{if or (not .PhonePending) .Verified}}disabled{{end}}>Verify phone</button>
 
@@ -146,7 +146,7 @@ a { color: var(--primary); }
 <div class="section">
 {{range .Providers}}
 <form method="post" action="{{$.Action}}">
-<input type="hidden" name="request" value="{{$.Request.ID}}"><input type="hidden" name="csrf" value="{{$.Request.CSRF}}">
+<input type="hidden" name="request" value="{{$.Request.GetID}}"><input type="hidden" name="csrf" value="{{$.Request.CSRF}}">
 <input type="hidden" name="organization" value="{{$.ProviderOrganizationID}}"><input type="hidden" name="provider" value="{{.ID}}">
 <button name="action" value="{{.Type}}" {{if or $.Pending $.Verified}}disabled{{end}}>Sign in with {{if eq .Type "dingtalk"}}DingTalk{{if ne .DisplayName "DingTalk"}} · {{.DisplayName}}{{end}}{{else}}Feishu{{if ne .DisplayName "Feishu"}} · {{.DisplayName}}{{end}}{{end}}</button>
 </form>
@@ -156,13 +156,13 @@ a { color: var(--primary); }
 {{end}}
 {{if or .Pending .Verified}}
 <form method="post" action="{{.Action}}">
-<input type="hidden" name="request" value="{{.Request.ID}}"><input type="hidden" name="csrf" value="{{.Request.CSRF}}">
+<input type="hidden" name="request" value="{{.Request.GetID}}"><input type="hidden" name="csrf" value="{{.Request.CSRF}}">
 <button class="secondary" name="action" value="cancel">Cancel verification</button>
 </form>
 {{end}}
 {{if .Verified}}
 <form method="post" action="{{.Action}}" class="section">
-<input type="hidden" name="request" value="{{.Request.ID}}"><input type="hidden" name="csrf" value="{{.Request.CSRF}}">
+<input type="hidden" name="request" value="{{.Request.GetID}}"><input type="hidden" name="csrf" value="{{.Request.CSRF}}">
 <label for="member">Organization identity</label><select id="member" name="member" {{if .FactorClient}}disabled{{else}}required{{end}}>
 {{if .FactorClient}}<option>Verified phone identity</option>{{else}}
 <option value="">Select a Member</option>
