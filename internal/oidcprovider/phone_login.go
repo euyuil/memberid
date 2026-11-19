@@ -31,7 +31,6 @@ func (service *Service) verifyPhoneLogin(w http.ResponseWriter, r *http.Request,
 	if err != nil {
 		return err
 	}
-	completed.Revision++
 	*request = completed
 	service.cookie(w, "session", secret, expires.Sub(service.now()))
 	return nil

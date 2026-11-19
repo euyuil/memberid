@@ -85,6 +85,10 @@ func (service *Service) renderLogin(w http.ResponseWriter, r *http.Request, requ
 		OrganizationRestricted: client.registration.OrganizationID != "", ProviderOrganizationID: client.registration.OrganizationID,
 		FactorClient: client.registration.SubjectKind == "factor", ConsentRequired: !client.registration.Preauthorized || slices.Contains(request.prompts(), "consent"),
 	}
+	if request.browserHeldSAML() {
+		// Callback failures render a form for canceling the upstream attempt.
+		data.Action = "/login/" + request.SAML.OrganizationID
+	}
 	if request.SAML == nil && len(choices) == 1 {
 		data.SelectedMemberID = choices[0].ID
 	}

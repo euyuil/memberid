@@ -13,7 +13,6 @@ import (
 	"github.com/euyuil/memberid/internal/identity"
 	"github.com/euyuil/memberid/internal/samlprovider"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 )
 
 func (service *Service) samlSSO(w http.ResponseWriter, r *http.Request) {
@@ -47,22 +46,33 @@ func (service *Service) samlSSO(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	browser, _ := r.Context().Value(browserKey{}).(string)
+	newBrowser := len(browser) != 43
+	if newBrowser {
+		browser = config.RandomSecret()
+	}
 	request := &authorizationRequest{grant: grant{ID: newID(), InteractionID: newID(), ClientID: sp.ID}, Interaction: browserauth.Interaction{Revision: 1, BrowserHash: config.SecretHash(browser), CSRF: config.RandomSecret(), ProviderOrganizationID: sp.OrganizationID}, SAML: txn}
-	data, err := json.Marshal(request)
+	request.entryToken, err = service.sealSAMLLogin(request, request.Revision)
 	if err != nil {
-		http.Error(w, "SAML unavailable", 503)
+		http.Error(w, "SAML unavailable", http.StatusServiceUnavailable)
 		return
 	}
-	_, err = service.store.Database().Exec(r.Context(), `INSERT INTO authentication_requests(id,protocol,client_id,saml_service_provider_id,saml_request_id,data,expires_at) VALUES($1,'saml',$2,$2,$3,$4,$5)`, request.ID, sp.ID, txn.RequestID, data, service.now().Add(10*time.Minute))
+	result, err := service.store.Database().Exec(r.Context(), `INSERT INTO authentication_requests
+		(id,protocol,client_id,saml_service_provider_id,saml_request_id,data,expires_at)
+		VALUES($1,'saml','',$2,$3,'{}',$4) ON CONFLICT (saml_service_provider_id,saml_request_id) DO NOTHING`,
+		request.ID, sp.ID, txn.RequestID, service.now().Add(10*time.Minute))
 	if err != nil {
-		var conflict *pgconn.PgError
-		if errors.As(err, &conflict) && conflict.Code == "23505" {
-			service.samlEvent(r, request, "saml.request.reuse", "detected", "")
-		} else {
-			service.samlEvent(r, request, "saml.request", "failed", "backendUnavailable")
-		}
-		http.Error(w, "SAML request unavailable or already used", 400)
+		service.samlEvent(r, request, "saml.request", "failed", "backendUnavailable")
+		http.Error(w, "SAML unavailable", http.StatusServiceUnavailable)
 		return
+	}
+	if result.RowsAffected() != 1 {
+		service.samlEvent(r, request, "saml.request.reuse", "detected", "")
+		http.Error(w, "SAML request already used", http.StatusBadRequest)
+		return
+	}
+	// A losing first visit must not overwrite the winning browser binding.
+	if newBrowser {
+		service.cookie(w, "browser", browser, sessionIdleLifetime)
 	}
 	service.samlEvent(r, request, "saml.request", "succeeded", "")
 	if status != "" {
@@ -173,7 +183,7 @@ func (service *Service) finishSAML(w http.ResponseWriter, r *http.Request, reque
 		if err != nil {
 			return err
 		}
-		_, err = tx.Exec(r.Context(), "UPDATE authentication_requests SET consumed_at=$2,revision=revision+1,data=jsonb_set(data,'{complete}','true'::jsonb) WHERE id=$1", request.ID, now)
+		_, err = tx.Exec(r.Context(), "UPDATE authentication_requests SET consumed_at=$2,revision=revision+1,data=CASE WHEN data='{}'::jsonb THEN data ELSE jsonb_set(data,'{complete}','true'::jsonb) END WHERE id=$1", request.ID, now)
 		commitReady = err == nil
 		return err
 	})

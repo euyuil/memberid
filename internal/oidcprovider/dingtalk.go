@@ -51,7 +51,7 @@ func (service *Service) startDingTalk(w http.ResponseWriter, r *http.Request, re
 	request.DingTalk = &dingTalkAttempt{StateHash: config.SecretHash(state), DingTalkLoginContext: app.LoginContext(), ExpiresAt: service.now().Add(5 * time.Minute)}
 	request.Fresh = true
 	request.ProviderOrganizationID = organizationID
-	if err := service.storage.saveRequest(r.Context(), request); err != nil {
+	if err := service.saveExternalLogin(w, r, request, state); err != nil {
 		http.Error(w, "Login transaction expired", http.StatusBadRequest)
 		return
 	}
@@ -83,19 +83,12 @@ func (service *Service) dingTalkCallback(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "Invalid DingTalk callback", http.StatusBadRequest)
 		return
 	}
-	found, err := service.storage.loadRequest(r.Context(), "data->'dingtalk'->>'stateHash'", config.SecretHash(state))
+	request, err := service.externalLoginRequest(r, state, "data->'dingtalk'->>'stateHash'")
 	if err != nil {
 		failure = err
 		http.Error(w, "Invalid or expired DingTalk login", http.StatusBadRequest)
 		return
 	}
-	input, err := service.storage.loginRequestByID(r.Context(), found.ID)
-	if err != nil {
-		failure = err
-		http.Error(w, "Invalid or expired DingTalk login", http.StatusBadRequest)
-		return
-	}
-	request := input
 	attempt := request.DingTalk
 	event = service.loginEvent(r.Context(), request)
 	if attempt != nil {
@@ -113,6 +106,9 @@ func (service *Service) dingTalkCallback(w http.ResponseWriter, r *http.Request)
 		failure = err
 		http.Error(w, "Invalid or expired DingTalk login", http.StatusBadRequest)
 		return
+	}
+	if request.browserHeldSAML() {
+		service.cookie(w, "saml_"+state, "", -time.Second)
 	}
 	if r.Form.Get("error") != "" || code == "" {
 		if r.Form.Get("error") != "" {
@@ -173,12 +169,7 @@ func (service *Service) completeExternalLogin(w http.ResponseWriter, r *http.Req
 		completed.DingTalk, completed.Feishu = nil, nil
 		completed.SessionID = id
 		setVerification(&completed, verified)
-		data, err := json.Marshal(&completed)
-		if err != nil {
-			return err
-		}
-		_, err = tx.Exec(r.Context(), "UPDATE authentication_requests SET data=$2,revision=revision+1 WHERE id=$1", request.ID, data)
-		return err
+		return service.storage.advanceRequest(r.Context(), tx, &completed)
 	})
 	if err == nil {
 		event.OrganizationID, event.MemberID, event.BindingID = admitted.OrganizationID, admitted.MemberID, admitted.BindingID
@@ -190,7 +181,6 @@ func (service *Service) completeExternalLogin(w http.ResponseWriter, r *http.Req
 		http.Error(w, name+" login expired or the identity is no longer eligible. Start a new login.", http.StatusForbidden)
 		return
 	}
-	completed.Revision++
 	*request = completed
 	service.cookie(w, "session", secret, expires.Sub(service.now()))
 	http.Redirect(w, r, requestLoginURL(request), http.StatusSeeOther)

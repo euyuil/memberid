@@ -263,6 +263,115 @@ func TestSAMLProtocolErrorsAndAdmission(t *testing.T) {
 	}
 }
 
+func TestSAMLConcurrentAdmissionAndPassiveError(t *testing.T) {
+	f := newFixture(t)
+	sp := enableSAML(t, f)
+	requestID := "_" + rand.Text()
+	start := samlURL(t, f, sp, func(input *saml.AuthnRequest) {
+		passive := true
+		input.ID, input.IsPassive = requestID, &passive
+	})
+	parallelGET := func(path string) []reply {
+		results := make(chan reply, 2)
+		var group sync.WaitGroup
+		for range 2 {
+			group.Go(func() { results <- f.call(f.browser, "GET", path, nil, nil) })
+		}
+		group.Wait()
+		return []reply{<-results, <-results}
+	}
+	var location string
+	for _, result := range parallelGET(start) {
+		if result.status == 303 && location == "" {
+			location = result.header.Get("Location")
+		} else {
+			f.status(result, 400)
+			if result.header.Get("Set-Cookie") != "" {
+				t.Fatal("rejected admission changed the browser binding")
+			}
+		}
+	}
+	target, err := url.Parse(location)
+	if err != nil || !strings.HasPrefix(target.Query().Get("request"), samlLoginPrefix) {
+		t.Fatal("missing sealed continuation")
+	}
+	f.status(f.call(browserClient(), "GET", location, nil, nil), 400)
+	tampered := samlLoginPrefix + "x" + strings.TrimPrefix(target.Query().Get("request"), samlLoginPrefix)
+	f.status(f.call(f.browser, "GET", organizationLoginURL(sp.OrganizationID, tampered), nil, nil), 400)
+	responses := 0
+	for _, result := range parallelGET(location) {
+		if result.status == 200 {
+			responses++
+			response := verifySAMLResponse(t, f, sp, result)
+			if response.Status.StatusCode.StatusCode.Value != saml.StatusNoPassive || response.Assertion != nil || response.InResponseTo != requestID {
+				t.Fatal("unexpected passive response")
+			}
+		} else {
+			f.status(result, 400)
+		}
+	}
+	if responses != 1 {
+		t.Fatalf("emitted %d protocol errors", responses)
+	}
+	var markers int
+	if err := f.store.Database().QueryRow(t.Context(), `SELECT count(*) FROM authentication_requests
+		WHERE saml_service_provider_id=$1 AND saml_request_id=$2 AND data='{}' AND consumed_at IS NOT NULL`, sp.ID, requestID).Scan(&markers); err != nil || markers != 1 {
+		t.Fatal("expected one consumed replay marker", markers, err)
+	}
+}
+
+func TestSAMLLoginContextStaysInBrowser(t *testing.T) {
+	f := newFixture(t)
+	sp := enableSAML(t, f)
+	// Enforce the storage boundary on every intermediate transition as well as
+	// admission and issuance, so a later update cannot hide an earlier write.
+	if _, err := f.store.Database().Exec(t.Context(), `ALTER TABLE authentication_requests
+		ADD CHECK (protocol <> 'saml' OR data = '{}')`); err != nil {
+		t.Fatal(err)
+	}
+	initial := samlPage(t, f, sp)
+	pending := f.submit(initial.body, "send", url.Values{"phone": {"19900000001"}})
+	f.status(pending, 200)
+	f.status(f.submit(initial.body, "cancel", nil), 400)
+	verified := f.submit(pending.body, "verify", url.Values{"code": {f.sender.latest()}})
+	f.status(verified, 200)
+	verifySAMLResponse(t, f, sp, f.submit(verified.body, "continue", url.Values{"member": {f.member.ID}, "consent": {"yes"}}))
+	f.status(f.submit(verified.body, "continue", url.Values{"member": {f.member.ID}, "consent": {"yes"}}), 400)
+}
+
+func TestSAMLStoredRequestCanFinishAfterUpgrade(t *testing.T) {
+	f := newFixture(t)
+	sp := enableSAML(t, f)
+	// Use a browser with a binding and seed a pending row in the prior format.
+	f.call(f.browser, "GET", "/login", nil, nil)
+	origin, _ := url.Parse(f.server.URL)
+	var browser string
+	for _, cookie := range f.browser.Jar.Cookies(origin) {
+		if cookie.Name == f.service.cookieName("browser") {
+			browser = cookie.Value
+		}
+	}
+	if browser == "" {
+		t.Fatal("missing browser binding")
+	}
+	id, requestID := newID(), "_"+rand.Text()
+	_, err := f.store.Database().Exec(t.Context(), `INSERT INTO authentication_requests
+		(id,protocol,client_id,saml_service_provider_id,saml_request_id,data,expires_at)
+		VALUES($1,'saml',$2,$2,$3,jsonb_build_object('id',$1::text,'clientId',$2::text,'browserHash',$4::text,
+		'csrf',$5::text,'providerOrganizationId',$6::text,'saml',jsonb_build_object('serviceProviderId',$2::text,
+		'requestId',$3::text,'organizationId',$6::text,'revision',$7::bigint,'passive',true)),now()+interval '10 minutes')`,
+		id, sp.ID, requestID, config.SecretHash(browser), config.RandomSecret(), sp.OrganizationID, sp.Revision)
+	if err != nil {
+		t.Fatal(err)
+	}
+	location := organizationLoginURL(sp.OrganizationID, id)
+	response := verifySAMLResponse(t, f, sp, f.call(f.browser, "GET", location, nil, nil))
+	if response.InResponseTo != requestID || response.Status.StatusCode.StatusCode.Value != saml.StatusNoPassive {
+		t.Fatal("legacy request lost its SAML correlation")
+	}
+	f.status(f.call(f.browser, "GET", location, nil, nil), 400)
+}
+
 func TestSAMLConcurrentCompletionAndPolicyChanges(t *testing.T) {
 	for _, change := range []string{"concurrent", "registration", "member", "session"} {
 		t.Run(change, func(t *testing.T) {
@@ -449,7 +558,7 @@ func TestSAMLCompletionBoundaries(t *testing.T) {
 			case "other organization":
 				member = f.otherMember.ID
 			case "expired interaction":
-				if _, err := f.store.Database().Exec(t.Context(), "UPDATE authentication_requests SET expires_at=now()-interval '1 second' WHERE id=$1", hidden(t, page.body, "request")); err != nil {
+				if _, err := f.store.Database().Exec(t.Context(), "UPDATE authentication_requests SET expires_at=now()-interval '1 second' WHERE saml_service_provider_id=$1", sp.ID); err != nil {
 					t.Fatal(err)
 				}
 			case "fresh authentication":
@@ -480,8 +589,8 @@ func TestSAMLExpiryDuringCompletion(t *testing.T) {
 				var elapsed atomic.Int64
 				now := time.Now()
 				f.service.now = func() time.Time { return now.Add(time.Duration(elapsed.Load())) }
-				query := "UPDATE authentication_requests SET expires_at=$1 WHERE id=$2"
-				args := []any{now.Add(time.Minute), hidden(t, page.body, "request")}
+				query := "UPDATE authentication_requests SET expires_at=$1 WHERE saml_service_provider_id=$2"
+				args := []any{now.Add(time.Minute), sp.ID}
 				if expiry != "request" {
 					column := "expires_at"
 					if expiry == "absolute session" {
@@ -535,7 +644,7 @@ func TestSAMLExpiryDuringCompletion(t *testing.T) {
 					t.Fatal("issued after expiry during completion")
 				}
 				var consumed bool
-				if err := f.store.Database().QueryRow(t.Context(), "SELECT consumed_at IS NOT NULL FROM authentication_requests WHERE id=$1", hidden(t, page.body, "request")).Scan(&consumed); err != nil || consumed {
+				if err := f.store.Database().QueryRow(t.Context(), "SELECT consumed_at IS NOT NULL FROM authentication_requests WHERE saml_service_provider_id=$1", sp.ID).Scan(&consumed); err != nil || consumed {
 					t.Fatal("expired completion was committed", err)
 				}
 			})

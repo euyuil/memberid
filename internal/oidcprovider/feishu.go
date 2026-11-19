@@ -37,7 +37,7 @@ func (service *Service) startFeishu(w http.ResponseWriter, r *http.Request, requ
 	request.Feishu = &feishuAttempt{FeishuLoginContext: login, StateHash: config.SecretHash(state), Verifier: verifier, ExpiresAt: service.now().Add(5 * time.Minute)}
 	request.Fresh = true
 	request.ProviderOrganizationID = organizationID
-	if err := service.storage.saveRequest(r.Context(), request); err != nil {
+	if err := service.saveExternalLogin(w, r, request, state); err != nil {
 		http.Error(w, "Login transaction expired", http.StatusBadRequest)
 		return
 	}
@@ -74,11 +74,9 @@ func (service *Service) feishuCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	hash := config.SecretHash(state)
-	request, err := service.storage.loadRequest(r.Context(), "data->'feishu'->>'stateHash'", hash)
-	if err != nil || !sameSecret(request.BrowserHash, config.SecretHash(accountBrowser(r))) {
-		if err != nil {
-			failure = err
-		}
+	request, err := service.externalLoginRequest(r, state, "data->'feishu'->>'stateHash'")
+	if err != nil {
+		failure = err
 		http.Error(w, "Invalid or expired Feishu login", http.StatusBadRequest)
 		return
 	}
@@ -102,6 +100,9 @@ func (service *Service) feishuCallback(w http.ResponseWriter, r *http.Request) {
 		failure = err
 		http.Error(w, "Invalid or expired Feishu login", http.StatusBadRequest)
 		return
+	}
+	if request.browserHeldSAML() {
+		service.cookie(w, "saml_"+state, "", -time.Second)
 	}
 	if r.Form.Get("error") != "" || r.Form.Get("code") == "" {
 		if r.Form.Get("error") != "" {
