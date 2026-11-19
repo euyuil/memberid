@@ -24,6 +24,12 @@ func (service *Service) passwordLogin(w http.ResponseWriter, r *http.Request, re
 		return
 	}
 	username := r.PostForm.Get("username")
+	if request.entry != nil {
+		if err := service.storage.insertLoginEntry(r.Context(), request); err != nil {
+			http.Error(w, "Login transaction expired", http.StatusBadRequest)
+			return
+		}
+	}
 	event := service.loginEvent(r.Context(), request)
 	err := service.verifyPasswordLogin(w, r, request, organizationID, username, r.PostForm.Get("password"), &event)
 	service.recordVerification(r, event, "pwd", err)
