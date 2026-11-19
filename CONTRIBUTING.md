@@ -2,7 +2,7 @@
 
 ## Setup
 
-Use Git, Go 1.27.4, Node.js 26.13.1 LTS with npm 11.20.0, a POSIX shell, and Gitleaks 8.x (8.30.1 or newer). On Windows, Git Bash provides the shell. Prioritize reusing existing persistent toolchain installations in system or user scopes (on PATH, via environment package managers, or managed by tools such as mise for Go and Node via the repository `.mise.toml`) that satisfy these requirements; do not install local toolchains in temporary directories or duplicate existing installations. The frontend lockfile is `web/package-lock.json`.
+Use Git, Go 1.27.4, Node.js 26.13.1 LTS with npm 11.20.0, a POSIX shell, and Gitleaks 8.x (8.30.1 or newer). On Windows, Git Bash provides the shell. Reuse matching system or user installations and keep new toolchains outside temporary directories. If only Go is missing or mismatched, run `mise install go` from the repository root when mise is available. For Node.js, use `mise install node` in the same way. Each command installs only the named runtime at the version in `.mise.toml`. The frontend lockfile is `web/package-lock.json`.
 
 From the repository root, enable the versioned hooks:
 
@@ -10,7 +10,14 @@ From the repository root, enable the versioned hooks:
 git config --local core.hooksPath .githooks
 ```
 
-Inspect any existing hooks configuration before changing it. The hooks require Gitleaks on Git's PATH and reject whitespace errors, detected secrets, and known coding-agent attribution patterns. Bypassing hooks (`--no-verify`) is prohibited; false positives in synthetic credentials or fixtures must be explicitly allowed through reviewed `.gitleaksignore` or `.gitleaks.toml` configurations. They do not modify the staged content.
+Inspect any existing hooks configuration before changing it. The hooks require Gitleaks on Git's PATH and reject whitespace errors, detected secrets, and known coding-agent attribution patterns. The hooks leave staged content unchanged. Never bypass them with `--no-verify`.
+
+Review each fixture exception. For a confirmed false positive, add the finding's fingerprint to `.gitleaksignore` or limit a `.gitleaks.toml` allowlist entry to that specific finding. Include the following section when creating `.gitleaks.toml` to keep the built-in rules active.
+
+```toml
+[extend]
+useDefault = true
+```
 
 ## Local development stack
 
@@ -61,7 +68,7 @@ The project license remains undecided. Review exact dependency and bundled-mater
 
 Run `sh scripts/test-integration.sh` with Docker and the pinned Go toolchain available. The runner starts a labelled, disposable PostgreSQL 18.6 container, binds it only to loopback, runs integration tests with the race detector, and removes only its owned container. Local trust authentication is confined to that temporary test server; it is not a deployment configuration.
 
-To use an already disposable test server, set `MEMBERID_TEST_DATABASE_URL` and run `go test -race -tags=integration -timeout=10m ./...`. The timeout applies to each complete package, including the combined OIDC/SAML suite and its real password hashing under the race detector. The configured database role must be able to create and drop test databases. Each test creates a unique database and removes only that database. Do not use a production or personal working server.
+To reuse an existing isolated, disposable PostgreSQL Docker container dedicated to integration tests, set `MEMBERID_TEST_DATABASE_URL` to its connection URL and run `go test -race -tags=integration -timeout=10m ./...`. The timeout applies to each complete package, including the combined OIDC/SAML suite and its real password hashing under the race detector. The configured database role must be able to create and drop test databases. Each test creates a unique database and removes only that database. Do not use a production or personal working server.
 
 To measure console SQL calls and local HTTP latency, run
 `MEMBERID_TEST_QUERY_PROFILE=1 sh scripts/test-integration.sh`. This optional mode
