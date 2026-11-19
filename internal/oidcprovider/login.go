@@ -175,10 +175,13 @@ func (service *Service) login(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	var request *authorizationRequest
-	var err error
 	if r.Method == http.MethodGet && r.Form.Get("request") == "" {
-		request, err = service.createDirectLogin(r, pathOrganizationID)
+		if !service.directStarts.allow(accountBrowser(r), service.now()) {
+			w.Header().Set("Retry-After", "60")
+			http.Error(w, "Too many new login attempts. Try again later.", http.StatusTooManyRequests)
+			return
+		}
+		request, err := service.createDirectLogin(r, pathOrganizationID)
 		if err != nil {
 			if errors.Is(err, identity.ErrIneligible) {
 				http.Error(w, "Organization login is unavailable", http.StatusNotFound)
@@ -187,12 +190,13 @@ func (service *Service) login(w http.ResponseWriter, r *http.Request) {
 			}
 			return
 		}
-	} else {
-		request, err = service.storage.loginRequestByID(r.Context(), r.Form.Get("request"))
-		if err != nil {
-			http.Error(w, "Invalid or expired login transaction", http.StatusBadRequest)
-			return
-		}
+		http.Redirect(w, r, requestLoginURL(request), http.StatusSeeOther)
+		return
+	}
+	request, err := service.storage.loginRequestByID(r.Context(), r.Form.Get("request"))
+	if err != nil {
+		http.Error(w, "Invalid or expired login transaction", http.StatusBadRequest)
+		return
 	}
 	if request.Complete {
 		http.Error(w, "Login transaction has already completed", http.StatusBadRequest)
