@@ -11,6 +11,65 @@ import (
 	"github.com/euyuil/memberid/internal/identity"
 )
 
+func TestOrganizationLoginLookupErrors(t *testing.T) {
+	f := newFixture(t)
+	page := f.call(f.browser, "GET", "/login", nil, nil)
+	f.status(page, http.StatusOK)
+	requestQuery := "?request=" + url.QueryEscape(hidden(t, page.body, "request"))
+	selectOrganization := func(organizationID string) reply {
+		return f.submit(page.body, "choose-organization", url.Values{"organization": {organizationID}})
+	}
+	checkResponse := func(response reply, status int, message string) {
+		t.Helper()
+		f.status(response, status)
+		if strings.TrimSpace(response.body) != message {
+			t.Fatalf("response body = %q, want %q", response.body, message)
+		}
+	}
+
+	unknownID, err := identity.NewID(identity.OrganizationKind)
+	if err != nil {
+		t.Fatal(err)
+	}
+	disabled := "disabled"
+	if _, err := f.store.UpdateOrganization(t.Context(), identity.OperatorPrincipal(), f.otherMember.OrganizationID, identity.OrganizationChange{Status: &disabled}); err != nil {
+		t.Fatal(err)
+	}
+	for _, organizationID := range []string{unknownID, f.otherMember.OrganizationID} {
+		path := "/login/" + organizationID
+		for _, target := range []string{path, path + requestQuery} {
+			checkResponse(f.call(f.browser, "GET", target, nil, nil), http.StatusNotFound, "Organization login is unavailable")
+		}
+	}
+	for _, organizationID := range []string{"invalid id", unknownID, f.otherMember.OrganizationID} {
+		response := selectOrganization(organizationID)
+		f.status(response, http.StatusOK)
+		if !strings.Contains(response.body, "Enter a valid organization ID.") {
+			t.Fatalf("missing organization ID validation message for %q", organizationID)
+		}
+	}
+
+	// Break organization reads while leaving the stored login transaction readable.
+	if _, err := f.store.Database().Exec(t.Context(), "ALTER TABLE organizations RENAME TO unavailable_organizations"); err != nil {
+		t.Fatal(err)
+	}
+	path := "/login/" + f.member.OrganizationID
+	for _, target := range []string{path, path + requestQuery} {
+		checkResponse(f.call(f.browser, "GET", target, nil, nil), http.StatusServiceUnavailable, "Login temporarily unavailable")
+	}
+	checkResponse(selectOrganization(f.member.OrganizationID), http.StatusServiceUnavailable, "Login temporarily unavailable")
+	if _, err := f.store.Database().Exec(t.Context(), "ALTER TABLE unavailable_organizations RENAME TO organizations"); err != nil {
+		t.Fatal(err)
+	}
+
+	selected := selectOrganization(f.member.OrganizationID)
+	f.status(selected, http.StatusSeeOther)
+	if selected.header.Get("Location") != path+requestQuery {
+		t.Fatalf("organization selection redirected to %q", selected.header.Get("Location"))
+	}
+	f.status(f.call(f.browser, "GET", selected.header.Get("Location"), nil, nil), http.StatusOK)
+}
+
 func TestDirectOrganizationPasswordLoginOpensMemberAccount(t *testing.T) {
 	f := newFixture(t)
 	password, err := f.store.SetMemberPassword(t.Context(), identity.OperatorPrincipal(), f.member.OrganizationID, f.member.ID, "example")

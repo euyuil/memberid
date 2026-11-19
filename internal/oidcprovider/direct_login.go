@@ -13,9 +13,8 @@ import (
 
 func (service *Service) createDirectLogin(r *http.Request, organizationID string) (*authorizationRequest, error) {
 	if organizationID != "" {
-		organization, err := service.store.Organization(r.Context(), organizationID)
-		if err != nil || organization.Status != "enabled" {
-			return nil, identity.ErrIneligible
+		if err := service.requireLoginOrganization(r.Context(), organizationID); err != nil {
+			return nil, err
 		}
 	}
 	browser, _ := r.Context().Value(browserKey{}).(string)
