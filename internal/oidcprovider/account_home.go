@@ -84,8 +84,7 @@ func (service *Service) accountHome(w http.ResponseWriter, r *http.Request) {
 	}
 	nonce := config.RandomSecret()
 	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'nonce-"+nonce+"'; base-uri 'none'; frame-ancestors 'none'")
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_ = accountHomePage.Execute(w, struct {
+	writeHTMLPage(w, accountHomePage, struct {
 		Member identity.Member
 		Links  []link
 		Nonce  string

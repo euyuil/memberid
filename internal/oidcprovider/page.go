@@ -1,6 +1,7 @@
 package oidcprovider
 
 import (
+	"bytes"
 	"embed"
 	"html/template"
 	"net/http"
@@ -15,6 +16,16 @@ import (
 //go:embed login.html
 var pageFiles embed.FS
 var loginPage = template.Must(template.ParseFS(pageFiles, "login.html"))
+
+func writeHTMLPage(w http.ResponseWriter, page *template.Template, data any) {
+	var body bytes.Buffer
+	if err := page.Execute(&body, data); err != nil {
+		http.Error(w, "Unable to display this page.", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_, _ = w.Write(body.Bytes())
+}
 
 type memberChoice struct{ ID, Label string }
 type pageData struct {
@@ -129,6 +140,5 @@ func (service *Service) renderLogin(w http.ResponseWriter, r *http.Request, requ
 		formTargets = append(formTargets, "https://accounts.feishu.cn")
 	}
 	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'nonce-"+data.Nonce+"'; form-action "+strings.Join(formTargets, " ")+"; base-uri 'none'; frame-ancestors 'none'")
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_ = loginPage.Execute(w, data)
+	writeHTMLPage(w, loginPage, data)
 }
