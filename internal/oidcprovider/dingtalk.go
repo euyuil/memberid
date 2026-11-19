@@ -107,9 +107,6 @@ func (service *Service) dingTalkCallback(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "Invalid or expired DingTalk login", http.StatusBadRequest)
 		return
 	}
-	if request.browserHeldSAML() {
-		service.cookie(w, "saml_"+state, "", -time.Second)
-	}
 	if r.Form.Get("error") != "" || code == "" {
 		if r.Form.Get("error") != "" {
 			failure = callbackFailure(r.Form.Get("error"))
@@ -182,6 +179,9 @@ func (service *Service) completeExternalLogin(w http.ResponseWriter, r *http.Req
 		return
 	}
 	*request = completed
+	if request.browserHeldSAML() {
+		service.cookie(w, "saml_"+r.Form.Get("state"), "", -time.Second)
+	}
 	service.cookie(w, "session", secret, expires.Sub(service.now()))
 	http.Redirect(w, r, requestLoginURL(request), http.StatusSeeOther)
 }

@@ -2,6 +2,7 @@ package oidcprovider
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"time"
 
@@ -76,7 +77,9 @@ func (service *Service) feishuCallback(w http.ResponseWriter, r *http.Request) {
 	hash := config.SecretHash(state)
 	request, err := service.externalLoginRequest(r, state, "data->'feishu'->>'stateHash'")
 	if err != nil {
-		failure = err
+		if !errors.Is(err, identity.ErrIneligible) {
+			failure = err
+		}
 		http.Error(w, "Invalid or expired Feishu login", http.StatusBadRequest)
 		return
 	}
@@ -100,9 +103,6 @@ func (service *Service) feishuCallback(w http.ResponseWriter, r *http.Request) {
 		failure = err
 		http.Error(w, "Invalid or expired Feishu login", http.StatusBadRequest)
 		return
-	}
-	if request.browserHeldSAML() {
-		service.cookie(w, "saml_"+state, "", -time.Second)
 	}
 	if r.Form.Get("error") != "" || r.Form.Get("code") == "" {
 		if r.Form.Get("error") != "" {
