@@ -129,7 +129,7 @@ type authorizationRequest struct {
 func (r *authorizationRequest) externalPending() bool { return r.DingTalk != nil || r.Feishu != nil }
 
 func (r *authorizationRequest) GetID() string {
-	if r.entry != nil {
+	if r.entryToken != "" {
 		return r.entryToken
 	}
 	return r.ID

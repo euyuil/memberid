@@ -293,7 +293,7 @@ func TestSAMLCurrentEligibility(t *testing.T) {
 					t.Fatal("ineligible identity issued an assertion")
 				}
 				var consumed bool
-				if err := s.store.Database().QueryRow(t.Context(), "SELECT consumed_at IS NOT NULL FROM authentication_requests WHERE id=$1", hidden(t, page.body, "request")).Scan(&consumed); err != nil || consumed {
+				if err := s.store.Database().QueryRow(t.Context(), "SELECT bool_or(consumed_at IS NOT NULL) FROM authentication_requests WHERE saml_service_provider_id=$1", s.sp.ID).Scan(&consumed); err != nil || consumed {
 					t.Fatal("ineligible interaction committed", err)
 				}
 			})

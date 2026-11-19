@@ -76,7 +76,6 @@ func (service *Service) verifyPasswordLogin(w http.ResponseWriter, r *http.Reque
 	if err != nil {
 		return err
 	}
-	completed.Revision++
 	*request = completed
 	event.Actor = authevent.Actor{Kind: "member", ID: admission.MemberID}
 	event.MemberID, event.OrganizationID, event.BindingID = admission.MemberID, admission.OrganizationID, admission.BindingID

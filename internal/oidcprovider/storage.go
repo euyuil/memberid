@@ -14,6 +14,7 @@ import (
 	"github.com/euyuil/memberid/internal/config"
 	"github.com/euyuil/memberid/internal/identity"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/zitadel/oidc/v3/pkg/oidc"
 	"github.com/zitadel/oidc/v3/pkg/op"
 )
@@ -159,17 +160,33 @@ func (s *storage) saveRequest(ctx context.Context, request *authorizationRequest
 	if request.entry != nil {
 		return s.insertLoginEntry(ctx, request)
 	}
-	data, err := json.Marshal(request)
+	return s.advanceRequest(ctx, s.service.store.Database(), request)
+}
+
+type requestWriter interface {
+	Exec(context.Context, string, ...any) (pgconn.CommandTag, error)
+}
+
+func (s *storage) advanceRequest(ctx context.Context, db requestWriter, request *authorizationRequest) error {
+	var data []byte
+	var token string
+	var err error
+	if request.browserHeldSAML() {
+		token, err = s.service.sealSAMLLogin(request, request.Revision+1)
+	} else {
+		data, err = json.Marshal(request)
+	}
 	if err != nil {
 		return err
 	}
-	result, err := s.service.store.Database().Exec(ctx, "UPDATE authentication_requests SET data=$2,revision=revision+1 WHERE id=$1 AND code_hash IS NULL AND consumed_at IS NULL AND expires_at>$3 AND revision=$4", request.ID, data, s.service.now(), request.Revision)
+	result, err := db.Exec(ctx, "UPDATE authentication_requests SET data=COALESCE($2,data),revision=revision+1 WHERE id=$1 AND code_hash IS NULL AND consumed_at IS NULL AND expires_at>$3 AND revision=$4", request.ID, data, s.service.now(), request.Revision)
 	if err != nil {
 		return err
 	}
 	if result.RowsAffected() != 1 {
 		return oidc.ErrInvalidRequest()
 	}
+	request.entryToken = token
 	request.Revision++
 	return nil
 }

@@ -10,7 +10,6 @@ import (
 	"github.com/euyuil/memberid/internal/config"
 	"github.com/euyuil/memberid/internal/identity"
 	"github.com/jackc/pgx/v5"
-	"github.com/zitadel/oidc/v3/pkg/oidc"
 )
 
 type loginPolicy struct {
@@ -105,16 +104,8 @@ func (service *Service) persistVerifiedSession(ctx context.Context, tx pgx.Tx, c
 	}
 	setVerification(completed, verified)
 	now := service.now()
-	data, err := json.Marshal(completed)
-	if err != nil {
+	if err := service.storage.advanceRequest(ctx, tx, completed); err != nil {
 		return time.Time{}, err
-	}
-	result, err := tx.Exec(ctx, "UPDATE authentication_requests SET data=$2,revision=revision+1 WHERE id=$1 AND revision=$3 AND code_hash IS NULL AND consumed_at IS NULL AND expires_at>$4", completed.ID, data, completed.Revision, now)
-	if err != nil {
-		return time.Time{}, err
-	}
-	if result.RowsAffected() != 1 {
-		return time.Time{}, oidc.ErrInvalidRequest()
 	}
 	session, err := json.Marshal(completed.Verification)
 	if err != nil {

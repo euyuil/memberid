@@ -239,6 +239,8 @@ func (service *Service) login(w http.ResponseWriter, r *http.Request) {
 	var err error
 	if strings.HasPrefix(id, oidcLoginPrefix) {
 		request, err = service.readLoginEntry(r.Context(), id)
+	} else if strings.HasPrefix(id, samlLoginPrefix) {
+		request, err = service.readSAMLLogin(r.Context(), id)
 	} else {
 		request, err = service.storage.loginRequestByID(r.Context(), id)
 	}
@@ -448,8 +450,8 @@ func (service *Service) loginTransaction(w http.ResponseWriter, r *http.Request,
 					}
 				}
 				if !found {
-					message = "Select an available Member identity."
-					break
+					service.renderLogin(w, r, request, registered, "Select an available Member identity.")
+					return
 				}
 			} else if r.PostForm.Get("member") != "" {
 				http.Error(w, "Invalid subject selection", http.StatusBadRequest)
@@ -473,7 +475,12 @@ func (service *Service) loginTransaction(w http.ResponseWriter, r *http.Request,
 			request.SessionID = ""
 		}
 		if service.loadSession(r, request) || hadSession {
-			if err := service.saveLoginNavigation(r.Context(), request); err != nil {
+			if request.browserHeldSAML() {
+				request.entryToken, err = service.sealSAMLLogin(request, request.Revision)
+			} else {
+				err = service.saveLoginNavigation(r.Context(), request)
+			}
+			if err != nil {
 				http.Error(w, "Login transaction expired", http.StatusBadRequest)
 				return
 			}

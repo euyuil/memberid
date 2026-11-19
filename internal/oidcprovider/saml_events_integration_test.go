@@ -42,7 +42,7 @@ func TestSAMLIssuanceEventBoundaries(t *testing.T) {
 				t.Fatal("unexpected assertion delivery", result.status)
 			}
 			var consumed bool
-			if err := s.store.Database().QueryRow(t.Context(), "SELECT consumed_at IS NOT NULL FROM authentication_requests WHERE id=$1", hidden(t, page.body, "request")).Scan(&consumed); err != nil || consumed != succeeded {
+			if err := s.store.Database().QueryRow(t.Context(), "SELECT consumed_at IS NOT NULL FROM authentication_requests WHERE saml_service_provider_id=$1", s.sp.ID).Scan(&consumed); err != nil || consumed != succeeded {
 				t.Fatal("event and issuance transaction disagree", err)
 			}
 			recorder.Close(time.Second)
