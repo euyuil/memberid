@@ -115,7 +115,13 @@ import type {
   SAMLDirectory,
   SAMLServiceProvider,
 } from "@/saml-service-providers"
-import { memberListLocation, parseRoute, routeURL, type Route } from "@/routes"
+import {
+  isOrganizationDetail,
+  memberListLocation,
+  parseRoute,
+  routeURL,
+  type Route,
+} from "@/routes"
 import { describeEvent, type ManagementEvent } from "@/operation-history"
 import { currentLocation, Link, navigate } from "@/navigation"
 
@@ -680,6 +686,7 @@ export default function App() {
   const noMemberMatches = emptyMemberPage && memberSearchActive
   const showCreateOrganization =
     actor.platform && activeView === "organization" && !org && !unavailableScope
+  const showOrganizationDetails = isOrganizationDetail(route)
   const showCreateMember = membersView && !member && !!org && !unavailableScope
   const base = `/api/organizations/${encodeURIComponent(org)}`
   const scopeName = org ? (data.organization?.name ?? "当前组织") : "所有组织"
@@ -951,32 +958,27 @@ export default function App() {
               新增成员
             </Button>
           )}
-          {!membersView &&
-            !events &&
-            !authenticationEvents &&
-            !providers &&
-            !saml &&
-            org && (
-              <>
-                {actor.platform && (
-                  <Button
-                    variant="outline"
-                    render={<Link href="/organizations" />}
-                    nativeButton={false}
-                  >
-                    所有组织
-                  </Button>
-                )}
-                {data.organization && (
-                  <Button
-                    render={<Link href={routeURL(memberDirectoryRoute)} />}
-                    nativeButton={false}
-                  >
-                    查看成员
-                  </Button>
-                )}
-              </>
-            )}
+          {showOrganizationDetails && (
+            <>
+              {actor.platform && (
+                <Button
+                  variant="outline"
+                  render={<Link href="/organizations" />}
+                  nativeButton={false}
+                >
+                  所有组织
+                </Button>
+              )}
+              {data.organization && (
+                <Button
+                  render={<Link href={routeURL(memberDirectoryRoute)} />}
+                  nativeButton={false}
+                >
+                  查看成员
+                </Button>
+              )}
+            </>
+          )}
         </div>
       </div>
       <div className="console-feedback" aria-live="polite">
@@ -1189,56 +1191,51 @@ export default function App() {
                 onComplete={refresh}
               />
             )}
-            {data.organization &&
-              !events &&
-              !authenticationEvents &&
-              !membersView &&
-              !saml &&
-              !providers && (
-                <OrganizationDetails
-                  key={data.organization.id}
-                  organization={data.organization}
-                  canChangeStatus={actor.platform && org !== "org_system"}
-                  save={(name) =>
-                    request<Organization>(base, {
-                      method: "PATCH",
-                      headers: {
-                        "Content-Type": "application/json",
-                        "X-CSRF-Token": session.csrf,
-                      },
-                      body: JSON.stringify({ name }),
-                    })
-                  }
-                  onSaved={(organization) =>
-                    setData((current) =>
-                      current.organization?.id === organization.id
-                        ? { ...current, organization }
-                        : current
-                    )
-                  }
-                  onStatusChange={() =>
-                    setAction({
-                      title:
+            {showOrganizationDetails && data.organization && (
+              <OrganizationDetails
+                key={data.organization.id}
+                organization={data.organization}
+                canChangeStatus={actor.platform && org !== "org_system"}
+                save={(name) =>
+                  request<Organization>(base, {
+                    method: "PATCH",
+                    headers: {
+                      "Content-Type": "application/json",
+                      "X-CSRF-Token": session.csrf,
+                    },
+                    body: JSON.stringify({ name }),
+                  })
+                }
+                onSaved={(organization) =>
+                  setData((current) =>
+                    current.organization?.id === organization.id
+                      ? { ...current, organization }
+                      : current
+                  )
+                }
+                onStatusChange={() =>
+                  setAction({
+                    title:
+                      data.organization!.status === "enabled"
+                        ? "停用组织"
+                        : "启用组织",
+                    description:
+                      data.organization!.status === "enabled"
+                        ? "停用后，该组织成员无法通过后续登录和身份有效性检查。已有业务系统会话由各应用管理。"
+                        : undefined,
+                    path: base,
+                    method: "PATCH",
+                    body: {
+                      status:
                         data.organization!.status === "enabled"
-                          ? "停用组织"
-                          : "启用组织",
-                      description:
-                        data.organization!.status === "enabled"
-                          ? "停用后，该组织成员无法通过后续登录和身份有效性检查。已有业务系统会话由各应用管理。"
-                          : undefined,
-                      path: base,
-                      method: "PATCH",
-                      body: {
-                        status:
-                          data.organization!.status === "enabled"
-                            ? "disabled"
-                            : "enabled",
-                      },
-                      destructive: data.organization!.status === "enabled",
-                    })
-                  }
-                />
-              )}
+                          ? "disabled"
+                          : "enabled",
+                    },
+                    destructive: data.organization!.status === "enabled",
+                  })
+                }
+              />
+            )}
             {data.members && (
               <section aria-label="成员列表">
                 <div className="overflow-hidden rounded-md border">
