@@ -1,6 +1,11 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
-import { memberListLocation, parseRoute, routeURL } from "../src/routes.ts"
+import {
+  isOrganizationDetail,
+  memberListLocation,
+  parseRoute,
+  routeURL,
+} from "../src/routes.ts"
 
 test("page paths identify resources independently of query parameters", () => {
   for (const [path, view, org, member] of [
@@ -55,6 +60,22 @@ test("OIDC application navigation retains the selected management scope", () => 
     parseRoute("/oidc-applications?organizationId=org_example")?.org,
     ""
   )
+})
+
+test("organization detail controls follow the page when navigating within a scope", () => {
+  const org = "org_system"
+  const detailURL = routeURL({ org })
+  const appsURL = routeURL({ org, view: "oidc-applications" })
+  for (const [url, expected] of [
+    ["/organizations", false],
+    [detailURL, true],
+    [appsURL, false],
+    [detailURL, true],
+  ] as const) {
+    const route = parseRoute(url)
+    assert.ok(route)
+    assert.equal(isOrganizationDetail(route), expected, url)
+  }
 })
 
 test("only supported pages are routes", () => {

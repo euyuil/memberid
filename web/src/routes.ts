@@ -76,6 +76,10 @@ export function parseRoute(location: string) {
   }
 }
 
+export function isOrganizationDetail(route: Route): boolean {
+  return (route.view ?? "organization") === "organization" && !!route.org
+}
+
 export function memberListLocation(value: unknown): string | undefined {
   if (typeof value !== "string") return
   const route = parseRoute(value)
