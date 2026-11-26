@@ -25,7 +25,16 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
+import {
+  Field,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+} from "@/components/ui/field"
+import {
+  evidencePolicyError,
+  isExactApplicationURL,
+} from "@/oidc-application-policy"
 import { Input } from "@/components/ui/input"
 import {
   Table,
@@ -57,6 +66,7 @@ export type OIDCApplication = {
 export type OIDCApplicationDirectory = {
   items: OIDCApplication[]
   issuer: string
+  allowLoopbackHttp: boolean
   organizations: Organization[]
 }
 
@@ -218,6 +228,7 @@ export function OIDCApplications({
           key={application?.clientId ?? "create"}
           application={application}
           organizations={organizations}
+          allowLoopbackHttp={directory.allowLoopbackHttp}
           pending={pending}
           error={error}
           onClose={() =>
@@ -450,6 +461,7 @@ function URIFields({ label, values }: { label: string; values: string[] }) {
 function ApplicationForm({
   application,
   organizations,
+  allowLoopbackHttp,
   pending,
   error,
   onClose,
@@ -457,6 +469,7 @@ function ApplicationForm({
 }: {
   application?: OIDCApplication
   organizations: Organization[]
+  allowLoopbackHttp: boolean
   pending: boolean
   error: string
   onClose: () => void
@@ -467,6 +480,7 @@ function ApplicationForm({
     application?.preauthorized ?? false
   )
   const [validationError, setValidationError] = useState("")
+  const memberPolicy = !application || application.subjectKind === "member"
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const form = new FormData(event.currentTarget)
@@ -482,21 +496,23 @@ function ApplicationForm({
     if (
       !redirectUris.length ||
       [...redirectUris, ...postLogoutRedirectUris, ...accountReturnUris].some(
-        (value) => {
-          const url = URL.parse(value)
-          return (
-            !url ||
-            url.protocol !== "https:" ||
-            Boolean(url.username || url.password) ||
-            value.includes("#") ||
-            value.includes("*")
-          )
-        }
+        (value) => !isExactApplicationURL(value, allowLoopbackHttp)
       )
     ) {
       setValidationError(
         "请填写有效的 HTTPS 回调地址，每行一个，地址中不能包含通配符、片段或用户信息。"
       )
+      return
+    }
+    const evidenceScope = field("evidenceScope")
+    const evidenceAudience = field("evidenceAudience")
+    const policyError = evidencePolicyError(
+      evidenceScope,
+      evidenceAudience,
+      allowLoopbackHttp
+    )
+    if (policyError) {
+      setValidationError(policyError)
       return
     }
     setValidationError("")
@@ -508,6 +524,7 @@ function ApplicationForm({
       redirectUris,
       postLogoutRedirectUris,
       accountReturnUris,
+      ...(memberPolicy ? { evidenceScope, evidenceAudience } : {}),
       preauthorized,
       refresh,
     })
@@ -614,6 +631,38 @@ function ApplicationForm({
                 defaultValue={application?.accountReturnUris?.join("\n")}
               />
             </Field>
+            {memberPolicy && (
+              <div className="grid gap-3">
+                <Field>
+                  <FieldLabel htmlFor="oidc-evidence-scope">
+                    身份凭据范围（可选）
+                  </FieldLabel>
+                  <Input
+                    id="oidc-evidence-scope"
+                    name="evidenceScope"
+                    maxLength={128}
+                    defaultValue={application?.evidenceScope}
+                    placeholder="member:evidence"
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="oidc-evidence-audience">
+                    身份凭据接收方（资源 URL）
+                  </FieldLabel>
+                  <Input
+                    id="oidc-evidence-audience"
+                    name="evidenceAudience"
+                    defaultValue={application?.evidenceAudience}
+                    placeholder="https://api.example.com"
+                    aria-describedby="oidc-evidence-disclosure"
+                  />
+                  <FieldDescription id="oidc-evidence-disclosure">
+                    应用请求此范围时，发给该资源的访问令牌将包含组织、成员和绑定
+                    ID，以及认证因子的 ID、类型、认证方式、认证时间和到期时间。
+                  </FieldDescription>
+                </Field>
+              </div>
+            )}
             <Field orientation="horizontal">
               <Checkbox
                 id="oidc-preauthorized"

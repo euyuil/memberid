@@ -109,21 +109,45 @@ func TestOIDCApplicationPolicyManagement(t *testing.T) {
 	consoleLogin(t, f, server, admin.ID)
 	csrf := consoleJSON(t, f, server, "GET", "/api/session", "", "", 200)["csrf"].(string)
 	const base = "/api/oidc-applications"
-	payload := fmt.Sprintf(`{"clientId":"policy","displayName":"Policy application","organizationId":%q,"redirectUris":[%q],"accountReturnUris":["https://app.example.invalid/account"],"preauthorized":true}`, f.member.OrganizationID, callback)
+	const scope = "member:evidence"
+	const audience = "https://api.example.test"
+	payload := fmt.Sprintf(`{"clientId":"policy","displayName":"Policy application","redirectUris":[%q],"accountReturnUris":["https://app.example.invalid/account"],"preauthorized":true,"refresh":true,"evidenceScope":%q,"evidenceAudience":%q}`, callback, scope, audience)
+	consoleJSON(t, f, server, "POST", base, csrf, strings.Replace(payload, audience, "", 1), 400)
 	created := consoleJSON(t, f, server, "POST", base, csrf, payload, 200)
 	application := created["application"].(map[string]any)
-	if application["preauthorized"] != true || application["subjectKind"] != "member" || len(application["accountReturnUris"].([]any)) != 1 {
+	if application["preauthorized"] != true || application["subjectKind"] != "member" || len(application["accountReturnUris"].([]any)) != 1 || application["evidenceScope"] != scope || application["evidenceAudience"] != audience {
 		t.Fatal("policy missing", application)
 	}
 	f.secret = created["clientSecret"].(string)
-	page, _ := f.loginPage("policy", "openid profile")
+	page, verifier := f.loginPage("policy", "openid offline_access "+scope)
 	if strings.Contains(page.body, `id="phone"`) {
 		page = f.verifyPhone(page)
 	}
 	if !strings.Contains(page.body, `name="consent" type="checkbox" value="yes" checked`) {
 		t.Fatal("live policy did not skip consent")
 	}
-	update := map[string]any{"expectedRevision": 1, "displayName": "Updated policy", "organizationId": f.member.OrganizationID, "redirectUris": []string{callback}}
+	token := f.exchange("policy", f.complete(page, f.member.ID), verifier)
+	f.status(token, 200)
+	tokens := jsonObject(t, token)
+	checkEvidence := func(access any, wantAudience string) {
+		t.Helper()
+		claims := f.signedClaims(access.(string))
+		aud, _ := claims["aud"].([]any)
+		authn, _ := claims["authentication"].(map[string]any)
+		if len(aud) != 1 || aud[0] != wantAudience || claims["organizationId"] != f.member.OrganizationID || claims["memberId"] != f.member.ID ||
+			claims["bindingId"] == nil || authn["factorType"] != "phone" || authn["factorId"] == nil {
+			t.Fatal("unexpected evidence token claims")
+		}
+	}
+	checkEvidence(tokens["access_token"], audience)
+	page, verifier = f.loginPage("policy", "openid offline_access")
+	ordinary := f.exchange("policy", f.complete(page, f.member.ID), verifier)
+	f.status(ordinary, 200)
+	ordinaryTokens := jsonObject(t, ordinary)
+	if f.signedClaims(ordinaryTokens["access_token"].(string))["authentication"] != nil {
+		t.Fatal("ordinary scope released authentication evidence")
+	}
+	update := map[string]any{"expectedRevision": 1, "displayName": "Updated policy", "redirectUris": []string{callback}, "refresh": true}
 	send := func(status int) map[string]any {
 		t.Helper()
 		b, _ := json.Marshal(update)
@@ -131,7 +155,7 @@ func TestOIDCApplicationPolicyManagement(t *testing.T) {
 	}
 	send(200) // Older callers do not erase policy fields they did not send.
 	stored, err := f.store.OIDCClient(ctx, "policy")
-	if err != nil || !stored.Client.Preauthorized || len(stored.Client.AccountReturnURIs) != 1 {
+	if err != nil || !stored.Client.Preauthorized || len(stored.Client.AccountReturnURIs) != 1 || stored.Client.EvidenceScope != scope || stored.Client.EvidenceAudience != audience {
 		t.Fatal("omitted policy was lost", err)
 	}
 	update["expectedRevision"] = 2
@@ -143,16 +167,49 @@ func TestOIDCApplicationPolicyManagement(t *testing.T) {
 		t.Fatal("invalid update changed policy")
 	}
 	update["accountReturnUris"] = []string{}
+	update["evidenceScope"] = scope
+	send(400) // Both policy fields must be supplied on edit.
+	update["evidenceScope"], update["evidenceAudience"] = "profile", audience
+	send(400)
+	update["evidenceScope"] = scope
+	update["evidenceAudience"] = audience + "?tenant=example"
+	send(400)
+	const newAudience = "https://reports.example.test"
+	update["evidenceAudience"] = newAudience
 	send(200)
 	send(409)
 	stored, _ = f.store.OIDCClient(ctx, "policy")
 	if stored.Client.Preauthorized || len(stored.Client.AccountReturnURIs) != 0 {
 		t.Fatal("explicit policy removal ignored")
 	}
-	page, _ = f.loginPage("policy", "openid profile")
+	f.invalidRefresh("policy", tokens["refresh_token"].(string))
+	f.status(f.refresh("policy", ordinaryTokens["refresh_token"].(string), ""), 200)
+	page, verifier = f.loginPage("policy", "openid offline_access "+scope)
 	if !strings.Contains(page.body, `name="consent" type="checkbox" value="yes" required`) {
 		t.Fatal("live policy did not restore consent")
 	}
+	token = f.exchange("policy", f.complete(page, f.member.ID), verifier)
+	f.status(token, 200)
+	updatedTokens := jsonObject(t, token)
+	checkEvidence(updatedTokens["access_token"], newAudience)
+	update["expectedRevision"], update["evidenceScope"], update["evidenceAudience"] = 3, "", ""
+	send(200)
+	stored, err = f.store.OIDCClient(ctx, "policy")
+	if err != nil || stored.Client.EvidenceScope != "" || stored.Client.EvidenceAudience != "" {
+		t.Fatal("explicit evidence removal was not persisted", err)
+	}
+	update["expectedRevision"], update["evidenceScope"], update["evidenceAudience"] = 4, scope, newAudience
+	send(200)
+	// Restoring the policy must not reactivate a grant revoked by its removal.
+	f.invalidRefresh("policy", updatedTokens["refresh_token"].(string))
+	events, _ := json.Marshal(consoleJSON(t, f, server, "GET", "/api/events", "", "", 200))
+	if !strings.Contains(string(events), newAudience) || !strings.Contains(string(events), scope) {
+		t.Fatal("evidence policy missing from management history")
+	}
+	consoleJSON(t, f, server, "PATCH", base+"/policy", csrf, `{"expectedRevision":5,"enabled":false,"evidenceScope":"","evidenceAudience":""}`, 400)
+	patch := fmt.Sprintf(`{"expectedRevision":1,"displayName":"Example","redirectUris":[%q],"evidenceScope":%q,"evidenceAudience":%q}`, callback, scope, audience)
+	consoleJSON(t, f, server, "PATCH", base+"/console", csrf, patch, 403)
+	consoleJSON(t, f, server, "PATCH", base+"/registration", csrf, patch, 403)
 	consoleJSON(t, f, server, "PATCH", base+"/policy", csrf, `{"expectedRevision":3,"enabled":false,"preauthorized":true}`, 400)
 	consoleJSON(t, f, server, "PATCH", base+"/console", csrf, `{"expectedRevision":1,"displayName":"Console","redirectUris":["https://app.example.invalid/callback"],"preauthorized":false}`, 403)
 	// Organization administrators cannot configure installation-wide applications.
@@ -163,6 +220,6 @@ func TestOIDCApplicationPolicyManagement(t *testing.T) {
 	csrf = consoleJSON(t, f, server, "GET", "/api/session", "", "", 200)["csrf"].(string)
 	consoleJSON(t, f, server, "GET", base, "", "", 403)
 	consoleJSON(t, f, server, "POST", base, csrf, payload, 403)
-	update["expectedRevision"] = 3
+	update["expectedRevision"] = 5
 	send(403)
 }

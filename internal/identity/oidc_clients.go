@@ -133,6 +133,7 @@ func (service *ManagementService) CreateOIDCApplication(ctx context.Context, pri
 			OrganizationID: application.OrganizationID, RedirectURIs: application.RedirectURIs,
 			PostLogoutRedirectURIs: application.PostLogoutRedirectURIs, Refresh: application.Refresh,
 			AccountReturnURIs: application.AccountReturnURIs, Preauthorized: application.Preauthorized,
+			EvidenceScope: application.EvidenceScope, EvidenceAudience: application.EvidenceAudience,
 		},
 	}
 	return service.store.CreateOIDCClient(ctx, principal, registration, loopback)
@@ -175,6 +176,8 @@ type OIDCApplicationChange struct {
 	RedirectURIs           []string  `json:"redirectUris"`
 	PostLogoutRedirectURIs []string  `json:"postLogoutRedirectUris"`
 	AccountReturnURIs      *[]string `json:"accountReturnUris"`
+	EvidenceScope          *string   `json:"evidenceScope"`
+	EvidenceAudience       *string   `json:"evidenceAudience"`
 	Preauthorized          *bool     `json:"preauthorized"`
 	Refresh                bool      `json:"refresh"`
 	Enabled                *bool     `json:"enabled"`
@@ -183,12 +186,12 @@ type OIDCApplicationChange struct {
 func (service *ManagementService) UpdateOIDCApplication(ctx context.Context, principal Principal, id string, change OIDCApplicationChange, loopback bool) (OIDCApplication, error) {
 	action := actionUpdate
 	if change.Enabled != nil {
-		if change.DisplayName != "" || change.OrganizationID != "" || change.RedirectURIs != nil || change.PostLogoutRedirectURIs != nil || change.AccountReturnURIs != nil || change.Preauthorized != nil || change.Refresh {
+		if change.DisplayName != "" || change.OrganizationID != "" || change.RedirectURIs != nil || change.PostLogoutRedirectURIs != nil || change.AccountReturnURIs != nil || change.Preauthorized != nil || change.EvidenceScope != nil || change.EvidenceAudience != nil || change.Refresh {
 			return OIDCApplication{}, ErrInvalid
 		}
 		action = actionStatusUpdate
 	}
-	if change.ExpectedRevision < 1 {
+	if change.ExpectedRevision < 1 || (change.EvidenceScope == nil) != (change.EvidenceAudience == nil) {
 		return OIDCApplication{}, ErrInvalid
 	}
 	return service.store.changeOIDCClient(ctx, principal, id, change.ExpectedRevision, action, func(registration *OIDCClientRegistration) (bool, error) {
@@ -200,6 +203,12 @@ func (service *ManagementService) UpdateOIDCApplication(ctx context.Context, pri
 			return false, ErrInvalid
 		}
 		client := &registration.Client
+		if change.EvidenceScope != nil {
+			if client.SubjectKind != "member" {
+				return false, ErrForbidden
+			}
+			client.EvidenceScope, client.EvidenceAudience = *change.EvidenceScope, *change.EvidenceAudience
+		}
 		revoke := client.OrganizationID != change.OrganizationID || client.Refresh && !change.Refresh
 		registration.DisplayName = change.DisplayName
 		client.RedirectURIs, client.PostLogoutRedirectURIs = change.RedirectURIs, change.PostLogoutRedirectURIs
@@ -271,8 +280,11 @@ func (store *Store) changeOIDCClient(ctx context.Context, principal Principal, i
 			id, registration.DisplayName, registration.Enabled, registration.Revision, registration.Client); err != nil {
 			return storageError(err)
 		}
-		if revoke {
-			if _, err := tx.Exec(ctx, "UPDATE oidc_grants SET revoked_at=$2 WHERE client_id=$1 AND revoked_at IS NULL", id, time.Now().UTC()); err != nil {
+		oldEvidenceChanged := previous.EvidenceScope != "" &&
+			(previous.EvidenceScope != registration.Client.EvidenceScope || previous.EvidenceAudience != registration.Client.EvidenceAudience)
+		if revoke || oldEvidenceChanged {
+			if _, err := tx.Exec(ctx, `UPDATE oidc_grants SET revoked_at=$2 WHERE client_id=$1 AND revoked_at IS NULL
+ AND ($3 OR (data->'scopes') ? $4)`, id, time.Now().UTC(), revoke, previous.EvidenceScope); err != nil {
 				return err
 			}
 		}

@@ -20,8 +20,9 @@ func (s *Service) registerOIDCApplicationRoutes(installation *config.Loaded) {
 		value, err := s.management.OIDCApplications(r.Context(), r.Context().Value(sessionKey{}).(session).principal())
 		respond(w, struct {
 			identity.OIDCApplicationDirectory
-			Issuer string `json:"issuer"`
-		}{value, installation.Issuer}, err)
+			Issuer            string `json:"issuer"`
+			AllowLoopbackHTTP bool   `json:"allowLoopbackHttp"`
+		}{value, installation.Issuer, installation.AllowLoopbackHTTP}, err)
 	})
 	s.routes.HandleFunc("POST "+collection, func(w http.ResponseWriter, r *http.Request) {
 		var input struct {
@@ -31,6 +32,8 @@ func (s *Service) registerOIDCApplicationRoutes(installation *config.Loaded) {
 			RedirectURIs           []string `json:"redirectUris"`
 			PostLogoutRedirectURIs []string `json:"postLogoutRedirectUris"`
 			AccountReturnURIs      []string `json:"accountReturnUris"`
+			EvidenceScope          string   `json:"evidenceScope"`
+			EvidenceAudience       string   `json:"evidenceAudience"`
 			Preauthorized          bool     `json:"preauthorized"`
 			Refresh                bool     `json:"refresh"`
 		}
@@ -43,6 +46,7 @@ func (s *Service) registerOIDCApplicationRoutes(installation *config.Loaded) {
 				ClientID: input.ClientID, DisplayName: input.DisplayName, OrganizationID: input.OrganizationID,
 				RedirectURIs: input.RedirectURIs, PostLogoutRedirectURIs: input.PostLogoutRedirectURIs, Refresh: input.Refresh,
 				AccountReturnURIs: input.AccountReturnURIs, Preauthorized: input.Preauthorized,
+				EvidenceScope: input.EvidenceScope, EvidenceAudience: input.EvidenceAudience,
 			}, config.SecretHash(secret), installation.AllowLoopbackHTTP)
 		respond(w, oidcApplicationResult{value, secret}, err)
 	})
