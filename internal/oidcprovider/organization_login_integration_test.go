@@ -66,6 +66,52 @@ func TestOrganizationFirstLoginBindsMethodsAndMembers(t *testing.T) {
 	f.status(f.exchange("example-web", code, verifier), http.StatusOK)
 }
 
+func TestScopedQualifiedPasswordUsername(t *testing.T) {
+	f := newFixture(t)
+	ctx, op := t.Context(), identity.OperatorPrincipal()
+	for _, member := range []identity.Member{f.member, f.otherMember} {
+		password, err := f.store.SetMemberPassword(ctx, op, member.OrganizationID, member.ID, "Casey")
+		if err != nil {
+			t.Fatal(err)
+		}
+		path := "/login/" + member.OrganizationID
+		signIn := func(input, suffix string, ok bool) {
+			t.Helper()
+			f.browser = browserClient()
+			page := f.openDirectLogin(path)
+			if !strings.Contains(page.body, `data-suffix="`+suffix+`"`) {
+				t.Fatal("missing preferred password suffix", suffix)
+			}
+			response := f.submitDirect(page, path, "password", url.Values{"username": {input}, "password": {password}})
+			if ok {
+				f.status(response, http.StatusSeeOther)
+				if response.header.Get("Location") != "/account?memberId="+member.ID {
+					t.Fatal("qualified username selected the wrong Member")
+				}
+			} else {
+				f.status(response, http.StatusOK)
+				if !strings.Contains(response.body, "does not match this organization") {
+					t.Fatal("expected organization mismatch", input)
+				}
+			}
+		}
+		signIn("Casey@"+member.OrganizationID, member.OrganizationID, true)
+		if member.ID == f.member.ID {
+			if err := f.store.AssignOrganizationSlug(ctx, op, member.OrganizationID, "north"); err != nil {
+				t.Fatal(err)
+			}
+			signIn("CASEY@NORTH", "north", true)
+			signIn("Casey@"+member.OrganizationID, "north", true)
+			signIn("casey@"+f.otherMember.OrganizationID, "north", false)
+		} else {
+			signIn("casey@north", member.OrganizationID, false)
+			signIn("casey@unknown", member.OrganizationID, false)
+			signIn("casey@@north", member.OrganizationID, false)
+			signIn("casey@", member.OrganizationID, false)
+		}
+	}
+}
+
 func TestProviderLoginNames(t *testing.T) {
 	f := newFixture(t)
 	enableDingTalk(t, f, true)
