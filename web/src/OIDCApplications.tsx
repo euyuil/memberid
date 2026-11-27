@@ -55,6 +55,7 @@ export type OIDCApplication = {
   redirectUris: string[]
   postLogoutRedirectUris?: string[]
   accountReturnUris: string[] | null
+  allowOrganizationScope: boolean
   preauthorized: boolean
   subjectKind: "member" | "factor"
   evidenceScope?: string
@@ -378,6 +379,14 @@ export function OIDCApplications({
                     </Button>
                   </Field>
                 )}
+              {panel.application.subjectKind === "member" && (
+                <ReadField
+                  label="读取登录组织 ID"
+                  value={
+                    panel.application.allowOrganizationScope ? "允许" : "不允许"
+                  }
+                />
+              )}
               <ReadField
                 label="Refresh Token"
                 value={panel.application.refresh ? "允许" : "不允许"}
@@ -604,6 +613,9 @@ function ApplicationForm({
   onClose: () => void
   onSave: (input: object) => void
 }) {
+  const [allowOrganizationScope, setAllowOrganizationScope] = useState(
+    application?.allowOrganizationScope ?? false
+  )
   const [refresh, setRefresh] = useState(application?.refresh ?? false)
   const [preauthorized, setPreauthorized] = useState(
     application?.preauthorized ?? false
@@ -657,6 +669,9 @@ function ApplicationForm({
       redirectUris,
       postLogoutRedirectUris,
       accountReturnUris,
+      ...(!application || application.subjectKind === "member"
+        ? { allowOrganizationScope }
+        : {}),
       ...(memberPolicy ? { evidenceScope, evidenceAudience } : {}),
       ...(platform ? { preauthorized } : {}),
       refresh,
@@ -806,6 +821,18 @@ function ApplicationForm({
                   此应用可在用户完成认证后接收请求的身份信息，无需再次确认授权。应用明确要求确认时仍需用户确认。
                 </AlertDescription>
               </Alert>
+            )}
+            {(!application || application.subjectKind === "member") && (
+              <Field orientation="horizontal">
+                <Checkbox
+                  id="oidc-organization-scope"
+                  checked={allowOrganizationScope}
+                  onCheckedChange={setAllowOrganizationScope}
+                />
+                <FieldLabel htmlFor="oidc-organization-scope">
+                  允许应用读取登录组织 ID
+                </FieldLabel>
+              </Field>
             )}
             <Field orientation="horizontal">
               <Checkbox

@@ -400,6 +400,16 @@ func (s *storage) SetUserinfoFromRequest(ctx context.Context, info *oidc.UserInf
 	if err != nil {
 		return err
 	}
+	if slices.Contains(scopes, identity.OrganizationScope) && g.MemberID != "" {
+		registered, err := s.client(ctx, g.ClientID)
+		if err != nil {
+			return err
+		}
+		if !registered.IsScopeAllowed(identity.OrganizationScope) {
+			return oidc.ErrInvalidScope()
+		}
+		info.AppendClaims("organizationId", g.OrganizationID)
+	}
 	info.AppendClaims("sid", g.SessionID)
 	return s.userinfo(ctx, info, g, scopes)
 }

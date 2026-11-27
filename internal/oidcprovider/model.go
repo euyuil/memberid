@@ -80,6 +80,9 @@ func (c client) RestrictAdditionalAccessTokenScopes() func([]string) []string {
 	return func(scopes []string) []string { return scopes }
 }
 func (c client) IsScopeAllowed(scope string) bool {
+	if scope == identity.OrganizationScope {
+		return c.registration.AllowOrganizationScope && c.registration.SubjectKind == "member"
+	}
 	return c.registration.EvidenceScope != "" && scope == c.registration.EvidenceScope
 }
 func (c client) IDTokenUserinfoClaimsAssertion() bool { return false }

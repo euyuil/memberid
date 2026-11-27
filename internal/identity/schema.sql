@@ -1,7 +1,7 @@
 CREATE TABLE memberid_schema (
-    version integer PRIMARY KEY CHECK (version = 33)
+    version integer PRIMARY KEY CHECK (version = 34)
 );
-INSERT INTO memberid_schema(version) VALUES (33);
+INSERT INTO memberid_schema(version) VALUES (34);
 
 CREATE TABLE database_upgrades (
     to_version integer PRIMARY KEY,
@@ -180,6 +180,11 @@ CREATE TABLE oidc_clients (
     registration jsonb NOT NULL,
     owner_organization_id text COLLATE "C" NOT NULL REFERENCES organizations(id),
     published boolean NOT NULL DEFAULT false,
+    CONSTRAINT oidc_clients_organization_scope_check CHECK (
+        NOT registration ? 'allowOrganizationScope'
+        OR registration @> '{"allowOrganizationScope": false}'
+        OR registration @> '{"allowOrganizationScope": true, "subjectKind": "member"}'
+    ),
     CONSTRAINT oidc_clients_system_owner_check CHECK (NOT system OR owner_organization_id = 'org_system'),
     CHECK (NOT system OR enabled),
     CHECK ((registration->>'client_id') IS NOT DISTINCT FROM client_id)

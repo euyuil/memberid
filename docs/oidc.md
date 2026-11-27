@@ -16,7 +16,7 @@ Discover configuration at `ISSUER/.well-known/openid-configuration`.
 | Token revocation | `/oauth/revoke` |
 | RP-initiated logout | `/oauth/logout` |
 
-Authorization uses `response_type=code`, mandatory PKCE `S256`, and the `openid` scope. Token exchange, introspection, and revocation require a form-encoded POST body and `client_secret_basic`. Query-string credentials, body client secrets, and combined client-authentication methods are rejected. ID Tokens and JWT access tokens use RS256 and a public-key-derived `kid`. Discovery advertises only the enabled profile, including the registered custom evidence scopes.
+Authorization uses `response_type=code`, mandatory PKCE `S256`, and the `openid` scope. Token exchange, introspection, and revocation require a form-encoded POST body and `client_secret_basic`. Query-string credentials, body client secrets, and combined client-authentication methods are rejected. ID Tokens and JWT access tokens use RS256 and a public-key-derived `kid`. Discovery advertises only the enabled profile, including registered evidence scopes and the organization scope when at least one enabled Member client permits it.
 
 Authorization responses support `query` (the default) and `fragment`, as advertised in Discovery. `form_post` and other response modes are not enabled and receive `invalid_request` before login. Clients must select one of the advertised modes; successful responses and interaction errors use that selected mode.
 
@@ -69,6 +69,31 @@ Member without another SMS challenge. The [console identity switch](console.md#s
 uses this standard authorization flow and separately checks management access.
 
 A separately registered `subjectKind=factor` client may receive a verified phone-factor subject before membership exists. This policy requires an operator-selected evidence scope and fixed audience. It does not create a Member or grant access to an organization. Ordinary clients cannot request this subject mode themselves.
+
+## Current organization in the ID token
+
+A Member client can request the MemberID extension scope `memberid.organization`. Its administrator must first enable **允许应用读取登录组织 ID** on the registration (or supply `--allow-organization-scope` at registration with `client add`). The default is off. The same opt-in applies to owner-only, shared and unrestricted Member clients. A requested but unregistered optional scope is omitted from the grant. To obtain the organization ID the authorization request must include `openid memberid.organization`. The normal interactive consent or configured administrative preauthorization applies.
+
+When granted, the signed ID token includes the authenticated Member's immutable organization ID as `organizationId`. The standard `sub` identifies that Member within the issuer. Two Members of one organization receive the same organization ID. The same person using separate Members of different organizations receives distinct subjects and organization IDs. Renaming an organization preserves its ID. Use `profile` and UserInfo for display names.
+
+A standard refresh retains this claim while the scope remains granted. Narrowing the refresh request to `openid` omits it. Removing the registration opt-in revokes grants containing this scope. The scope adds no claim to the access token or UserInfo and releases no factor, binding, role or membership list. The separate evidence scope retains its configured audience and access-token disclosure.
+
+The following Go callback uses the same verification path as the MemberID console. Configure `party` with the exact expected issuer and client ID, issuer discovery and JWKS, and a nonce verifier bound to the stored authorization transaction. Check the returned state and retrieve the original PKCE verifier before exchanging the code.
+
+```go
+tokens, err := rp.CodeExchange[*oidc.IDTokenClaims](ctx, code, party, rp.WithCodeVerifier(pkceVerifier))
+if err != nil {
+    return err
+}
+claims := tokens.IDTokenClaims // Verified signature, issuer, audience, expiry and nonce.
+organizationID, ok := claims.Claims["organizationId"].(string)
+if !ok || organizationID == "" {
+    return errors.New("this workspace requires the organization scope")
+}
+return openWorkspace(claims.Issuer, claims.Subject, organizationID)
+```
+
+The relying party maps the verified organization to its workspace and checks the Member's permissions there.
 
 ## Token validation and eligibility
 
@@ -141,7 +166,7 @@ memberid serve --directory .local/memberid --listen 127.0.0.1:8080
 
 Member clients can authenticate with an [organization-scoped password](administration.md#organization-scoped-passwords) and receive `amr=["pwd"]`. The username belongs to the password credential; subject and profile claims retain their existing Member semantics. The password form is part of the browser authorization flow. Token requests continue to use the documented Authorization Code and Refresh Token grants.
 
-Phone, DingTalk, and Feishu can be enabled independently of password login. Omitting `--directory` starts health-only mode. Local signing and installation configuration is loaded at startup. Client policy and organization provider credentials use the current database registrations. The current schema is version 33. Startup refuses older schemas and preserves existing database contents.
+Phone, DingTalk, and Feishu can be enabled independently of password login. Omitting `--directory` starts health-only mode. Local signing and installation configuration is loaded at startup. Client policy and organization provider credentials use the current database registrations. The current schema is version 34. Startup refuses older schemas and preserves existing database contents.
 
 For the first Member, create its organization and Member through the operator CLI, then let the person verify their phone in an application login. Verification creates only the factor. An authorized operator can inspect that existing factor and explicitly bind it:
 
