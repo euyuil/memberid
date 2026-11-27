@@ -6,14 +6,14 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
-	"github.com/euyuil/memberid/internal/config"
+	"github.com/zhizhun-tech/memberid/internal/config"
 	"net/http"
 	"net/url"
 	"strings"
 	"sync"
 	"testing"
 
-	"github.com/euyuil/memberid/internal/identity"
+	"github.com/zhizhun-tech/memberid/internal/identity"
 )
 
 const linkPhoneNumber = "19900000003"

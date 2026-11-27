@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/euyuil/memberid/internal/authevent"
+	"github.com/zhizhun-tech/memberid/internal/authevent"
 )
 
 func TestClientRevocationEvents(t *testing.T) {

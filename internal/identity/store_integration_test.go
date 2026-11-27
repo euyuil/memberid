@@ -8,8 +8,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/euyuil/memberid/internal/testdb"
 	"github.com/jackc/pgx/v5"
+	"github.com/zhizhun-tech/memberid/internal/testdb"
 )
 
 func testStore(t *testing.T) *Store {

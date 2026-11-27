@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/euyuil/memberid/internal/identity"
+	"github.com/zhizhun-tech/memberid/internal/identity"
 )
 
 func TestGrantInspectionAndTargetedRevocation(t *testing.T) {

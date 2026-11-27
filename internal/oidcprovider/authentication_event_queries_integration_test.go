@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/euyuil/memberid/internal/authevent"
-	"github.com/euyuil/memberid/internal/identity"
+	"github.com/zhizhun-tech/memberid/internal/authevent"
+	"github.com/zhizhun-tech/memberid/internal/identity"
 )
 
 func TestConsoleAuthenticationEventQueries(t *testing.T) {

@@ -9,13 +9,13 @@ import (
 	"os"
 	"time"
 
-	"github.com/euyuil/memberid/internal/authevent"
-	"github.com/euyuil/memberid/internal/config"
-	"github.com/euyuil/memberid/internal/dingtalk"
-	"github.com/euyuil/memberid/internal/feishu"
-	"github.com/euyuil/memberid/internal/identity"
-	"github.com/euyuil/memberid/internal/oidcprovider"
-	"github.com/euyuil/memberid/internal/sms"
+	"github.com/zhizhun-tech/memberid/internal/authevent"
+	"github.com/zhizhun-tech/memberid/internal/config"
+	"github.com/zhizhun-tech/memberid/internal/dingtalk"
+	"github.com/zhizhun-tech/memberid/internal/feishu"
+	"github.com/zhizhun-tech/memberid/internal/identity"
+	"github.com/zhizhun-tech/memberid/internal/oidcprovider"
+	"github.com/zhizhun-tech/memberid/internal/sms"
 )
 
 func authenticationHandler(ctx context.Context, directory string) (http.Handler, func(), error) {

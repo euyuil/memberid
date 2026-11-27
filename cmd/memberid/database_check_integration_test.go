@@ -10,9 +10,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/euyuil/memberid/internal/identity"
-	"github.com/euyuil/memberid/internal/testdb"
 	"github.com/jackc/pgx/v5"
+	"github.com/zhizhun-tech/memberid/internal/identity"
+	"github.com/zhizhun-tech/memberid/internal/testdb"
 )
 
 func TestDatabaseCheckPreservesUninitializedDatabases(t *testing.T) {

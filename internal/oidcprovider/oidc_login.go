@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/euyuil/memberid/internal/config"
 	"github.com/jackc/pgx/v5"
+	"github.com/zhizhun-tech/memberid/internal/config"
 	"github.com/zitadel/oidc/v3/pkg/oidc"
 )
 

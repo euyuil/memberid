@@ -10,7 +10,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/euyuil/memberid/internal/server"
+	"github.com/zhizhun-tech/memberid/internal/server"
 )
 
 var version = "dev"

@@ -10,9 +10,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/euyuil/memberid/internal/authevent"
-	"github.com/euyuil/memberid/internal/identity"
-	"github.com/euyuil/memberid/internal/oidcprovider"
+	"github.com/zhizhun-tech/memberid/internal/authevent"
+	"github.com/zhizhun-tech/memberid/internal/identity"
+	"github.com/zhizhun-tech/memberid/internal/oidcprovider"
 )
 
 func manageGrant(ctx context.Context, args []string, stdout, stderr io.Writer) error {

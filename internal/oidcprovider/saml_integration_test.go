@@ -20,10 +20,10 @@ import (
 
 	"github.com/beevik/etree"
 	"github.com/crewjam/saml"
-	"github.com/euyuil/memberid/internal/config"
-	"github.com/euyuil/memberid/internal/identity"
-	"github.com/euyuil/memberid/internal/samlprovider"
 	dsig "github.com/russellhaering/goxmldsig"
+	"github.com/zhizhun-tech/memberid/internal/config"
+	"github.com/zhizhun-tech/memberid/internal/identity"
+	"github.com/zhizhun-tech/memberid/internal/samlprovider"
 )
 
 func enableSAML(t *testing.T, f *fixture) identity.SAMLServiceProvider {

@@ -7,8 +7,8 @@ import (
 	"net/netip"
 	"strings"
 
-	"github.com/euyuil/memberid/internal/authevent"
-	"github.com/euyuil/memberid/internal/identity"
+	"github.com/zhizhun-tech/memberid/internal/authevent"
+	"github.com/zhizhun-tech/memberid/internal/identity"
 )
 
 func (service *Service) startPhone(r *http.Request, binding, phone, clientID string, event authevent.Event) (identity.PhoneChallenge, error) {

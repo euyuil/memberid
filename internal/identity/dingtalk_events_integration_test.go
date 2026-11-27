@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/euyuil/memberid/internal/dingtalk"
+	"github.com/zhizhun-tech/memberid/internal/dingtalk"
 )
 
 func directoryEvent(app DingTalkApplication, id, kind string, born int64) dingtalk.DirectoryEvent {

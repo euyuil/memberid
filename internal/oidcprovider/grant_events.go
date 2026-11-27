@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 
-	"github.com/euyuil/memberid/internal/authevent"
-	"github.com/euyuil/memberid/internal/identity"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/zhizhun-tech/memberid/internal/authevent"
+	"github.com/zhizhun-tech/memberid/internal/identity"
 	"github.com/zitadel/oidc/v3/pkg/oidc"
 )
 

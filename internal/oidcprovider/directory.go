@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 
-	"github.com/euyuil/memberid/internal/identity"
 	"github.com/jackc/pgx/v5"
+	"github.com/zhizhun-tech/memberid/internal/identity"
 	"github.com/zitadel/oidc/v3/pkg/oidc"
 )
 

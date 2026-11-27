@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/crewjam/saml"
-	"github.com/euyuil/memberid/internal/identity"
+	"github.com/zhizhun-tech/memberid/internal/identity"
 )
 
 func assertSAMLEmail(t *testing.T, response saml.Response, expected string) {

@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/euyuil/memberid/internal/authorization"
+	"github.com/zhizhun-tech/memberid/internal/authorization"
 )
 
 func TestManagementWritePermissionBoundaries(t *testing.T) {

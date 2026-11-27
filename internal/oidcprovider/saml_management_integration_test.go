@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/euyuil/memberid/internal/identity"
+	"github.com/zhizhun-tech/memberid/internal/identity"
 )
 
 func TestSAMLConsoleManagementAndInFlightInvalidation(t *testing.T) {

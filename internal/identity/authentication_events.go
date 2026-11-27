@@ -9,8 +9,8 @@ import (
 	"slices"
 	"time"
 
-	"github.com/euyuil/memberid/internal/authevent"
 	"github.com/jackc/pgx/v5"
+	"github.com/zhizhun-tech/memberid/internal/authevent"
 )
 
 // Filters only narrow an already-authorized collection. They confer no ownership.

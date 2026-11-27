@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/euyuil/memberid/internal/authevent"
+	"github.com/zhizhun-tech/memberid/internal/authevent"
 )
 
 func insertQueryEvent(t *testing.T, store *Store, event authevent.Event) {

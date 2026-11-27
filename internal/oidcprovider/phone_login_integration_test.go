@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/euyuil/memberid/internal/identity"
+	"github.com/zhizhun-tech/memberid/internal/identity"
 )
 
 func TestPhoneLoginSendReservation(t *testing.T) {

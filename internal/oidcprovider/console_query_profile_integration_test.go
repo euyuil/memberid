@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/euyuil/memberid/internal/identity"
+	"github.com/zhizhun-tech/memberid/internal/identity"
 )
 
 // This opt-in profile uses an isolated database and stubbed providers. It reports

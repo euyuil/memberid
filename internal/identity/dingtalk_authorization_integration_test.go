@@ -8,7 +8,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/euyuil/memberid/internal/dingtalk"
+	"github.com/zhizhun-tech/memberid/internal/dingtalk"
 )
 
 func TestDingTalkAuthorizationEvidenceAndPhoneEligibility(t *testing.T) {

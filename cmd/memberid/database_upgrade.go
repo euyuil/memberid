@@ -10,9 +10,9 @@ import (
 	"path/filepath"
 	"slices"
 
-	"github.com/euyuil/memberid/internal/config"
-	"github.com/euyuil/memberid/internal/identity"
-	"github.com/euyuil/memberid/internal/recovery"
+	"github.com/zhizhun-tech/memberid/internal/config"
+	"github.com/zhizhun-tech/memberid/internal/identity"
+	"github.com/zhizhun-tech/memberid/internal/recovery"
 )
 
 func databaseUpgrade(ctx context.Context, args []string, stdout, stderr io.Writer) error {

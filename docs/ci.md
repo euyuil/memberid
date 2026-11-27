@@ -11,7 +11,7 @@
 
 Aim for 1–2 minutes of checks for ordinary code changes and tens of seconds for Markdown-only documentation. Compare the elapsed time to the last required check, since the two jobs run in parallel. Runner queue time can add to the time an author waits.
 
-In the November 27 rollout, the previous PostgreSQL job took six minutes on PR #194. PR #198 completed the new Linux job in 88 seconds, including a focused PostgreSQL run. These are observations from individual runs. [Previous checks](https://github.com/euyuil/memberid/actions/runs/45930838965) and [tiered checks](https://github.com/euyuil/memberid/actions/runs/45938780471).
+In the November 27 rollout, the previous PostgreSQL job took six minutes on PR #194. PR #198 completed the new Linux job in 88 seconds, including a focused PostgreSQL run. These are observations from individual runs. [Previous checks](https://github.com/zhizhun-tech/memberid/actions/runs/45930838965) and [tiered checks](https://github.com/zhizhun-tech/memberid/actions/runs/45938780471).
 
 The PR job selects checks from the complete change set, including removed paths. Documentation runs the title, metadata, and secret checks. Adding a code file to the same PR also selects the Linux build and unit tests. Schema and recovery changes select database upgrade cases. Go changes in identity, management, console and OIDC packages select isolation and refresh-token regressions. Maintain these path and test mappings together in `scripts/pr_checks.py`.
 

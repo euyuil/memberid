@@ -17,7 +17,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/euyuil/memberid/internal/identity"
+	"github.com/zhizhun-tech/memberid/internal/identity"
 )
 
 type Handler struct {

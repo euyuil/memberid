@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/euyuil/memberid/internal/config"
-	"github.com/euyuil/memberid/internal/identity"
-	"github.com/euyuil/memberid/internal/testdb"
+	"github.com/zhizhun-tech/memberid/internal/config"
+	"github.com/zhizhun-tech/memberid/internal/identity"
+	"github.com/zhizhun-tech/memberid/internal/testdb"
 )
 
 func TestConfigurationCommands(t *testing.T) {

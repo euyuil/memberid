@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/euyuil/memberid/internal/authorization"
+	"github.com/zhizhun-tech/memberid/internal/authorization"
 )
 
 func TestScopedOrganizationUpdates(t *testing.T) {

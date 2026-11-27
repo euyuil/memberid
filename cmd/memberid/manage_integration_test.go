@@ -7,8 +7,8 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/euyuil/memberid/internal/identity"
-	"github.com/euyuil/memberid/internal/testdb"
+	"github.com/zhizhun-tech/memberid/internal/identity"
+	"github.com/zhizhun-tech/memberid/internal/testdb"
 )
 
 func TestOperatorCommands(t *testing.T) {

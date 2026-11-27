@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/euyuil/memberid/internal/dingtalk"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/zhizhun-tech/memberid/internal/dingtalk"
 )
 
 func workerFixture(t *testing.T) (*Store, *DingTalkDirectory, <-chan struct{}, *atomic.Int64) {

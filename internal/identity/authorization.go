@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/euyuil/memberid/internal/authorization"
+	"github.com/zhizhun-tech/memberid/internal/authorization"
 )
 
 func permission(scope string, actions ...string) authorization.Permission {

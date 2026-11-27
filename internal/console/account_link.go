@@ -5,9 +5,9 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/euyuil/memberid/internal/consolestate"
-	"github.com/euyuil/memberid/internal/identity"
-	"github.com/euyuil/memberid/internal/management"
+	"github.com/zhizhun-tech/memberid/internal/consolestate"
+	"github.com/zhizhun-tech/memberid/internal/identity"
+	"github.com/zhizhun-tech/memberid/internal/management"
 	"golang.org/x/oauth2"
 )
 

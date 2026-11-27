@@ -3,7 +3,7 @@ package management
 import (
 	"net/http"
 
-	"github.com/euyuil/memberid/internal/identity"
+	"github.com/zhizhun-tech/memberid/internal/identity"
 )
 
 func (h *Handler) dingTalkRoutes(applications *identity.DingTalkApplications) {

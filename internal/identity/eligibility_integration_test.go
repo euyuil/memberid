@@ -10,7 +10,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/euyuil/memberid/internal/dingtalk"
+	"github.com/zhizhun-tech/memberid/internal/dingtalk"
 )
 
 func boundPhone(t *testing.T, store *Store, organizationID, memberID, number string) Factor {

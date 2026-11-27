@@ -8,8 +8,8 @@ import (
 	"slices"
 	"time"
 
-	"github.com/euyuil/memberid/internal/dingtalk"
 	"github.com/jackc/pgx/v5"
+	"github.com/zhizhun-tech/memberid/internal/dingtalk"
 )
 
 // acceptDirectoryEvent runs only for a configured outbound provider stream. It
