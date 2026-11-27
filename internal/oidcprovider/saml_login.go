@@ -17,6 +17,7 @@ const samlLoginPrefix = "saml."
 
 type samlLoginState struct {
 	ID            string                   `json:"id"`
+	EnablementID  string                   `json:"enablementId,omitempty"`
 	InteractionID string                   `json:"interactionId"`
 	SessionID     string                   `json:"sessionId,omitempty"`
 	Revision      int64                    `json:"revision"`
@@ -32,7 +33,7 @@ func (request *authorizationRequest) browserHeldSAML() bool {
 // supplies the authoritative expiry and revision throughout the interaction.
 func (service *Service) sealSAMLLogin(request *authorizationRequest, revision int64) (string, error) {
 	state := samlLoginState{
-		ID: request.ID, InteractionID: request.InteractionID, SessionID: request.SessionID,
+		ID: request.ID, EnablementID: request.EnablementID, InteractionID: request.InteractionID, SessionID: request.SessionID,
 		Revision: revision, Transaction: *request.SAML, Interaction: request.Interaction,
 	}
 	// The reservation already holds the SP's request ID.
@@ -68,7 +69,7 @@ func (service *Service) readSAMLLogin(ctx context.Context, token string) (*autho
 		return nil, err
 	}
 	request := &authorizationRequest{
-		grant:       grant{ID: state.ID, InteractionID: state.InteractionID, SessionID: state.SessionID, ClientID: state.Transaction.ServiceProviderID},
+		grant:       grant{ID: state.ID, EnablementID: state.EnablementID, InteractionID: state.InteractionID, SessionID: state.SessionID, ClientID: state.Transaction.ServiceProviderID},
 		Interaction: state.Interaction, SAML: &state.Transaction, entryToken: token,
 	}
 	request.Revision = state.Revision

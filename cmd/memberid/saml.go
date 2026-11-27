@@ -14,7 +14,7 @@ import (
 
 func manageSAML(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	if len(args) < 2 {
-		return errors.New("usage: memberid saml sp <apply|list|inspect|disable|retire> or saml signing <inspect|export-certificate|activate> or saml nameid <inspect|provision>")
+		return errors.New("usage: memberid saml sp <apply|list|inspect|disable|retire|enable-use|withdraw-use> or saml signing <inspect|export-certificate|activate> or saml nameid <inspect|provision>")
 	}
 	if args[0] == "signing" {
 		return manageSAMLSigning(args[1:], stdout, stderr)
@@ -25,12 +25,15 @@ func manageSAML(ctx context.Context, args []string, stdout, stderr io.Writer) er
 	flags := flag.NewFlagSet("saml "+args[0]+" "+args[1], flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	directory := flags.String("directory", "", "protected installation directory")
-	id, file := "", ""
+	id, file, organizationID := "", "", ""
 	revision := int64(0)
 	if args[0] == "sp" {
 		switch args[1] {
 		case "apply":
 			flags.StringVar(&file, "file", "", "registration JSON; revision zero creates")
+		case "enable-use", "withdraw-use":
+			flags.StringVar(&id, "id", "", "registered service provider ID")
+			flags.StringVar(&organizationID, "organization", "", "consumer organization ID")
 		case "inspect", "disable", "retire":
 			flags.StringVar(&id, "id", "", "registered service provider ID")
 			if args[1] != "inspect" {
@@ -78,6 +81,10 @@ func manageSAML(ctx context.Context, args []string, stdout, stderr io.Writer) er
 		if err = config.ReadJSON(file, &sp); err == nil {
 			result, err = store.PutSAMLServiceProvider(ctx, identity.OperatorPrincipal(), sp, loaded.AllowLoopbackHTTP)
 		}
+	case "enable-use", "withdraw-use":
+		enabled := args[1] == "enable-use"
+		err = store.SetSAMLEnablement(ctx, identity.OperatorPrincipal(), organizationID, id, enabled)
+		result = map[string]bool{"enabled": enabled}
 	case "disable", "retire":
 		if id == "" || revision < 1 {
 			return errors.New("--id and --revision are required")

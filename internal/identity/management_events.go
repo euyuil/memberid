@@ -27,7 +27,7 @@ func managementEvent(ctx context.Context, tx pgx.Tx, principal Principal, organi
 	}
 	var snapshot ManagementEventSnapshot
 	if err := tx.QueryRow(ctx, `SELECT o.name,CASE WHEN $4='provider.configure' THEN $5::jsonb->>'displayName'
- WHEN $4='saml.serviceProvider.configure' THEN COALESCE(NULLIF($5::jsonb->>'displayName',''),$5::jsonb->>'id')
+ WHEN $4 LIKE 'saml.serviceProvider.%' THEN COALESCE(NULLIF($5::jsonb->>'displayName',''),$5::jsonb->>'id')
  WHEN $4 LIKE 'oidc.application.%' THEN $5::jsonb->>'displayName'
  ELSE COALESCE(m.display_name,o.name) END,COALESCE(a.display_name,'')
  FROM organizations o

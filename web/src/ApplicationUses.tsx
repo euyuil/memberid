@@ -29,8 +29,10 @@ import { DirectoryState, DirectoryResults } from "@/components/directory"
 import { Link } from "@/navigation"
 import { routeURL } from "@/routes"
 
-export type ApplicationUse = {
-  clientId: string
+export type ApplicationView = "oidc-applications" | "saml-service-providers"
+export type ApplicationUse = (
+  { clientId: string } | { applicationId: string }
+) & {
   displayName: string
   ownerOrganizationId: string
   ownerName: string
@@ -38,11 +40,17 @@ export type ApplicationUse = {
   use: "included" | "enabled" | "available" | "withdrawn"
 }
 
+function applicationID(app: ApplicationUse) {
+  return "clientId" in app ? app.clientId : app.applicationId
+}
+
 export function ApplicationViews({
+  view,
   org,
   used,
 }: {
   org: string
+  view: ApplicationView
   used: boolean
 }) {
   return (
@@ -55,9 +63,9 @@ export function ApplicationViews({
           render={
             <Link
               href={routeURL({
-                view: "oidc-applications",
+                view,
                 org,
-                oidcUse: isUsed,
+                used: isUsed,
               })}
               aria-current={isUsed === used ? "page" : undefined}
             />
@@ -84,7 +92,8 @@ function applicationUseLabel(app: ApplicationUse) {
   }
 }
 
-export function OIDCUses({
+export function ApplicationUses({
+  view,
   org,
   items,
   preview,
@@ -92,6 +101,7 @@ export function OIDCUses({
   request,
   refresh,
 }: {
+  view: ApplicationView
   org: { id: string; name: string }
   items?: ApplicationUse[]
   preview?: ApplicationUse | null
@@ -110,8 +120,10 @@ export function OIDCUses({
       await request(
         "/api/organizations/" +
           encodeURIComponent(org.id) +
-          "/oidc-applications/" +
-          encodeURIComponent(app.clientId) +
+          "/" +
+          view +
+          "/" +
+          encodeURIComponent(applicationID(app)) +
           "/enablement",
         {
           method: "PUT",
@@ -132,7 +144,14 @@ export function OIDCUses({
       <DirectoryResults
         count={items.length}
         empty={
-          <DirectoryState kind="empty" title="本组织尚未使用任何 OIDC 应用" />
+          <DirectoryState
+            kind="empty"
+            title={
+              view === "oidc-applications"
+                ? "本组织尚未使用任何 OIDC 应用"
+                : "本组织尚未使用任何 SAML 应用"
+            }
+          />
         }
       >
         <div className="overflow-hidden rounded-md border">
@@ -147,7 +166,7 @@ export function OIDCUses({
             </TableHeader>
             <TableBody>
               {items.map((app) => (
-                <TableRow key={app.clientId}>
+                <TableRow key={applicationID(app)}>
                   <TableCell>{app.displayName}</TableCell>
                   <TableCell>{app.ownerName}</TableCell>
                   <TableCell>
@@ -162,9 +181,9 @@ export function OIDCUses({
                       render={
                         <Link
                           href={routeURL({
-                            view: "oidc-applications",
+                            view,
                             org: org.id,
-                            join: app.clientId,
+                            join: applicationID(app),
                           })}
                         />
                       }
@@ -230,7 +249,9 @@ export function OIDCUses({
             </AlertDialogTitle>
             <AlertDialogDescription>
               {withdrawing
-                ? `「${org.name}」的成员将无法登录或续期，其现有授权会被撤销。其他组织可继续使用。`
+                ? view === "saml-service-providers"
+                  ? `「${org.name}」的成员将无法发起新的应用登录。应用内已有会话由应用管理。`
+                  : `「${org.name}」的成员将无法登录或续期，其现有授权会被撤销。其他组织可继续使用。`
                 : `允许「${org.name}」的成员登录「${preview.displayName}」。`}
             </AlertDialogDescription>
           </AlertDialogHeader>

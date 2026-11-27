@@ -11,6 +11,42 @@ import (
 	"github.com/zhizhun-tech/memberid/internal/identity"
 )
 
+func TestSAMLConsumerAdminWorkflow(t *testing.T) {
+	f := newFixture(t)
+	sp := enableSAML(t, f)
+	consumer := f.otherMember
+	ctx := t.Context()
+	if err := f.store.SetAdministrator(ctx, identity.OperatorPrincipal(), consumer.OrganizationID, consumer.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	server := consoleFixture(t, f)
+	base := "/api/organizations/" + consumer.OrganizationID
+	consoleLoginTo(t, f, server, consumer.ID, "/organizations/"+consumer.OrganizationID+"/saml-service-providers")
+	csrf := consoleJSON(t, f, server, "GET", "/api/session", "", "", 200)["csrf"].(string)
+	preview := base + "/saml-application-uses/" + sp.ID
+	enrollment := base + "/saml-service-providers/" + sp.ID + "/enablement"
+	consoleJSON(t, f, server, "GET", preview, "", "", 404)
+	sp.Published = true
+	if _, err := f.store.PutSAMLServiceProvider(ctx, identity.OperatorPrincipal(), sp, false); err != nil {
+		t.Fatal(err)
+	}
+	use := consoleJSON(t, f, server, "GET", preview, "", "", 200)
+	if len(use) != 6 || use["applicationId"] != sp.ID || use["ownerOrganizationId"] != sp.OrganizationID || use["use"] != "available" {
+		t.Fatal("unexpected consumer preview", use)
+	}
+	consoleJSON(t, f, server, "GET", base+"/saml-service-providers/"+sp.ID, "", "", 404)
+	consoleJSON(t, f, server, "PUT", enrollment, "missing", `{"enabled":true}`, 403)
+	consoleJSON(t, f, server, "PUT", enrollment, csrf, `{"enabled":true}`, 200)
+	items := consoleJSON(t, f, server, "GET", base+"/saml-application-uses", "", "", 200)["items"].([]any)
+	if len(items) != 1 || items[0].(map[string]any)["use"] != "enabled" {
+		t.Fatal(items)
+	}
+	consoleJSON(t, f, server, "PUT", enrollment, csrf, `{"enabled":false}`, 200)
+	if got := consoleJSON(t, f, server, "GET", preview, "", "", 200)["use"]; got != "withdrawn" {
+		t.Fatal(got)
+	}
+}
+
 func TestSAMLConsoleManagementAndInFlightInvalidation(t *testing.T) {
 	f := newFixture(t)
 	sp := enableSAML(t, f)

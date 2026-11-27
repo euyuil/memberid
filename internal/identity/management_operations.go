@@ -70,7 +70,7 @@ var managementOperations = map[managementResource][]string{
 	providerTypeResource:                     {actionCreate},
 	providerResource:                         {actionUpdate, actionStatusUpdate, "credential.check"},
 	samlServiceProvidersResource:             {actionCreate, actionList},
-	samlServiceProviderResource:              {actionGet, actionUpdate, actionStatusUpdate, actionDelete},
+	samlServiceProviderResource:              {actionGet, actionUpdate, actionStatusUpdate, actionDelete, "enablement.update"},
 	organizationEventsResource:               {actionList},
 	memberDirectoryResource:                  {actionList},
 	managementEventsResource:                 {actionList},

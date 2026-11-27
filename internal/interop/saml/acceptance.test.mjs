@@ -518,26 +518,41 @@ test(
     }
     await startProvider();
 
-    async function responseForm() {
-      const start = await browser(`${spOrigin}/login`);
+    async function responseForm({
+      agent = browser,
+      loginOrganization,
+      username = "saml-fixture",
+      credential = password,
+      memberId = member.id,
+      beforeConsent,
+    } = {}) {
+      const start = await agent(`${spOrigin}/login`);
       assert.equal(start.status, 302);
-      const request = await browser(start.headers.location);
+      const request = await agent(start.headers.location);
       assert.equal(request.status, 303, "signed Node-SAML request admission");
-      let page = await browser(new URL(request.headers.location, issuer));
+      let page = await agent(new URL(request.headers.location, issuer));
       assert.equal(page.status, 200);
       const submit = (action, extra) =>
-        browser(`${issuer}/login`, {
+        agent(`${issuer}/login`, {
           request: hidden(page.body, "request"),
           csrf: hidden(page.body, "csrf"),
           action,
           ...extra,
         });
+      if (loginOrganization && page.body.includes('name="organization"')) {
+        const chosen = await submit("choose-organization", {
+          organization: loginOrganization,
+        });
+        assert.equal(chosen.status, 303, "consumer organization selected");
+        page = await agent(new URL(chosen.headers.location, issuer));
+      }
       if (page.body.includes('name="password"')) {
-        page = await submit("password", { username: "saml-fixture", password });
+        page = await submit("password", { username, password: credential });
         assert.equal(page.status, 200, "password authentication");
       }
+      if (beforeConsent) await beforeConsent();
       const result = await submit("continue", {
-        member: member.id,
+        member: memberId,
         consent: "yes",
       });
       assert.equal(result.status, 200, "SAML issuance");
@@ -641,7 +656,9 @@ test(
           ),
         );
         assert.equal(before.organizationId, undefined);
-        registration.attributes = upgradeBaseline ? ["Email"] : ["Email", "OrganizationID"];
+        registration.attributes = upgradeBaseline
+          ? ["Email"]
+          : ["Email", "OrganizationID"];
         writeFileSync(spFile, JSON.stringify(registration));
         cli(
           "saml",
@@ -914,7 +931,7 @@ test(
         const snapshot = () =>
           Object.fromEntries(
             pg(
-              "SELECT tablename FROM pg_tables WHERE schemaname='public' AND tablename NOT IN ('memberid_schema','database_upgrades','feishu_memberships','oidc_clients','organization_login_slugs','application_ids','oidc_application_enablements') ORDER BY tablename",
+              "SELECT tablename FROM pg_tables WHERE schemaname='public' AND tablename NOT IN ('memberid_schema','database_upgrades','feishu_memberships','oidc_clients','organization_login_slugs','application_ids','oidc_application_enablements','saml_application_enablements') ORDER BY tablename",
             )
               .split(/\r?\n/)
               .map((name) => {
@@ -1050,8 +1067,8 @@ test(
         ];
         const upgraded = JSON.parse(cli(...upgradeArgs));
         assert.equal(upgraded.upgraded, true);
-        assert.equal(upgraded.currentVersion, 34);
-        t.diagnostic("upgrade rehearsal: schema 34 committed");
+        assert.equal(upgraded.currentVersion, 35);
+        t.diagnostic("upgrade rehearsal: schema 35 committed");
         assert.deepEqual(snapshot(), before);
         assert.equal(
           pg(
@@ -1239,6 +1256,115 @@ test(
         env.MEMBERID_DATABASE_URL = oldURL;
         executable = upgradedExecutable;
         await startProvider();
+      },
+    );
+    await t.test(
+      "one shared SP admits enabled organizations independently",
+      async () => {
+        const sharedSP = JSON.parse(
+          cli("saml", "sp", "list", "--directory", installation),
+        ).find((sp) => sp.entityId === initialSP.entityId);
+        assert.ok(sharedSP);
+        const inspect = () =>
+          JSON.parse(
+            cli(
+              "saml",
+              "sp",
+              "inspect",
+              "--directory",
+              installation,
+              "--id",
+              sharedSP.id,
+            ),
+          );
+        function configure(changes) {
+          writeFileSync(spFile, JSON.stringify({ ...inspect(), ...changes }));
+          cli(
+            "saml",
+            "sp",
+            "apply",
+            "--directory",
+            installation,
+            "--file",
+            spFile,
+          );
+        }
+        function organizationLogin(label) {
+          const org = JSON.parse(
+            cli("organization", "create", "--name", label),
+          );
+          const actor = JSON.parse(
+            cli("member", "create", "--organization", org.id, "--name", label),
+          );
+          const credential = cli(
+            "member",
+            "set-password",
+            "--organization",
+            org.id,
+            "--member",
+            actor.id,
+            "--username",
+            "shared-member",
+          );
+          const use = (enabled) =>
+            cli(
+              "saml",
+              "sp",
+              enabled ? "enable-use" : "withdraw-use",
+              "--directory",
+              installation,
+              "--id",
+              sharedSP.id,
+              "--organization",
+              org.id,
+            );
+          async function signIn(beforeConsent) {
+            const agent = client(tls.cert);
+            const form = await responseForm({
+              agent,
+              loginOrganization: org.id,
+              memberId: actor.id,
+              username: "shared-member",
+              credential,
+              beforeConsent,
+            });
+            assert.equal((await agent(acs, form)).status, 303);
+            const profile = JSON.parse(
+              (await agent(`${spOrigin}/session`)).body,
+            );
+            assert.equal(profile.organizationId, org.id);
+            return profile.nameID;
+          }
+          return { use, signIn };
+        }
+        const b = organizationLogin("Subscriber B"),
+          c = organizationLogin("Subscriber C");
+        configure({ published: true, attributes: ["OrganizationID"] });
+        b.use(true);
+        c.use(true);
+        const subjectB = await b.signIn(),
+          subjectC = await c.signIn();
+        assert.notEqual(subjectB, subjectC);
+        assert.equal(await b.signIn(), subjectB);
+        await assert.rejects(
+          b.signIn(() => {
+            b.use(false);
+            b.use(true);
+          }),
+          /SAML issuance/,
+        );
+        b.use(false);
+        await assert.rejects(b.signIn(), /consumer organization selected/);
+        assert.equal(await c.signIn(), subjectC);
+        configure({ published: false });
+        assert.throws(() => b.use(true));
+        configure({ published: true });
+        await assert.rejects(c.signIn(), /consumer organization selected/);
+        c.use(true);
+        assert.equal(await c.signIn(), subjectC);
+        configure({ enabled: false });
+        await assert.rejects(c.signIn(), /signed Node-SAML request admission/);
+        configure({ enabled: true, published: false });
       },
     );
     await t.test(

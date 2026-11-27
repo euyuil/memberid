@@ -41,7 +41,7 @@ func TestManagementOperationMatrix(t *testing.T) {
 			{roleAssignmentResource, []string{targetOrganization, memberID}, base + "/roleAssignments/" + memberID, []string{"delete"}, []string{"delete"}, nil},
 			{providersResource, []string{targetOrganization}, base + "/providers", []string{"list"}, []string{"list"}, nil},
 			{samlServiceProvidersResource, []string{targetOrganization}, base + "/samlServiceProviders", []string{"create", "list"}, []string{"create", "list"}, nil},
-			{samlServiceProviderResource, []string{targetOrganization, "example-sp"}, base + "/samlServiceProviders/example-sp", []string{"get", "update", "status.update", "delete"}, []string{"get", "update", "status.update", "delete"}, nil},
+			{samlServiceProviderResource, []string{targetOrganization, "example-sp"}, base + "/samlServiceProviders/example-sp", []string{"get", "update", "status.update", "delete", "enablement.update"}, []string{"get", "update", "status.update", "delete", "enablement.update"}, nil},
 			{providerTypeResource, []string{targetOrganization, "dingtalk"}, base + "/providers/dingtalk", []string{"create"}, []string{"create"}, nil},
 			{providerTypeResource, []string{targetOrganization, "feishu"}, base + "/providers/feishu", []string{"create"}, []string{"create"}, nil},
 			{providerResource, []string{targetOrganization, "dingtalk", "example"}, base + "/providers/dingtalk/example", []string{"update", "status.update", "credential.check"}, []string{"update", "status.update", "credential.check"}, nil},
@@ -64,7 +64,7 @@ func TestManagementOperationMatrix(t *testing.T) {
 			if !slices.Equal(registered, expected) {
 				t.Errorf("%s: registered actions %v, want %v", test.resource, registered, expected)
 			}
-			for _, action := range []string{"create", "list", "get", "update", "delete", "status.update", "credential.rotate", "read", "unknown", "*", "?"} {
+			for _, action := range []string{"create", "list", "get", "update", "delete", "status.update", "credential.rotate", "enablement.update", "read", "unknown", "*", "?"} {
 				required := authorization.Requirement{Target: test.target, Action: action}
 				supported := slices.Contains(test.supported, action)
 				built := test.resource.require(action, test.ids...)

@@ -13,6 +13,7 @@ type SAMLServiceProviderInput struct {
 	Enabled               bool     `json:"enabled"`
 	AllowUnsignedRequests bool     `json:"allowUnsignedRequests"`
 	SigningCertificates   []string `json:"signingCertificates"`
+	Published             bool     `json:"published"`
 	Preauthorized         bool     `json:"preauthorized"`
 	Attributes            []string `json:"attributes"`
 	Revision              int64    `json:"revision"`
@@ -23,7 +24,7 @@ func (input SAMLServiceProviderInput) Registration(organizationID string) SAMLSe
 		ID: input.ID, DisplayName: input.DisplayName, EntityID: input.EntityID,
 		OrganizationID: organizationID, ACSURL: input.ACSURL, Enabled: input.Enabled, NameIDFormat: input.NameIDFormat,
 		AllowUnsignedRequests: input.AllowUnsignedRequests, SigningCertificates: input.SigningCertificates,
-		Preauthorized: input.Preauthorized, Attributes: input.Attributes, Revision: input.Revision,
+		Published: input.Published, Preauthorized: input.Preauthorized, Attributes: input.Attributes, Revision: input.Revision,
 	}
 }
 

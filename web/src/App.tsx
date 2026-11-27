@@ -98,7 +98,11 @@ import {
   type AuthenticationEventPage,
 } from "@/authentication-events"
 import { Providers, type ProviderDirectory } from "@/Providers"
-import { OIDCUses, ApplicationViews, type ApplicationUse } from "@/OIDCUses"
+import {
+  ApplicationUses,
+  ApplicationViews,
+  type ApplicationUse,
+} from "@/ApplicationUses"
 import { SAMLServiceProviders } from "@/SAMLServiceProviders"
 import { MemberPassword } from "@/MemberPassword"
 import { MemberEmail, type ManagedEmail } from "@/MemberEmail"
@@ -163,8 +167,8 @@ type Data = {
   authenticationEvents?: AuthenticationEventPage
   historyMember?: Member
   providers?: ProviderDirectory
-  oidcUses?: ApplicationUse[]
-  oidcPreview?: ApplicationUse | null
+  applicationUses?: ApplicationUse[]
+  applicationPreview?: ApplicationUse | null
   oidcApplications?: OIDCApplicationDirectory
   saml?: SAMLDirectory
   serviceProvider?: SAMLServiceProvider
@@ -369,10 +373,13 @@ export default function App() {
   const authenticationEvents = view === "authentication-events"
   const providers = view === "providers"
   const oidcApplications = view === "oidc-applications"
-  const join = oidcApplications ? params.get("join") || "" : ""
-  const usingApps =
-    oidcApplications && !!org && (params.get("tab") === "used" || !!join)
   const saml = view === "saml-service-providers"
+  const appView = saml ? "saml-service-providers" : "oidc-applications"
+  const join = oidcApplications || saml ? params.get("join") || "" : ""
+  const usingApps =
+    (oidcApplications || saml) &&
+    !!org &&
+    (params.get("tab") === "used" || !!join)
   const membersView = view === "members"
   const activeView = view ?? "organization"
   const member = route?.member ?? ""
@@ -471,7 +478,7 @@ export default function App() {
   useEffect(() => {
     if (session && join && !org) {
       navigate(
-        { view: "oidc-applications", org: session.actor.organizationId, join },
+        { view: appView, org: session.actor.organizationId, join },
         { replace: true }
       )
     } else if (session && parseRoute(location)?.root) {
@@ -482,7 +489,7 @@ export default function App() {
         { replace: true }
       )
     }
-  }, [session, location, join, org])
+  }, [session, location, join, org, appView])
 
   useEffect(() => {
     if (!session || !route || route.root || forbidden || (join && !org)) return
@@ -507,7 +514,7 @@ export default function App() {
           const base =
             "/api/organizations/" +
             encodeURIComponent(org) +
-            "/oidc-application-uses"
+            (saml ? "/saml-application-uses" : "/oidc-application-uses")
           if (join) {
             const [preview, organization] = await Promise.all([
               request<ApplicationUse>(
@@ -520,13 +527,13 @@ export default function App() {
               }),
               fetchOrganization(),
             ])
-            result = { oidcPreview: preview, organization }
+            result = { applicationPreview: preview, organization }
           } else {
             const [uses, organization] = await Promise.all([
               request<{ items: ApplicationUse[] }>(base, options),
               fetchOrganization(),
             ])
-            result = { oidcUses: uses.items, organization }
+            result = { applicationUses: uses.items, organization }
           }
         } else if (oidcApplications) {
           const [directory, organization] = await Promise.all([
@@ -1110,15 +1117,16 @@ export default function App() {
           </div>
         ) : (
           <>
-            {oidcApplications && org && (
-              <ApplicationViews org={org} used={usingApps} />
+            {(oidcApplications || saml) && org && (
+              <ApplicationViews view={appView} org={org} used={usingApps} />
             )}
             {usingApps && data.organization && (
-              <OIDCUses
+              <ApplicationUses
+                view={appView}
                 key={location}
                 org={data.organization}
-                items={data.oidcUses}
-                preview={data.oidcPreview}
+                items={data.applicationUses}
+                preview={data.applicationPreview}
                 csrf={session.csrf}
                 request={request}
                 refresh={refresh}

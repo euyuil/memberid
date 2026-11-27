@@ -102,6 +102,13 @@ func (service *Service) members(r *http.Request, request *authorizationRequest, 
 	for _, member := range members {
 		if (organizationID == "" || member.OrganizationID == organizationID) &&
 			(request.SAML != nil || !identity.ValidID(request.Input.LoginHint, identity.MemberKind) || member.ID == request.Input.LoginHint) {
+			if request.SAML != nil && organizationID == "" && client.activation != nil {
+				if _, err := client.activation(r.Context(), member.OrganizationID); errors.Is(err, identity.ErrIneligible) {
+					continue
+				} else if err != nil {
+					return nil, err
+				}
+			}
 			filtered = append(filtered, member)
 		}
 	}
@@ -210,8 +217,8 @@ func (service *Service) selectLoginOrganization(ctx context.Context, request *au
 	if err := service.requireLoginOrganization(ctx, id); err != nil {
 		return err
 	}
-	if policy.sharedClient != nil {
-		activation, err := policy.sharedClient.organizationActivation(ctx, service.store.Database(), id)
+	if policy.activation != nil {
+		activation, err := policy.activation(ctx, id)
 		if err != nil {
 			return err
 		}
@@ -518,7 +525,7 @@ func (service *Service) loginTransaction(w http.ResponseWriter, r *http.Request,
 				service.loginError(w, r, request, "interaction_required")
 				return
 			}
-			if registered.sharedClient != nil && request.ProviderOrganizationID == "" {
+			if registered.activation != nil && request.ProviderOrganizationID == "" {
 				if err := service.selectLoginOrganization(r.Context(), request, registered, members[0].OrganizationID); err != nil {
 					service.loginError(w, r, request, "login_required")
 					return

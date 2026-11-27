@@ -16,7 +16,7 @@ export type Route = {
   administrator?: string
   after?: string
   before?: string
-  oidcUse?: boolean
+  used?: boolean
   join?: string
   provider?: string
   serviceProvider?: string
@@ -37,10 +37,12 @@ export function routeURL(route: Route): string {
       if (route[key]) query.set(key, route[key])
   } else if (view === "oidc-applications") {
     if (route.join) query.set("join", route.join)
-    else if (org && route.oidcUse) query.set("tab", "used")
+    else if (org && route.used) query.set("tab", "used")
   } else if (view === "providers" && org) {
     if (route.provider) query.set("providerId", route.provider)
   } else if (view === "saml-service-providers") {
+    if (route.join) query.set("join", route.join)
+    else if (org && route.used) query.set("tab", "used")
     if (route.after) query.set("after", route.after)
     if (org && route.serviceProvider)
       query.set("serviceProviderId", route.serviceProvider)

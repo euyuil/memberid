@@ -9,6 +9,19 @@ import (
 func (s *Service) registerSAMLRoutes() {
 	const collection = "/api/organizations/{organizationId}/saml-service-providers"
 	const item = collection + "/{serviceProviderId}"
+	const uses = "/api/organizations/{organizationId}/saml-application-uses"
+	readUses := func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("serviceProviderId")
+		items, err := s.management.SAMLApplicationUses(r.Context(), r.Context().Value(sessionKey{}).(session).principal(), r.PathValue("organizationId"), id)
+		if id != "" && err == nil {
+			respond(w, items[0], nil)
+			return
+		}
+		respond(w, map[string]any{"items": items}, err)
+	}
+	s.routes.HandleFunc("GET "+uses, readUses)
+	s.routes.HandleFunc("GET "+uses+"/{serviceProviderId}", readUses)
+	s.routes.HandleFunc("PUT "+item+"/enablement", sharingHandler("serviceProviderId", s.management.SetSAMLEnablement))
 	s.routes.HandleFunc("GET "+collection, func(w http.ResponseWriter, r *http.Request) {
 		after, limit, ok := management.DecodePageRequest(w, r)
 		if !ok {

@@ -110,6 +110,7 @@ export function describeEvent(event: ManagementEvent) {
     case "oidc.application.publication.update":
       label = changes.enabled ? "开放跨组织使用" : "恢复仅归属组织使用"
       break
+    case "saml.serviceProvider.enablement.update":
     case "oidc.application.enablement.update":
       label = changes.enabled ? "本组织启用应用" : "本组织停止使用应用"
       break
@@ -151,6 +152,10 @@ export function describeEvent(event: ManagementEvent) {
             : "配置 SAML 应用"
       if (changes.retired === true || changes.revision === 1) break
       field("displayName", "重命名 SAML 应用", name)
+      if (Boolean(changes.published) !== Boolean(previous.published))
+        operations.push(
+          changes.published ? "开放跨组织使用" : "恢复仅归属组织使用"
+        )
       field("acsUrl", "更新 ACS", name)
       field("nameIdFormat", "更新 NameID 格式", name)
       field(
@@ -204,7 +209,7 @@ export function describeEvent(event: ManagementEvent) {
   }
   const provider = action === "provider.configure"
   const oidc = action.startsWith("oidc.application.")
-  const saml = action === "saml.serviceProvider.configure"
+  const saml = action.startsWith("saml.serviceProvider.")
   const providerId =
     provider && typeof changes.providerId === "string"
       ? changes.providerId
@@ -234,13 +239,15 @@ export function describeEvent(event: ManagementEvent) {
       ? routeURL({
           view: "oidc-applications",
           org: event.organizationId,
-          oidcUse: action === "oidc.application.enablement.update",
+          used: action === "oidc.application.enablement.update",
         })
       : saml
         ? routeURL({
             org: event.organizationId,
             view: "saml-service-providers",
-            serviceProvider: name(changes.id),
+            ...(action === "saml.serviceProvider.enablement.update"
+              ? { join: name(changes.id) }
+              : { serviceProvider: name(changes.id) }),
           })
         : provider
           ? providerId
