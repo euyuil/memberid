@@ -103,7 +103,7 @@ See [Feishu setup](feishu.md) and [DingTalk setup](dingtalk.md) for the required
 
 ## OIDC applications
 
-Platform administrators open **OIDC 应用** in the application integrations group. For a Member application, the console configures the client ID (immutable), display name, login and logout callbacks, account-link return destinations, one or all login organizations, refresh, consent, and optional identity evidence. The console can also edit the registration, enable or disable it, and rotate its secret. `prompt=consent` still requires confirmation for a preauthorized application.
+Platform administrators open **OIDC 应用** in the application integrations group. For a Member application, the console assigns the immutable client ID and configures the display name, login and logout callbacks, account-link return destinations, one or all login organizations, refresh, consent, and optional identity evidence. The console can also edit the registration, enable or disable it, and rotate its secret. `prompt=consent` still requires confirmation for a preauthorized application.
 
 Application details show the management owner (`ownerOrganizationId`) alongside the organization whose Members may sign in (`organizationId`). Console-created applications belong to `org_system`. An installation operator can choose another owner at creation with `client add --owner-organization`. Editing the login restriction preserves the owner. Organization ownership alone grants no management permissions.
 
@@ -121,7 +121,7 @@ Choose an organization, then open **SAML 应用**. Platform administrators can s
 
 **接入信息** reads the running authentication service’s fixed `/saml/metadata` endpoint and displays its Entity ID, HTTP-Redirect SSO endpoint, metadata URL and one public signing certificate with SHA-256 fingerprint and validity. The downloadable PEM contains only that certificate. The console uses normal TLS verification, a five-second timeout, no redirects and a 64 KiB response limit, and rejects unexpected issuer, endpoint or certificate shapes. It does not read local signing files or change deployment settings. Unavailable metadata is reported without claiming SAML is disabled or showing a stale certificate. A successful read describes the replica that answered, not every replica or a completed SP login. The same-origin `GET /api/organizations/{organizationId}/saml-identity-provider` checks current organization-view permission before and after the fetch.
 
-Add an application with its immutable registration ID and entity ID, exact HTTPS POST ACS, request-signature certificates and policy, allowed attributes, consent policy, and enabled state. The detail view displays the fixed binding and the configured NameID format. New console registrations use persistent; edits preserve the existing format. Use the operator CLI or private registration API to select unspecified before any mapping exists. [Legacy mapping administration](saml-nameid.md) is operator-only and has no console form. The form accepts PEM public certificates, never private keys. Signed requests are required by default; the unsigned exception is explicit and does not bypass verification of a present signature. Registration does not enable the SAML listener or configure its signing identity.
+Add an application with its external entity ID, exact HTTPS POST ACS, request-signature certificates and policy, allowed attributes, consent policy, and enabled state. The detail view displays the fixed binding and the configured NameID format. New console registrations use persistent; edits preserve the existing format. Use the operator CLI or private registration API to select unspecified before any mapping exists. [Legacy mapping administration](saml-nameid.md) is operator-only and has no console form. The form accepts PEM public certificates, never private keys. Signed requests are required by default; the unsigned exception is explicit and does not bypass verification of a present signature. Registration does not enable the SAML listener or configure its signing identity.
 
 The allowed attributes include independent `DisplayName` and `Email` checkboxes. Email is disabled by default, comes only from the managed Member record, and is omitted when unset. Allowing it does not assert mailbox ownership.
 
@@ -195,12 +195,12 @@ targets. Explicit console logout returns to `/`.
 
 Build with `sh scripts/check.sh` or `sh scripts/package.sh VERSION NEW_OUTPUT_DIRECTORY`. Both build the locked frontend before embedding it in Go. Node/npm are build dependencies; the resulting executable needs neither at runtime.
 
-Initialize a protected installation and a new database as described in [operator setup](operations.md). Fresh installations use schema version **31**. Existing schema 26–30 databases use the [explicit forward upgrade](database-upgrades.md); startup never migrates or erases data. Start the OIDC process before starting the console so its discovery and keys are reachable.
+Initialize a protected installation and a new database as described in [operator setup](operations.md). Fresh installations use schema version **32**. Existing schema 26–31 databases use the [explicit forward upgrade](database-upgrades.md); startup never migrates or erases data. Start the OIDC process before starting the console so its discovery and keys are reachable.
 
 Register a dedicated confidential Member client with no organization restriction:
 
 ```sh
-memberid client add --directory .local/memberid --id memberid-console --system \
+memberid client add --directory .local/memberid --name "MemberID Console" --system \
   --redirect https://admin.example.invalid/auth/callback --preauthorized
 ```
 
@@ -209,7 +209,7 @@ Capture the returned secret directly into a protected file named `console-client
 ```json
 {
   "origin": "https://admin.example.invalid",
-  "clientId": "memberid-console",
+  "clientId": "<returned client_id>",
   "clientSecretFile": "console-client-secret"
 }
 ```

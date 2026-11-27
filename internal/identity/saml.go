@@ -136,6 +136,16 @@ func (store *Store) PutSAMLServiceProvider(ctx context.Context, principal Princi
 }
 
 func (store *Store) putSAMLServiceProvider(ctx context.Context, principal Principal, sp SAMLServiceProvider, loopback bool) (SAMLServiceProvider, error) {
+	if sp.Revision == 0 {
+		if sp.ID != "" {
+			return SAMLServiceProvider{}, ErrInvalid
+		}
+		id, err := NewID(ApplicationKind)
+		if err != nil {
+			return SAMLServiceProvider{}, err
+		}
+		sp.ID = id
+	}
 	if err := sp.Validate(loopback); err != nil || sp.Revision < 0 {
 		return SAMLServiceProvider{}, ErrInvalid
 	}

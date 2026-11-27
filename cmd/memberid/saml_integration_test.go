@@ -3,6 +3,7 @@
 package main
 
 import (
+	"bytes"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
@@ -77,9 +78,13 @@ func TestSAMLOnlyStartupAndOperatorCLI(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sp := identity.SAMLServiceProvider{ID: "example", EntityID: "https://sp.example.test/metadata", OrganizationID: organization.ID, ACSURL: "https://sp.example.test/acs", Enabled: true, AllowUnsignedRequests: true}
+	sp := identity.SAMLServiceProvider{EntityID: "https://sp.example.test/metadata", OrganizationID: organization.ID, ACSURL: "https://sp.example.test/acs", Enabled: true, AllowUnsignedRequests: true}
 	write("sp.json", sp)
-	if err := run(t.Context(), []string{"saml", "sp", "apply", "--directory", directory, "--file", filepath.Join(directory, "sp.json")}, io.Discard, io.Discard); err != nil {
+	var created bytes.Buffer
+	if err := run(t.Context(), []string{"saml", "sp", "apply", "--directory", directory, "--file", filepath.Join(directory, "sp.json")}, &created, io.Discard); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(created.Bytes(), &sp); err != nil {
 		t.Fatal(err)
 	}
 	handler, closeStore, err := authenticationHandler(t.Context(), directory)
@@ -92,10 +97,10 @@ func TestSAMLOnlyStartupAndOperatorCLI(t *testing.T) {
 	if response.Code != 200 {
 		t.Fatal("SAML-only metadata unavailable")
 	}
-	if err := run(t.Context(), []string{"saml", "sp", "disable", "--directory", directory, "--id", "example", "--revision", "1"}, io.Discard, io.Discard); err != nil {
+	if err := run(t.Context(), []string{"saml", "sp", "disable", "--directory", directory, "--id", sp.ID, "--revision", "1"}, io.Discard, io.Discard); err != nil {
 		t.Fatal(err)
 	}
-	if err := run(t.Context(), []string{"saml", "sp", "retire", "--directory", directory, "--id", "example", "--revision", "1"}, io.Discard, io.Discard); err == nil {
+	if err := run(t.Context(), []string{"saml", "sp", "retire", "--directory", directory, "--id", sp.ID, "--revision", "1"}, io.Discard, io.Discard); err == nil {
 		t.Fatal("CLI accepted stale revision")
 	}
 }

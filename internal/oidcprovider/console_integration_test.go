@@ -24,9 +24,13 @@ func consoleProviderFixture(t *testing.T, f *fixture, dingTalk identity.DingTalk
 	t.Helper()
 	server := httptest.NewUnstartedServer(nil)
 	origin := "http://" + server.Listener.Addr().String()
-	registration := config.Client{ID: "console", SecretSHA256: config.SecretHash(f.secret), RedirectURIs: []string{origin + "/auth/callback"}, SubjectKind: "member", Preauthorized: true}
-	seedOIDCClient(t, f.store, registration, true)
-	h, err := console.New(t.Context(), f.store, f.service.configuration, console.Settings{Origin: origin, ClientID: "console"}, f.secret, dingTalk, feishu)
+	registration := config.Client{SecretSHA256: config.SecretHash(f.secret), RedirectURIs: []string{origin + "/auth/callback"}, SubjectKind: "member", Preauthorized: true}
+	app, err := f.store.CreateOIDCClient(t.Context(), identity.OperatorPrincipal(), identity.OIDCClientRegistration{Client: registration, OwnerOrganizationID: identity.SystemOrganizationID, DisplayName: "Console", System: true}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.consoleID = app.ClientID
+	h, err := console.New(t.Context(), f.store, f.service.configuration, console.Settings{Origin: origin, ClientID: f.consoleID}, f.secret, dingTalk, feishu)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -175,7 +179,7 @@ func TestConsoleOIDCOrganizationScopeAndRevocation(t *testing.T) {
 		t.Fatal("cross organization directory")
 	}
 	consoleJSON(t, f, server, "GET", "/api/oidc-applications", "", "", 403)
-	consoleJSON(t, f, server, "POST", "/api/oidc-applications", csrf, `{"clientId":"tenant-client","displayName":"Tenant client","redirectUris":["https://example.invalid/callback"]}`, 403)
+	consoleJSON(t, f, server, "POST", "/api/oidc-applications", csrf, `{"displayName":"Tenant client","redirectUris":["https://example.invalid/callback"]}`, 403)
 	base := "/api/organizations/" + f.member.OrganizationID
 	consoleJSON(t, f, server, "POST", base+"/members/"+f.member.ID+"/password", csrf, `{"username":"example"}`, 403)
 	consoleJSON(t, f, server, "POST", base+"/members/"+f.member.ID+"/password/reset", csrf, `{}`, 403)

@@ -18,9 +18,14 @@ import (
 func databaseUpgrade(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	flags := flag.NewFlagSet("database "+args[0], flag.ContinueOnError)
 	flags.SetOutput(stderr)
-	var directory, backup, pgDump string
+	var directory, backup, pgDump, manifestFile, previousFile string
 	var maintenance bool
-	if args[0] == "upgrade" {
+	if args[0] == "application-id-plan" {
+		flags.StringVar(&directory, "directory", "", "protected installation directory")
+		flags.StringVar(&manifestFile, "output-file", "", "new application ID manifest file")
+		flags.StringVar(&previousFile, "previous-manifest", "", "retain assignments from an existing manifest")
+	} else if args[0] == "upgrade" {
+		flags.StringVar(&manifestFile, "application-id-manifest", "", "reviewed application ID manifest")
 		flags.StringVar(&directory, "directory", "", "protected installation directory")
 		flags.StringVar(&backup, "backup-directory", "", "new recovery directory outside the installation")
 		flags.StringVar(&pgDump, "pg-dump", "pg_dump", "PostgreSQL 18 pg_dump executable")
@@ -51,6 +56,28 @@ func databaseUpgrade(ctx context.Context, args []string, stdout, stderr io.Write
 		}{manifest.SchemaVersion, receipt})
 	}
 	databaseURL := os.Getenv("MEMBERID_DATABASE_URL")
+	if args[0] == "application-id-plan" {
+		if manifestFile == "" || directory == "" {
+			return errors.New("planning requires --directory and --output-file")
+		}
+		var previous []identity.ApplicationIDAssignment
+		if previousFile != "" {
+			var err error
+			previous, err = readApplicationIDManifest(previousFile)
+			if err != nil {
+				return err
+			}
+		}
+		plan, err := identity.PlanApplicationIDs(ctx, databaseURL, func() ([]identity.OIDCClientRegistration, error) { return legacyOIDCRegistrations(directory) }, previous)
+		if err != nil {
+			return err
+		}
+		data, err := json.MarshalIndent(plan, "", "  ")
+		if err != nil {
+			return err
+		}
+		return config.WriteExclusive(manifestFile, append(data, '\n'))
+	}
 	if args[0] == "upgrade-plan" {
 		plan, err := identity.InspectDatabase(ctx, databaseURL)
 		if err != nil {
@@ -68,15 +95,19 @@ func databaseUpgrade(ctx context.Context, args []string, stdout, stderr io.Write
 		return errors.New("upgrade requires --directory, --backup-directory and --maintenance-confirmed")
 	}
 	result, err := identity.UpgradeDatabase(ctx, databaseURL, func(ctx context.Context, snapshot string, version int) (identity.UpgradePreparation, error) {
+		assignments, err := readApplicationIDManifest(manifestFile)
+		if err != nil {
+			return identity.UpgradePreparation{}, err
+		}
 		receipt, err := recovery.Create(ctx, databaseURL, directory, backup, pgDump, snapshot, version)
 		if err != nil {
 			return identity.UpgradePreparation{}, err
 		}
 		if version >= 29 {
-			return identity.UpgradePreparation{Backup: receipt}, nil
+			return identity.UpgradePreparation{ApplicationIDs: assignments, Backup: receipt}, nil
 		}
 		clients, err := legacyOIDCRegistrations(filepath.Join(backup, "installation"))
-		return identity.UpgradePreparation{Backup: receipt, OIDCClients: clients}, err
+		return identity.UpgradePreparation{ApplicationIDs: assignments, Backup: receipt, OIDCClients: clients}, err
 	})
 	if err != nil {
 		return err
@@ -118,4 +149,25 @@ func legacyOIDCRegistrations(directory string) ([]identity.OIDCClientRegistratio
 		return nil, errors.New("configured legacy console client is missing from the registry")
 	}
 	return registrations, nil
+}
+
+func readApplicationIDManifest(file string) ([]identity.ApplicationIDAssignment, error) {
+	if file == "" {
+		return nil, errors.New("provide the reviewed --application-id-manifest produced by database application-id-plan")
+	}
+	f, err := os.Open(file)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	decoder := json.NewDecoder(f)
+	decoder.DisallowUnknownFields()
+	var rows []identity.ApplicationIDAssignment
+	if err := decoder.Decode(&rows); err != nil {
+		return nil, err
+	}
+	if rows == nil || decoder.Decode(new(any)) != io.EOF {
+		return nil, errors.New("invalid application ID manifest")
+	}
+	return rows, nil
 }

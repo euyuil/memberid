@@ -222,7 +222,15 @@ func TestSchema30UpgradePreservesOIDCRegistrations(t *testing.T) {
 		}
 	}
 	conn.Close(ctx)
-	if _, err := UpgradeDatabase(ctx, dsn, syntheticBackup); err != nil {
+	plan, err := PlanApplicationIDs(ctx, dsn, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := UpgradeDatabase(ctx, dsn, func(ctx context.Context, snapshot string, version int) (UpgradePreparation, error) {
+		prep, err := syntheticBackup(ctx, snapshot, version)
+		prep.ApplicationIDs = plan
+		return prep, err
+	}); err != nil {
 		t.Fatal(err)
 	}
 	store, err := Open(ctx, dsn)
@@ -231,9 +239,15 @@ func TestSchema30UpgradePreservesOIDCRegistrations(t *testing.T) {
 	}
 	defer store.Close()
 	for _, client := range []OIDCClient{restricted, protected} {
+		oldID := client.ID
+		for _, row := range plan {
+			if row.OldID == oldID {
+				client.ID = row.NewID
+			}
+		}
 		got, err := store.OIDCClient(ctx, client.ID)
-		if err != nil || got.OwnerOrganizationID != SystemOrganizationID || !got.Enabled || got.DisplayName != client.ID ||
-			got.System != (client.ID == protected.ID) || got.Revision != 7 || !reflect.DeepEqual(got.Client, client) {
+		if err != nil || got.OwnerOrganizationID != SystemOrganizationID || !got.Enabled || got.DisplayName != oldID ||
+			got.System != (oldID == protected.ID) || got.Revision != 7 || !reflect.DeepEqual(got.Client, client) {
 			t.Fatalf("upgrade did not preserve %s registration and assign platform ownership: %v", client.ID, err)
 		}
 	}

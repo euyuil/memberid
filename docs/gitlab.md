@@ -11,7 +11,7 @@ Register the exact GitLab callback as a confidential Member client:
 ```sh
 umask 077
 memberid client add --directory .local/memberid \
-  --id gitlab --redirect https://git.example.org/users/auth/openid_connect/callback \
+  --name GitLab --redirect https://git.example.org/users/auth/openid_connect/callback \
   > .local/gitlab-client.json
 ```
 
@@ -34,7 +34,7 @@ gitlab_rails['omniauth_providers'] = [{
     uid_field: 'sub',
     pkce: true,
     client_options: {
-      identifier: 'gitlab',
+      identifier: '<returned client_id>',
       secret: File.read('/etc/gitlab/memberid-client-secret').strip,
       redirect_uri: 'https://git.example.org/users/auth/openid_connect/callback'
     }

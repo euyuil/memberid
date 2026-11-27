@@ -73,7 +73,7 @@ func TestSAMLManagedEmailReleaseAndCurrentValue(t *testing.T) {
 		t.Fatal(err)
 	}
 	other := sp
-	other.ID, other.EntityID, other.OrganizationID, other.Revision = "other-email-sp", "https://other.example.test/metadata", f.otherMember.OrganizationID, 0
+	other.ID, other.EntityID, other.OrganizationID, other.Revision = "", "https://other.example.test/metadata", f.otherMember.OrganizationID, 0
 	other, err = f.store.PutSAMLServiceProvider(t.Context(), identity.OperatorPrincipal(), other, false)
 	if err != nil {
 		t.Fatal(err)

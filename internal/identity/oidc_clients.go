@@ -144,6 +144,17 @@ func (service *ManagementService) CreateOIDCApplication(ctx context.Context, pri
 }
 
 func (store *Store) CreateOIDCClient(ctx context.Context, principal Principal, registration OIDCClientRegistration, loopback bool) (OIDCApplication, error) {
+	if registration.Client.ID != "" {
+		return OIDCApplication{}, ErrInvalid
+	}
+	id, err := NewID(ApplicationKind)
+	if err != nil {
+		return OIDCApplication{}, err
+	}
+	registration.Client.ID = id
+	if registration.DisplayName == "" && principal.kind == operatorPrincipal {
+		registration.DisplayName = id
+	}
 	if !validText(registration.DisplayName, 128) || ValidateOIDCClients([]OIDCClient{registration.Client}, loopback) != nil {
 		return OIDCApplication{}, ErrInvalid
 	}
@@ -152,7 +163,7 @@ func (store *Store) CreateOIDCClient(ctx context.Context, principal Principal, r
 	}
 	registration.Enabled, registration.Revision = true, 1
 	application := registration.Application()
-	err := pgx.BeginFunc(ctx, store.pool, func(tx pgx.Tx) error {
+	err = pgx.BeginFunc(ctx, store.pool, func(tx pgx.Tx) error {
 		if err := managementLock(ctx, tx); err != nil {
 			return err
 		}

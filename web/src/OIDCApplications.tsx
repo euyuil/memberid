@@ -409,6 +409,7 @@ export function OIDCApplications({
                 密钥只显示这一次。请复制并保存在应用服务端。
               </DialogDescription>
             </DialogHeader>
+            <CopyField label="客户端 ID" value={panel.application.clientId} />
             <CopyField label="客户端密钥" value={panel.secret} />
             <DialogFooter>
               <Button
@@ -522,7 +523,6 @@ function ApplicationForm({
     }
     setValidationError("")
     onSave({
-      ...(!application ? { clientId: field("clientId") } : {}),
       displayName: field("displayName"),
       organizationId:
         field("organizationId") === "*" ? "" : field("organizationId"),
@@ -562,20 +562,8 @@ function ApplicationForm({
                   required
                 />
               </Field>
-              {application ? (
+              {application && (
                 <CopyField label="客户端 ID" value={application.clientId} />
-              ) : (
-                <Field>
-                  <FieldLabel htmlFor="oidc-client">客户端 ID</FieldLabel>
-                  <Input
-                    id="oidc-client"
-                    name="clientId"
-                    placeholder="my-app"
-                    pattern="[A-Za-z0-9][A-Za-z0-9._\-]{0,127}"
-                    maxLength={128}
-                    required
-                  />
-                </Field>
               )}
             </div>
             <Field>

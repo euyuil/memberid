@@ -19,7 +19,7 @@ func TestSAMLManagementScopeLifecycleAndAudit(t *testing.T) {
 	principal := administratorActor(t, store, admin, factor).Principal()
 	platformPrincipal := administratorActor(t, store, platform, platformFactor).Principal()
 	service := NewManagementService(store, nil, nil, time.Hour)
-	sp := SAMLServiceProvider{ID: "example-sp", DisplayName: "Example application", EntityID: "https://sp.example.test/metadata", OrganizationID: org.ID, ACSURL: "https://sp.example.test/acs", Enabled: true, AllowUnsignedRequests: true}
+	sp := SAMLServiceProvider{DisplayName: "Example application", EntityID: "https://sp.example.test/metadata", OrganizationID: org.ID, ACSURL: "https://sp.example.test/acs", Enabled: true, AllowUnsignedRequests: true}
 	for _, caller := range []Principal{{}, OperatorPrincipal(), InstallationManagerPrincipal(), ManagementPrincipal(ordinary.ID, "synthetic-grant")} {
 		if _, err := service.PutSAMLServiceProvider(t.Context(), caller, sp); !errors.Is(err, ErrForbidden) {
 			t.Fatal("unadmitted caller changed trust", err)
@@ -31,7 +31,7 @@ func TestSAMLManagementScopeLifecycleAndAudit(t *testing.T) {
 		t.Fatal(sp, err)
 	}
 	foreign := sp
-	foreign.ID, foreign.EntityID, foreign.OrganizationID, foreign.Revision = "foreign-sp", "https://other.example.test/metadata", other.ID, 0
+	foreign.ID, foreign.EntityID, foreign.OrganizationID, foreign.Revision = "", "https://other.example.test/metadata", other.ID, 0
 	if _, err := service.PutSAMLServiceProvider(t.Context(), principal, foreign); !errors.Is(err, ErrForbidden) {
 		t.Fatal("cross-organization create", err)
 	}
@@ -74,7 +74,7 @@ func TestSAMLManagementScopeLifecycleAndAudit(t *testing.T) {
 		t.Fatal(page, err)
 	}
 	duplicate := sp
-	duplicate.ID, duplicate.Revision = "duplicate", 0
+	duplicate.ID, duplicate.Revision = "", 0
 	if _, err := service.PutSAMLServiceProvider(t.Context(), principal, duplicate); !errors.Is(err, ErrConflict) {
 		t.Fatal("duplicate entity ID accepted", err)
 	}
@@ -131,7 +131,7 @@ func TestSAMLManagementConcurrencyPaginationAndAuditRollback(t *testing.T) {
 	admin, factor := administratorMember(t, store, org.ID, 93)
 	principal := administratorActor(t, store, admin, factor).Principal()
 	service := NewManagementService(store, nil, nil, time.Hour)
-	sp, err := service.PutSAMLServiceProvider(t.Context(), principal, SAMLServiceProvider{ID: "a-sp", EntityID: "https://a.example.test", OrganizationID: org.ID, ACSURL: "https://a.example.test/acs", Enabled: true, AllowUnsignedRequests: true})
+	sp, err := service.PutSAMLServiceProvider(t.Context(), principal, SAMLServiceProvider{EntityID: "https://a.example.test", OrganizationID: org.ID, ACSURL: "https://a.example.test/acs", Enabled: true, AllowUnsignedRequests: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -165,16 +165,17 @@ func TestSAMLManagementConcurrencyPaginationAndAuditRollback(t *testing.T) {
 		t.Fatal(sp, err)
 	}
 	second := sp
-	second.ID, second.EntityID, second.Revision = "b-sp", "https://b.example.test", 0
-	if _, err := service.PutSAMLServiceProvider(t.Context(), principal, second); err != nil {
+	second.ID, second.EntityID, second.Revision = "", "https://b.example.test", 0
+	second, err = service.PutSAMLServiceProvider(t.Context(), principal, second)
+	if err != nil {
 		t.Fatal(err)
 	}
 	page, err := service.SAMLServiceProviders(t.Context(), principal, org.ID, "", 1)
-	if err != nil || len(page.Items) != 1 || page.NextAfter != sp.ID {
+	if err != nil || len(page.Items) != 1 || page.NextAfter != min(sp.ID, second.ID) {
 		t.Fatal(page, err)
 	}
 	page, err = service.SAMLServiceProviders(t.Context(), principal, org.ID, page.NextAfter, 1)
-	if err != nil || len(page.Items) != 1 || page.Items[0].ID != second.ID || page.NextAfter != "" {
+	if err != nil || len(page.Items) != 1 || page.Items[0].ID != max(sp.ID, second.ID) || page.NextAfter != "" {
 		t.Fatal(page, err)
 	}
 	if _, err := store.pool.Exec(t.Context(), "ALTER TABLE management_events ADD CONSTRAINT fail_saml_audit CHECK(action<>'saml.serviceProvider.configure') NOT VALID"); err != nil {

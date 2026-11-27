@@ -96,11 +96,13 @@ func configure(ctx context.Context, args []string, stdout, stderr io.Writer) err
 		var client identity.OIDCClient
 		var system bool
 		var displayName, ownerOrganizationID string
-		flags.StringVar(&client.ID, "id", "", "client identifier")
+		if args[1] == "rotate-secret" {
+			flags.StringVar(&client.ID, "id", "", "assigned client identifier")
+		}
 		var redirects, logouts, accountReturns repeatedFlag
 		if args[1] == "add" {
 			flags.BoolVar(&system, "system", false, "protect an all-organization console client from administrative mutation")
-			flags.StringVar(&displayName, "name", "", "display name (defaults to the client ID)")
+			flags.StringVar(&displayName, "name", "", "application display name (defaults to the generated ID)")
 			flags.StringVar(&ownerOrganizationID, "owner-organization", identity.SystemOrganizationID, "organization that owns the registration")
 			flags.Var(&redirects, "redirect", "exact callback URL; repeat for multiple URLs")
 			flags.Var(&logouts, "post-logout-redirect", "exact post-logout URL")
@@ -118,8 +120,8 @@ func configure(ctx context.Context, args []string, stdout, stderr io.Writer) err
 			}
 			return err
 		}
-		if *directory == "" || client.ID == "" || flags.NArg() != 0 {
-			return errors.New("--directory and --id are required; positional arguments are not accepted")
+		if *directory == "" || (args[1] == "rotate-secret" && client.ID == "") || flags.NArg() != 0 {
+			return errors.New("provide --directory and, for rotate-secret, --id; positional arguments are not accepted")
 		}
 		secret := config.RandomSecret()
 		client.SecretSHA256 = config.SecretHash(secret)
@@ -135,12 +137,11 @@ func configure(ctx context.Context, args []string, stdout, stderr io.Writer) err
 		defer store.Close()
 		principal := identity.OperatorPrincipal()
 		if args[1] == "add" {
-			if displayName == "" {
-				displayName = client.ID
-			}
-			_, err = store.CreateOIDCClient(ctx, principal, identity.OIDCClientRegistration{
+			var application identity.OIDCApplication
+			application, err = store.CreateOIDCClient(ctx, principal, identity.OIDCClientRegistration{
 				Client: client, DisplayName: displayName, System: system, OwnerOrganizationID: ownerOrganizationID,
 			}, installation.AllowLoopbackHTTP)
+			client.ID = application.ClientID
 		} else {
 			_, err = store.RotateOIDCClientSecret(ctx, principal, client.ID, 0, client.SecretSHA256)
 		}

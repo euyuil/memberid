@@ -26,7 +26,6 @@ func (s *Service) registerOIDCApplicationRoutes(installation *config.Loaded) {
 	})
 	s.routes.HandleFunc("POST "+collection, func(w http.ResponseWriter, r *http.Request) {
 		var input struct {
-			ClientID               string   `json:"clientId"`
 			DisplayName            string   `json:"displayName"`
 			OrganizationID         string   `json:"organizationId"`
 			RedirectURIs           []string `json:"redirectUris"`
@@ -43,7 +42,7 @@ func (s *Service) registerOIDCApplicationRoutes(installation *config.Loaded) {
 		secret := config.RandomSecret()
 		value, err := s.management.CreateOIDCApplication(r.Context(), r.Context().Value(sessionKey{}).(session).principal(),
 			identity.OIDCApplication{
-				ClientID: input.ClientID, DisplayName: input.DisplayName, OrganizationID: input.OrganizationID,
+				DisplayName: input.DisplayName, OrganizationID: input.OrganizationID,
 				RedirectURIs: input.RedirectURIs, PostLogoutRedirectURIs: input.PostLogoutRedirectURIs, Refresh: input.Refresh,
 				AccountReturnURIs: input.AccountReturnURIs, Preauthorized: input.Preauthorized,
 				EvidenceScope: input.EvidenceScope, EvidenceAudience: input.EvidenceAudience,

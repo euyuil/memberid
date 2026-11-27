@@ -101,7 +101,7 @@ docker compose --env-file "$state/compose.env" run --rm --no-deps -T \
   --volume "$absolute_state/bootstrap:/bootstrap-output" auth database init \
   --initial-root-password-file /bootstrap-output/initial-root-password
 docker compose --env-file "$state/compose.env" run --rm --no-deps -T auth \
-  client add --directory /etc/memberid --id memberid-console --name "MemberID 管理台" --system \
+  client add --directory /etc/memberid --name "MemberID 管理台" --system \
   --redirect "$console_origin/auth/callback" --preauthorized > "$state/console-client.json"
 python3 - "$state" "$console_origin" <<'PY'
 import json
@@ -111,14 +111,15 @@ import sys
 state = Path(sys.argv[1])
 installation = state / "installation"
 with (state / "console-client.json").open(encoding="utf-8") as source:
-    secret = json.load(source)["client_secret"]
+    client = json.load(source)
+    secret = client["client_secret"]
 with (installation / "console-client-secret").open("x", encoding="utf-8") as output:
     output.write(secret + "\n")
 with (installation / "console.json").open("x", encoding="utf-8") as output:
     json.dump(
         {
             "origin": sys.argv[2],
-            "clientId": "memberid-console",
+            "clientId": client["client_id"],
             "clientSecretFile": "console-client-secret",
         },
         output,

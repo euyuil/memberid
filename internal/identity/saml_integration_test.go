@@ -13,7 +13,7 @@ import (
 func TestSAMLRegistryAuthorityRevisionsAndPermanentSubjects(t *testing.T) {
 	store := testStore(t)
 	org, member := organizationAndMember(t, store)
-	sp := SAMLServiceProvider{ID: "example", EntityID: "https://sp.example.test/metadata", OrganizationID: org.ID, ACSURL: "https://sp.example.test/acs", Enabled: true, AllowUnsignedRequests: true}
+	sp := SAMLServiceProvider{EntityID: "https://sp.example.test/metadata", OrganizationID: org.ID, ACSURL: "https://sp.example.test/acs", Enabled: true, AllowUnsignedRequests: true}
 	for _, principal := range []Principal{{}, ManagementPrincipal(member.ID, "grant"), AccountPrincipal("session", member.ID, "factor", "binding")} {
 		if _, err := store.PutSAMLServiceProvider(t.Context(), principal, sp, false); !errors.Is(err, ErrForbidden) {
 			t.Fatal("non-installation caller modified registration", err)
