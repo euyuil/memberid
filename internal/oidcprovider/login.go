@@ -213,6 +213,20 @@ func (service *Service) organizationSlugLogin(w http.ResponseWriter, r *http.Req
 	http.Redirect(w, r, path, http.StatusSeeOther)
 }
 
+func (service *Service) bindLaunchOrganization(ctx context.Context, request *authorizationRequest, id string) error {
+	if !identity.ValidID(id, identity.OrganizationKind) {
+		return identity.ErrIneligible
+	}
+	policy, err := service.loginPolicy(ctx, request)
+	if err != nil {
+		return err
+	}
+	if policy.registration.SubjectKind != "member" || policy.registration.OrganizationID != "" && policy.registration.OrganizationID != id {
+		return identity.ErrIneligible
+	}
+	return service.selectLoginOrganization(ctx, request, policy, id)
+}
+
 func (service *Service) selectLoginOrganization(ctx context.Context, request *authorizationRequest, policy loginPolicy, id string) error {
 	if err := service.requireLoginOrganization(ctx, id); err != nil {
 		return err
