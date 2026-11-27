@@ -122,7 +122,7 @@ func TestDirectOrganizationPasswordLoginOpensMemberAccount(t *testing.T) {
 	if err := f.store.AssignOrganizationSlug(t.Context(), identity.OperatorPrincipal(), f.member.OrganizationID, loginName); err != nil {
 		t.Fatal(err)
 	}
-	for previous, value := range []string{f.member.OrganizationID, loginName} {
+	for previous, value := range []string{f.member.OrganizationID, strings.ToUpper(loginName)} {
 		f.browser = browserClient()
 		page := f.openDirectLogin("/login")
 		if !strings.Contains(page.body, `value="choose-organization"`) || strings.Contains(page.body, `id="username"`) {

@@ -40,7 +40,7 @@ func TestConsoleFirstLoginAndMemberPasswordManagement(t *testing.T) {
 		response = f.call(f.browser, "GET", response.header.Get("Location"), nil, nil)
 		f.status(response, 303)
 	}
-	fields := url.Values{"username": {identity.RootUsername}, "password": {"incorrect"}}
+	fields := url.Values{"username": {"ROOT"}, "password": {"incorrect"}}
 	login := f.submit(loginPage(f.store.SystemOrganizationID()).body, "password", fields)
 	f.status(login, 200)
 	if !strings.Contains(login.body, "password is incorrect") {
@@ -61,7 +61,7 @@ func TestConsoleFirstLoginAndMemberPasswordManagement(t *testing.T) {
 	consoleJSON(t, f, server, "POST", target+"/password", "bad-token", `{"username":"example"}`, 403)
 	consoleJSON(t, f, server, "POST", target+"/password", csrf, `{"username":"example","password":"caller-supplied"}`, 400)
 	consoleJSON(t, f, server, "POST", "/api/organizations/"+f.member.OrganizationID+"/members/"+f.otherMember.ID+"/password", csrf, `{"username":"example"}`, 404)
-	created := consoleJSON(t, f, server, "POST", target+"/password", csrf, `{"username":"example"}`, 200)
+	created := consoleJSON(t, f, server, "POST", target+"/password", csrf, `{"username":"Example"}`, 200)
 	consoleJSON(t, f, server, "POST", target+"/password", csrf, `{"username":"other"}`, 409)
 	generated, ok := created["password"].(string)
 	if !ok || len(generated) != 32 || created["username"] != "example" {
@@ -72,7 +72,10 @@ func TestConsoleFirstLoginAndMemberPasswordManagement(t *testing.T) {
 		t.Fatal("password setup did not preserve the Member's existing phone binding")
 	}
 	consoleJSON(t, f, server, "PATCH", target+"/password", "bad-token", `{"expectedUsername":"example","username":"member-login"}`, 403)
-	consoleJSON(t, f, server, "PATCH", target+"/password", csrf, `{"expectedUsername":"example","username":"member-login"}`, 200)
+	consoleJSON(t, f, server, "PATCH", target+"/password", csrf, `{"expectedUsername":"EXAMPLE","username":"Member-Login"}`, 200)
+	if result := consoleJSON(t, f, server, "PATCH", target+"/password", csrf, `{"expectedUsername":"MEMBER-LOGIN","username":"MEMBER-LOGIN"}`, 200); result["username"] != "member-login" {
+		t.Fatal("case-only rename returned a noncanonical username", result)
+	}
 	renamed := consoleJSON(t, f, server, "GET", target, "", "", 200)
 	if renamed["passwordUsername"] != "member-login" || !reflect.DeepEqual(renamed["bindings"], detail["bindings"]) {
 		t.Fatal("changing a username changed the Member's bindings")
@@ -86,7 +89,7 @@ func TestConsoleFirstLoginAndMemberPasswordManagement(t *testing.T) {
 	if !strings.Contains(memberLogin.body, "password is incorrect") {
 		t.Fatal("the old Member username was accepted")
 	}
-	memberFields.Set("username", "member-login")
+	memberFields.Set("username", "Member-LOGIN")
 	finishLogin(f.submit(memberLogin.body, "password", memberFields))
 	memberActor := consoleJSON(t, f, server, "GET", "/api/session", "", "", 200)["actor"].(map[string]any)
 	if memberActor["memberId"] != f.otherMember.ID || memberActor["platform"] != false {
@@ -99,7 +102,7 @@ func TestConsoleFirstLoginAndMemberPasswordManagement(t *testing.T) {
 	consoleJSON(t, f, server, "PATCH", rootCredential, csrf, `{"expectedUsername":"root","username":"platform-login"}`, 403)
 	other := consoleJSON(t, f, server, "POST", base, csrf, `{"displayName":"Other system Member"}`, 200)
 	otherCredential := base + "/" + other["id"].(string) + "/password"
-	consoleJSON(t, f, server, "POST", otherCredential, csrf, `{"username":"root"}`, 403)
+	consoleJSON(t, f, server, "POST", otherCredential, csrf, `{"username":"Root"}`, 403)
 
 	rootReset := rootCredential + "/reset"
 	consoleJSON(t, f, server, "POST", rootReset, csrf, `{"username":"another-root"}`, 400)
@@ -151,7 +154,7 @@ func TestConsoleFirstLoginAndMemberPasswordManagement(t *testing.T) {
 func TestPasswordLoginOrganizationIsolationAndRefreshRevocation(t *testing.T) {
 	f := newConfiguredFixture(t, true)
 	operator := identity.OperatorPrincipal()
-	first, err := f.store.SetMemberPassword(t.Context(), operator, f.member.OrganizationID, f.member.ID, "example")
+	first, err := f.store.SetMemberPassword(t.Context(), operator, f.member.OrganizationID, f.member.ID, "Example")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -17,7 +17,7 @@ func TestOrganizationSlugReservations(t *testing.T) {
 	if err := store.AssignOrganizationSlug(ctx, Principal{}, first.ID, "example"); !errors.Is(err, ErrForbidden) {
 		t.Fatalf("assignment without operator authority: %v", err)
 	}
-	for _, slug := range []string{"", "Example", " example", "a--b", "a-", "-a", "a/b", "a_b", "团队", "system", strings.Repeat("a", 64)} {
+	for _, slug := range []string{"", "Kelvin", "SYSTEM", " example", "a--b", "a-", "-a", "a/b", "a_b", "团队", "system", strings.Repeat("a", 64)} {
 		if err := assign(first.ID, slug); !errors.Is(err, ErrInvalid) {
 			t.Fatalf("assigned invalid slug %q: %v", slug, err)
 		}
@@ -26,8 +26,8 @@ func TestOrganizationSlugReservations(t *testing.T) {
 		t.Fatal("system organization accepted an alias", err)
 	}
 	results := make(chan error, 2)
-	for _, id := range []string{first.ID, second.ID} {
-		go func() { results <- assign(id, "example-2") }()
+	for id, slug := range map[string]string{first.ID: "Example-2", second.ID: "EXAMPLE-2"} {
+		go func() { results <- assign(id, slug) }()
 	}
 	var ok, conflicts int
 	for range 2 {

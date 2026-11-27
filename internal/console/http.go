@@ -380,7 +380,7 @@ func (s *Service) renameMemberPassword(w http.ResponseWriter, r *http.Request) {
 	}
 	principal := r.Context().Value(sessionKey{}).(session).principal()
 	err := s.management.RenameMemberPassword(r.Context(), principal, r.PathValue("organizationId"), r.PathValue("memberId"), input.ExpectedUsername, input.Username)
-	respond(w, map[string]string{"username": input.Username}, err)
+	respond(w, map[string]string{"username": identity.CanonicalLoginName(input.Username)}, err)
 }
 func (s *Service) generateMemberPassword(w http.ResponseWriter, r *http.Request, username *string) {
 	value, err := s.management.GenerateMemberPassword(r.Context(), r.Context().Value(sessionKey{}).(session).principal(), r.PathValue("organizationId"), r.PathValue("memberId"), username)

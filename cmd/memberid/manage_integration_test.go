@@ -28,7 +28,7 @@ func TestOperatorCommands(t *testing.T) {
 	if err := json.Unmarshal(output.Bytes(), &organization); err != nil {
 		t.Fatal(err)
 	}
-	execute("organization", "set-slug", "--organization", organization.ID, "--slug", "example-team")
+	execute("organization", "set-slug", "--organization", organization.ID, "--slug", "Example-Team")
 	var alias map[string]string
 	if err := json.Unmarshal(output.Bytes(), &alias); err != nil || alias["organizationId"] != organization.ID || alias["slug"] != "example-team" {
 		t.Fatal("unexpected organization slug result", alias, err)

@@ -105,7 +105,7 @@ func (service *Service) renderLogin(w http.ResponseWriter, r *http.Request, requ
 			return
 		}
 		if r.PostForm.Get("action") == "password" {
-			data.PasswordUsername = r.PostForm.Get("username")
+			data.PasswordUsername = identity.CanonicalLoginName(r.PostForm.Get("username"))
 		}
 	}
 	if !data.OrganizationRequired && !verified && !data.PhoneEnabled && !data.ProviderEnabled && !data.PasswordEnabled && data.Message == "" {

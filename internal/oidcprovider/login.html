@@ -122,7 +122,7 @@ a { color: var(--primary); }
 {{if and .PasswordEnabled (not .Verified) (not .Pending)}}
 <form method="post" action="{{.Action}}" {{if or .PhoneEnabled .ProviderEnabled}}class="section"{{end}}>
 <input type="hidden" name="request" value="{{.Request.GetID}}"><input type="hidden" name="csrf" value="{{.Request.CSRF}}">
-<label for="username">Username</label><input id="username" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" pattern="[a-z0-9][a-z0-9._\-]{0,63}" maxlength="64" value="{{.PasswordUsername}}" required>
+<label for="username">Username</label><input id="username" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" pattern="[A-Za-z0-9][A-Za-z0-9._\-]{0,63}" maxlength="64" value="{{.PasswordUsername}}" required>
 <label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" maxlength="1024" required {{if .PasswordUsername}}autofocus{{end}}>
 <button name="action" value="password">Sign in with password</button>
 </form>
