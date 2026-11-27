@@ -206,9 +206,24 @@ func (service *Service) organizationSlugLogin(w http.ResponseWriter, r *http.Req
 	http.Redirect(w, r, path, http.StatusSeeOther)
 }
 
+func (service *Service) selectLoginOrganization(ctx context.Context, request *authorizationRequest, policy loginPolicy, id string) error {
+	if err := service.requireLoginOrganization(ctx, id); err != nil {
+		return err
+	}
+	if policy.sharedClient != nil {
+		activation, err := policy.sharedClient.organizationActivation(ctx, service.store.Database(), id)
+		if err != nil {
+			return err
+		}
+		request.EnablementID = activation
+	}
+	request.ProviderOrganizationID = id
+	return nil
+}
+
 func (service *Service) selectedLoginOrganization(w http.ResponseWriter, r *http.Request, request *authorizationRequest, policy loginPolicy) string {
 	id := r.PostForm.Get("organization")
-	if err := service.requireLoginOrganization(r.Context(), id); err != nil {
+	if err := service.selectLoginOrganization(r.Context(), request, policy, id); err != nil {
 		if errors.Is(err, identity.ErrInvalid) || errors.Is(err, identity.ErrIneligible) {
 			service.renderLogin(w, r, request, policy, "Enter a valid organization ID.")
 		} else {
@@ -276,22 +291,24 @@ func (service *Service) loginTransaction(w http.ResponseWriter, r *http.Request,
 			http.Error(w, "Invalid organization selection", http.StatusBadRequest)
 			return
 		}
-		if err := service.requireLoginOrganization(r.Context(), pathOrganizationID); err != nil {
-			writeLoginOrganizationError(w, err)
-			return
-		}
 		if request.ProviderOrganizationID == "" {
 			if (r.Method != http.MethodGet && registered.registration.OrganizationID == "") || request.Verification != nil || request.phonePending() || request.externalPending() {
 				http.Error(w, "Invalid organization selection", http.StatusBadRequest)
 				return
 			}
-			request.ProviderOrganizationID = pathOrganizationID
+			if err := service.selectLoginOrganization(r.Context(), request, registered, pathOrganizationID); err != nil {
+				writeLoginOrganizationError(w, err)
+				return
+			}
 			if r.Method == http.MethodGet {
 				if err := service.saveLoginNavigation(r.Context(), request); err != nil {
 					http.Error(w, "Login transaction expired", http.StatusBadRequest)
 					return
 				}
 			}
+		} else if err := service.requireLoginOrganization(r.Context(), pathOrganizationID); err != nil {
+			writeLoginOrganizationError(w, err)
+			return
 		}
 	} else if r.Method == http.MethodGet && request.ProviderOrganizationID != "" {
 		http.Redirect(w, r, requestLoginURL(request), http.StatusSeeOther)
@@ -305,8 +322,9 @@ func (service *Service) loginTransaction(w http.ResponseWriter, r *http.Request,
 			http.Error(w, "Login temporarily unavailable", http.StatusServiceUnavailable)
 			return
 		}
-		if err == nil {
-			request.ProviderOrganizationID = organizationID
+		if err == nil && service.selectLoginOrganization(r.Context(), request, registered, organizationID) != nil {
+			service.loginError(w, r, request, "login_required")
+			return
 		}
 	}
 	if r.Method == http.MethodPost {
@@ -340,7 +358,6 @@ func (service *Service) loginTransaction(w http.ResponseWriter, r *http.Request,
 			if organizationID == "" {
 				return
 			}
-			request.ProviderOrganizationID = organizationID
 			if err := service.saveLoginNavigation(r.Context(), request); err != nil {
 				http.Error(w, "Login transaction expired", http.StatusBadRequest)
 				return
@@ -500,6 +517,12 @@ func (service *Service) loginTransaction(w http.ResponseWriter, r *http.Request,
 			if err != nil || len(members) != 1 {
 				service.loginError(w, r, request, "interaction_required")
 				return
+			}
+			if registered.sharedClient != nil && request.ProviderOrganizationID == "" {
+				if err := service.selectLoginOrganization(r.Context(), request, registered, members[0].OrganizationID); err != nil {
+					service.loginError(w, r, request, "login_required")
+					return
+				}
 			}
 			request.MemberID, request.OrganizationID = members[0].ID, members[0].OrganizationID
 		}

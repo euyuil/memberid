@@ -15,6 +15,7 @@ import (
 type loginPolicy struct {
 	registration browserauth.Policy
 	displayName  string
+	sharedClient *client
 }
 
 func directLoginPolicy(organizationID string) loginPolicy {
@@ -45,8 +46,18 @@ func (service *Service) loginPolicy(ctx context.Context, request *authorizationR
 	if !request.permitsClient(registered) {
 		return loginPolicy{}, identity.ErrIneligible
 	}
+	var shared *client
+	if registered.sharedOwner != "" {
+		shared = &registered
+		if request.ProviderOrganizationID != "" {
+			if err := registered.checkActivation(ctx, service.store.Database(), request.ProviderOrganizationID, request.EnablementID); err != nil {
+				return loginPolicy{}, err
+			}
+		}
+	}
 	c := registered.registration
 	return loginPolicy{
+		sharedClient: shared,
 		registration: browserauth.Policy{ID: c.ID, OrganizationID: c.OrganizationID, SubjectKind: c.SubjectKind, Preauthorized: c.Preauthorized, ReturnURI: request.Input.RedirectURI, IdentityInformation: strings.Join(request.Scopes, ", ")},
 		displayName:  registered.displayName,
 	}, nil
@@ -76,9 +87,14 @@ func (service *Service) validateLoginPolicy(ctx context.Context, tx pgx.Tx, requ
 		return nil
 	}
 	if request.SAML == nil {
-		client, err := service.storage.clientAt(ctx, tx, request.ClientID)
+		client, err := service.storage.registeredClient(identity.LockOIDCClient(ctx, tx, request.ClientID))
 		if err != nil {
 			return err
+		}
+		if client.sharedOwner != "" {
+			if err := client.checkActivation(ctx, tx, request.ProviderOrganizationID, request.EnablementID); err != nil {
+				return err
+			}
 		}
 		if !request.permitsClient(client) {
 			return identity.ErrIneligible

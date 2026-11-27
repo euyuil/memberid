@@ -909,7 +909,7 @@ test(
         const snapshot = () =>
           Object.fromEntries(
             pg(
-              "SELECT tablename FROM pg_tables WHERE schemaname='public' AND tablename NOT IN ('memberid_schema','database_upgrades','feishu_memberships','oidc_clients','organization_login_slugs','application_ids') ORDER BY tablename",
+              "SELECT tablename FROM pg_tables WHERE schemaname='public' AND tablename NOT IN ('memberid_schema','database_upgrades','feishu_memberships','oidc_clients','organization_login_slugs','application_ids','oidc_application_enablements') ORDER BY tablename",
             )
               .split(/\r?\n/)
               .map((name) => {
@@ -1045,8 +1045,8 @@ test(
         ];
         const upgraded = JSON.parse(cli(...upgradeArgs));
         assert.equal(upgraded.upgraded, true);
-        assert.equal(upgraded.currentVersion, 32);
-        t.diagnostic("upgrade rehearsal: schema 32 committed");
+        assert.equal(upgraded.currentVersion, 33);
+        t.diagnostic("upgrade rehearsal: schema 33 committed");
         assert.deepEqual(snapshot(), before);
         assert.equal(
           pg(

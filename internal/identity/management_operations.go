@@ -79,7 +79,7 @@ var managementOperations = map[managementResource][]string{
 	organizationAuthenticationEventsResource: {actionList},
 	organizationAuthenticationEventResource:  {actionGet},
 	organizationOIDCClientsResource:          {actionList, actionCreate},
-	organizationOIDCClientResource:           {actionUpdate, actionStatusUpdate, "credential.rotate"},
+	organizationOIDCClientResource:           {actionUpdate, actionStatusUpdate, "credential.rotate", "publication.update", "enablement.update"},
 	oidcClientsResource:                      {actionCreate, actionList},
 	oidcClientResource:                       {actionUpdate, actionStatusUpdate, "credential.rotate"},
 }
