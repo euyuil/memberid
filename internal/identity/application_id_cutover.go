@@ -57,7 +57,7 @@ func PlanApplicationIDs(ctx context.Context, databaseURL string, loadLegacy func
 		if err != nil {
 			return err
 		}
-		if !version.Supported || !version.UpgradeRequired {
+		if !version.Supported || version.CurrentVersion >= 32 {
 			return errors.New("application ID planning requires a supported pre-cutover schema")
 		}
 		var legacy []OIDCClientRegistration

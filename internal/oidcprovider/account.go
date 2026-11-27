@@ -86,7 +86,11 @@ func (service *Service) accountClient(ctx context.Context, db databaseReader, de
 		return details.ReturnURI == ""
 	}
 	client, err := service.storage.clientAt(ctx, db, details.ClientID)
-	return err == nil && client.registration.SubjectKind == "member" && slices.Contains(client.registration.AccountReturnURIs, details.ReturnURI) && (client.registration.OrganizationID == "" || client.registration.OrganizationID == details.OrganizationID)
+	if err != nil || client.registration.SubjectKind != "member" || !slices.Contains(client.registration.AccountReturnURIs, details.ReturnURI) {
+		return false
+	}
+	_, err = client.organizationActivation(ctx, db, details.OrganizationID)
+	return err == nil
 }
 func (service *Service) accountMember(r *http.Request, session accountSession, memberID string) (identity.Member, string, error) {
 	members, err := service.store.EligibleMembers(r.Context(), session.verified.Factor.ID)

@@ -16,6 +16,7 @@ type OIDCClientRegistration struct {
 	DisplayName         string
 	OwnerOrganizationID string
 	Enabled             bool
+	Published           bool
 	System              bool
 	Revision            int64
 }
@@ -36,6 +37,7 @@ type OIDCApplication struct {
 	EvidenceAudience       string   `json:"evidenceAudience,omitempty"`
 	Refresh                bool     `json:"refresh"`
 	Enabled                bool     `json:"enabled"`
+	Published              bool     `json:"published"`
 	System                 bool     `json:"system"`
 	Revision               int64    `json:"revision"`
 }
@@ -48,15 +50,17 @@ func (registration OIDCClientRegistration) Application() OIDCApplication {
 		RedirectURIs:        client.RedirectURIs, PostLogoutRedirectURIs: client.PostLogoutRedirectURIs, Refresh: client.Refresh,
 		AccountReturnURIs: client.AccountReturnURIs, Preauthorized: client.Preauthorized,
 		SubjectKind: client.SubjectKind, EvidenceScope: client.EvidenceScope, EvidenceAudience: client.EvidenceAudience,
-		Enabled: registration.Enabled, System: registration.System, Revision: registration.Revision,
+		Published: registration.Published, Enabled: registration.Enabled, System: registration.System, Revision: registration.Revision,
 	}
 }
 
-const oidcClientColumns = "display_name,enabled,system,revision,registration,owner_organization_id"
+const oidcClientInsertColumns = "display_name,enabled,system,revision,registration,owner_organization_id"
+
+const oidcClientColumns = oidcClientInsertColumns + ",published"
 
 func scanOIDCClient(row pgx.Row) (OIDCClientRegistration, error) {
 	var registration OIDCClientRegistration
-	err := row.Scan(&registration.DisplayName, &registration.Enabled, &registration.System, &registration.Revision, &registration.Client, &registration.OwnerOrganizationID)
+	err := row.Scan(&registration.DisplayName, &registration.Enabled, &registration.System, &registration.Revision, &registration.Client, &registration.OwnerOrganizationID, &registration.Published)
 	return registration, storageError(err)
 }
 
@@ -88,7 +92,7 @@ func (store *Store) OIDCClientCapabilities(ctx context.Context) (OIDCClientCapab
 }
 
 func insertOIDCClient(ctx context.Context, tx pgx.Tx, registration OIDCClientRegistration) error {
-	_, err := tx.Exec(ctx, "INSERT INTO oidc_clients(client_id,"+oidcClientColumns+") VALUES($1,$2,$3,$4,$5,$6,$7)",
+	_, err := tx.Exec(ctx, "INSERT INTO oidc_clients(client_id,"+oidcClientInsertColumns+") VALUES($1,$2,$3,$4,$5,$6,$7)",
 		registration.Client.ID, registration.DisplayName, registration.Enabled, registration.System, registration.Revision, registration.Client, registration.OwnerOrganizationID)
 	return storageError(err)
 }
@@ -327,6 +331,9 @@ func (store *Store) changeOIDCClient(ctx context.Context, principal Principal, o
 			return err
 		}
 		if registration.Client.OrganizationID != previous.OrganizationID {
+			if registration.Published {
+				return ErrConflict
+			}
 			if err := requireOIDCOrganization(ctx, tx, registration.Client.OrganizationID); err != nil {
 				return err
 			}

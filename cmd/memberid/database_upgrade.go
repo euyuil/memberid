@@ -95,9 +95,13 @@ func databaseUpgrade(ctx context.Context, args []string, stdout, stderr io.Write
 		return errors.New("upgrade requires --directory, --backup-directory and --maintenance-confirmed")
 	}
 	result, err := identity.UpgradeDatabase(ctx, databaseURL, func(ctx context.Context, snapshot string, version int) (identity.UpgradePreparation, error) {
-		assignments, err := readApplicationIDManifest(manifestFile)
-		if err != nil {
-			return identity.UpgradePreparation{}, err
+		var assignments []identity.ApplicationIDAssignment
+		if version < 32 {
+			var err error
+			assignments, err = readApplicationIDManifest(manifestFile)
+			if err != nil {
+				return identity.UpgradePreparation{}, err
+			}
 		}
 		receipt, err := recovery.Create(ctx, databaseURL, directory, backup, pgDump, snapshot, version)
 		if err != nil {

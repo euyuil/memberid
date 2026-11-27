@@ -28,6 +28,7 @@ const maximumLifetime = 365 * 24 * time.Hour
 
 type client struct {
 	registration config.Client
+	sharedOwner  string
 	displayName  string
 	revision     int64
 	loopback     bool
@@ -94,6 +95,7 @@ type grant struct {
 	FactorType     string    `json:"factorType"`
 	MemberID       string    `json:"memberId,omitempty"`
 	OrganizationID string    `json:"organizationId,omitempty"`
+	EnablementID   string    `json:"enablementId,omitempty"`
 	BindingID      string    `json:"bindingId,omitempty"`
 	Method         string    `json:"method"`
 	AuthTime       time.Time `json:"authTime"`
@@ -215,10 +217,39 @@ func (s *storage) registeredClient(registration identity.OIDCClientRegistration,
 	if err != nil {
 		return client{}, oidc.ErrServerError()
 	}
+	var sharedOwner string
+	if registration.Published {
+		sharedOwner = registration.OwnerOrganizationID
+		registration.Client.OrganizationID = ""
+	}
 	return client{
-		registration: registration.Client, displayName: registration.DisplayName,
+		sharedOwner: sharedOwner, registration: registration.Client, displayName: registration.DisplayName,
 		revision: registration.Revision, loopback: s.service.configuration.AllowLoopbackHTTP,
 	}, nil
+}
+
+// An activation identifies one uninterrupted period of consumer enablement.
+func (c client) organizationActivation(ctx context.Context, db databaseReader, organizationID string) (string, error) {
+	if c.registration.OrganizationID != "" && c.registration.OrganizationID != organizationID {
+		return "", identity.ErrIneligible
+	}
+	if c.sharedOwner == "" || organizationID == c.sharedOwner {
+		return "", nil
+	}
+	var activation string
+	err := db.QueryRow(ctx, "SELECT activation_id::text FROM oidc_application_enablements WHERE client_id=$1 AND organization_id=$2", c.GetID(), organizationID).Scan(&activation)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", identity.ErrIneligible
+	}
+	return activation, err
+}
+
+func (c client) checkActivation(ctx context.Context, db databaseReader, organizationID, expected string) error {
+	current, err := c.organizationActivation(ctx, db, organizationID)
+	if err == nil && current != expected {
+		return identity.ErrIneligible
+	}
+	return err
 }
 
 func (s *storage) issuanceClient(ctx context.Context, tx pgx.Tx, id string) (client, error) {

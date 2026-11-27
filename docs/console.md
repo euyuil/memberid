@@ -37,7 +37,7 @@ The [Member role definitions](roles.md) and [management scopes and actions](mana
 | List, configure and disable identity providers | Any organization | Own organization |
 | Create, inspect, update, disable and retire SAML applications | Any organization | Own organization |
 | List OIDC applications | All or selected owner | Own organization |
-| Register and maintain OIDC applications | Any organization or installation-wide | Own owner-only Member applications |
+| Register and maintain OIDC applications | Any organization or installation-wide | Own Member applications |
 | Read, set or clear a Member's managed email | Any organization | Own organization |
 
 Platform administrators can switch organizations from the management scope in the header while retaining their original operator identity. The sidebar groups Organizations, Members, and Identity providers under Identity management; OIDC and SAML applications under Application integrations; and Authentication events and Operation history under Activity. Switching between them keeps the selected organization. In the all-organization scope, platform administrators see members from every organization. Each row identifies its organization and opens the member detail in that organization. Organization administrators see their own organization in the header. These permissions belong exclusively to MemberID management and are not added to business application identity claims. There are no custom roles, invitations, deletion, or bulk operations in this version. Explicit operator binding and first-administrator recovery use the operator tools.
@@ -106,7 +106,11 @@ See [Feishu setup](feishu.md) and [DingTalk setup](dingtalk.md) for the required
 
 Platform administrators open **OIDC 应用** in the application integrations group. For a Member application, the console assigns the immutable client ID and configures the display name, login and logout callbacks, account-link return destinations, one or all login organizations, refresh, consent, and optional identity evidence. The console can also edit the registration, enable or disable it, and rotate its secret. `prompt=consent` still requires confirmation for a preauthorized application.
 
-Application details show the management owner (`ownerOrganizationId`) alongside the organization whose Members may sign in (`organizationId`). Creating in the installation-wide directory assigns the system organization as owner. Creating in a selected organization assigns that organization as both owner and the only permitted login organization. An installation operator can choose another owner at creation with `client add --owner-organization`. Editing the login restriction preserves the owner. Its organization administrators can edit callbacks, rotate credentials, and disable or re-enable owner-only Member applications. Platform administrators retain control over login organization policies, identity evidence scopes and audiences, and consent bypass. Factor clients and legacy cross-organization registrations remain platform-managed.
+Application details show the management owner (`ownerOrganizationId`) alongside the organization whose Members may sign in (`organizationId`). Creating in the installation-wide directory assigns the system organization as owner. Creating in a selected organization assigns that organization as both owner and the only permitted login organization. An installation operator can choose another owner at creation with `client add --owner-organization`. Editing the login restriction preserves the owner. Its organization administrators can edit callbacks, rotate credentials, and disable or re-enable their Member applications. Platform administrators retain control over login organization policies, identity evidence scopes and audiences, and consent bypass. Factor clients and legacy cross-organization registrations remain platform-managed.
+
+An owner administrator or platform administrator can publish an owner-restricted Member client using the console API. Send a same-origin authenticated `PUT /api/organizations/{ownerId}/oidc-applications/{clientId}/publication` with the session CSRF header and `{"enabled":true}`. The owner remains eligible. A consumer administrator explicitly enables use with the same body at `PUT /api/organizations/{consumerId}/oidc-applications/{clientId}/enablement`. Duplicate writes have one effect. A published client keeps its original ID, callback list, credentials, consent policy and platform-controlled evidence policy.
+
+Withdrawing a consumer (`{"enabled":false}`) prevents further authorization and revokes its grants, including refresh and online UserInfo access. Other consumers remain eligible. A new enablement requires fresh authorization. Unpublishing removes all external enablements and revokes their grants. Global application disablement revokes every grant. Offline JWT validation can continue until token expiry, and relying parties control their own sessions.
 
 To release identity evidence, enter a custom scope such as `member:evidence` and an exact resource audience such as `https://api.example.test`. When the client requests that scope, the access token for that audience carries the organization, Member and binding IDs along with authentication factor ID, type, method and times. An ordinary login without the evidence scope uses the UserInfo audience. The recipient must validate the token and decide its own resource permissions. See [access-token claims](oidc.md#token-validation-and-eligibility).
 
@@ -149,7 +153,7 @@ and Member IDs identify resources; names do not participate in routing.
 | `/organizations/{organizationId}/authentication-events` | Organization authentication events. |
 | `/providers` | Organization picker for provider management (platform administrators). |
 | `/oidc-applications` | Installation OIDC application management with all-organization management scope (platform administrators). |
-| `/organizations/{organizationId}/oidc-applications` | Registrations owned by the selected organization. Organization administrators can create and manage their own owner-only Member applications here. Platform administrators can use the installation-wide view to create platform-owned applications. |
+| `/organizations/{organizationId}/oidc-applications` | Registrations owned by the selected organization. Organization administrators can create and manage their own Member applications here. Platform administrators can use the installation-wide view to create platform-owned applications. |
 | `/saml-service-providers` | Organization picker for SAML application management (platform administrators). |
 | `/organizations/{organizationId}/saml-service-providers` | Organization SAML applications; `after` cursor and optional `serviceProviderId` detail selection. |
 
@@ -196,7 +200,7 @@ targets. Explicit console logout returns to `/`.
 
 Build with `sh scripts/check.sh` or `sh scripts/package.sh VERSION NEW_OUTPUT_DIRECTORY`. Both build the locked frontend before embedding it in Go. Node/npm are build dependencies; the resulting executable needs neither at runtime.
 
-Initialize a protected installation and a new database as described in [operator setup](operations.md). Fresh installations use schema version **32**. Existing schema 26–31 databases use the [explicit forward upgrade](database-upgrades.md); startup never migrates or erases data. Start the OIDC process before starting the console so its discovery and keys are reachable.
+Initialize a protected installation and a new database as described in [operator setup](operations.md). Fresh installations use schema version **33**. Existing schema 26–32 databases use the [explicit forward upgrade](database-upgrades.md); startup never migrates or erases data. Start the OIDC process before starting the console so its discovery and keys are reachable.
 
 Register a dedicated confidential Member client with no organization restriction:
 

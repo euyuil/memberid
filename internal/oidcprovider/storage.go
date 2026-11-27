@@ -230,8 +230,11 @@ func (s *storage) eligible(ctx context.Context, database databaseReader, g *gran
 		}
 		return nil
 	}
-	if registered.registration.SubjectKind != "member" || registered.registration.OrganizationID != "" && registered.registration.OrganizationID != g.OrganizationID {
+	if registered.registration.SubjectKind != "member" {
 		return oidc.ErrInvalidGrant()
+	}
+	if err := registered.checkActivation(ctx, database, g.OrganizationID, g.EnablementID); err != nil {
+		return grantEligibilityError(err)
 	}
 	binding, err := identity.MemberEvidence(ctx, database, g.FactorID, g.MemberID, g.OrganizationID)
 	if err != nil {

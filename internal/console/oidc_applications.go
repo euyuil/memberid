@@ -1,6 +1,7 @@
 package console
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/zhizhun-tech/memberid/internal/config"
@@ -70,6 +71,24 @@ func (s *Service) registerOIDCApplicationRoutes(installation *config.Loaded) {
 			r.PathValue("organizationId"), r.PathValue("clientId"), input.ExpectedRevision, config.SecretHash(secret))
 		respond(w, oidcApplicationResult{value, secret}, err)
 	}
+	sharing := func(set func(context.Context, identity.Principal, string, string, bool) error) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			var input struct {
+				Enabled *bool `json:"enabled"`
+			}
+			if !management.DecodeRequest(w, r, &input) {
+				return
+			}
+			if input.Enabled == nil {
+				respond(w, nil, identity.ErrInvalid)
+				return
+			}
+			err := set(r.Context(), r.Context().Value(sessionKey{}).(session).principal(), r.PathValue("organizationId"), r.PathValue("clientId"), *input.Enabled)
+			respond(w, map[string]bool{"enabled": *input.Enabled}, err)
+		}
+	}
+	s.routes.HandleFunc("PUT "+scopedCollection+"/{clientId}/publication", sharing(s.management.SetOIDCPublication))
+	s.routes.HandleFunc("PUT "+scopedCollection+"/{clientId}/enablement", sharing(s.management.SetOIDCEnablement))
 	for _, path := range []string{collection, scopedCollection} {
 		item := path + "/{clientId}"
 		s.routes.HandleFunc("GET "+path, list)

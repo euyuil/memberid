@@ -26,6 +26,7 @@ type oidcLoginEntry struct {
 func (service *Service) sealLoginEntry(request *authorizationRequest) error {
 	entry := request.entry
 	entry.Request.ProviderOrganizationID = request.ProviderOrganizationID
+	entry.Request.EnablementID = request.EnablementID
 	entry.Request.SessionID = request.SessionID
 	entry.Request.Fresh = request.Fresh
 	data, err := json.Marshal(entry)
