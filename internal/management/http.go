@@ -229,13 +229,12 @@ func pageRequest(w http.ResponseWriter, r *http.Request) (string, int, bool) {
 
 func (h *Handler) createOrganization(w http.ResponseWriter, r *http.Request) {
 	var input struct {
-		ID   string `json:"id"`
 		Name string `json:"name"`
 	}
 	if !decode(w, r, &input) {
 		return
 	}
-	value, err := h.store.CreateOrganization(r.Context(), identity.InstallationManagerPrincipal(), input.ID, input.Name)
+	value, err := h.store.CreateOrganization(r.Context(), identity.InstallationManagerPrincipal(), "", input.Name)
 	respond(w, http.StatusCreated, value, err)
 }
 func (h *Handler) updateOrganization(w http.ResponseWriter, r *http.Request) {
@@ -256,13 +255,12 @@ func (h *Handler) organizations(w http.ResponseWriter, r *http.Request) {
 }
 func (h *Handler) createMember(w http.ResponseWriter, r *http.Request) {
 	var input struct {
-		ID          string `json:"id"`
 		DisplayName string `json:"displayName"`
 	}
 	if !decode(w, r, &input) {
 		return
 	}
-	value, err := h.store.CreateMember(r.Context(), identity.InstallationManagerPrincipal(), r.PathValue("organizationId"), input.ID, input.DisplayName)
+	value, err := h.store.CreateMember(r.Context(), identity.InstallationManagerPrincipal(), r.PathValue("organizationId"), "", input.DisplayName)
 	respond(w, http.StatusCreated, value, err)
 }
 func (h *Handler) updateMember(w http.ResponseWriter, r *http.Request) {
