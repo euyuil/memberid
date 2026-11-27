@@ -25,6 +25,8 @@ See [local development with Docker Compose](docs/local-development.md) for first
 
 ## Checks
 
+See the [CI operating guide](docs/ci.md) for PR timing, nightly failure handling, and release verification.
+
 ```sh
 sh scripts/check.sh
 go test -race ./...
