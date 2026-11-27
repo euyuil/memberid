@@ -11,6 +11,8 @@ import (
 	"github.com/zhizhun-tech/memberid/internal/config"
 )
 
+const sessionIdleTimeout = 4 * time.Hour
+
 type Store struct {
 	pool *pgxpool.Pool
 }
@@ -54,15 +56,15 @@ func (store *Store) Grant(ctx context.Context, sessionID, clientID, memberID, ac
 }
 
 func (store *Store) CreateSession(ctx context.Context, secret string, session Session, absolute time.Time) error {
-	_, err := store.pool.Exec(ctx, `INSERT INTO console_sessions(secret_hash,grant_id,member_id,csrf,expires_at,absolute_expires_at) VALUES($1,$2,$3,$4,LEAST($5,clock_timestamp()+interval '30 minutes'),$5)`, config.SecretHash(secret), session.GrantID, session.MemberID, session.CSRF, absolute)
+	_, err := store.pool.Exec(ctx, `INSERT INTO console_sessions(secret_hash,grant_id,member_id,csrf,expires_at,absolute_expires_at) VALUES($1,$2,$3,$4,LEAST($5,clock_timestamp()+$6::interval),$5)`, config.SecretHash(secret), session.GrantID, session.MemberID, session.CSRF, absolute, sessionIdleTimeout)
 	return err
 }
 
 // Session renews only the console cookie record. It does not load or cache roles.
 func (store *Store) Session(ctx context.Context, secret string) (Session, error) {
 	var session Session
-	err := store.pool.QueryRow(ctx, `UPDATE console_sessions SET expires_at=LEAST(absolute_expires_at,clock_timestamp()+interval '30 minutes')
- WHERE secret_hash=$1 AND expires_at>clock_timestamp() AND absolute_expires_at>clock_timestamp() RETURNING member_id,grant_id,csrf`, config.SecretHash(secret)).Scan(&session.MemberID, &session.GrantID, &session.CSRF)
+	err := store.pool.QueryRow(ctx, `UPDATE console_sessions SET expires_at=LEAST(absolute_expires_at,clock_timestamp()+$2::interval)
+ WHERE secret_hash=$1 AND expires_at>clock_timestamp() AND absolute_expires_at>clock_timestamp() RETURNING member_id,grant_id,csrf`, config.SecretHash(secret), sessionIdleTimeout).Scan(&session.MemberID, &session.GrantID, &session.CSRF)
 	return session, err
 }
 
@@ -84,7 +86,7 @@ func (store *Store) SwitchSession(ctx context.Context, previous, secret string, 
 			return pgx.ErrNoRows
 		}
 		_, err = tx.Exec(ctx, `INSERT INTO console_sessions(secret_hash,grant_id,member_id,csrf,expires_at,absolute_expires_at)
- VALUES($1,$2,$3,$4,LEAST($5,clock_timestamp()+interval '30 minutes'),$5)`, config.SecretHash(secret), session.GrantID, session.MemberID, session.CSRF, absolute)
+ VALUES($1,$2,$3,$4,LEAST($5,clock_timestamp()+$6::interval),$5)`, config.SecretHash(secret), session.GrantID, session.MemberID, session.CSRF, absolute, sessionIdleTimeout)
 		return err
 	})
 }
