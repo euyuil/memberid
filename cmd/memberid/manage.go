@@ -103,7 +103,7 @@ func manage(ctx context.Context, args []string, stdout, stderr io.Writer) error 
 				return errors.New("usage: memberid organization set-slug --organization ID --slug SLUG")
 			}
 			err = store.AssignOrganizationSlug(ctx, identity.OperatorPrincipal(), *organizationID, slug)
-			result = map[string]string{"organizationId": *organizationID, "slug": slug}
+			result = map[string]string{"organizationId": *organizationID, "slug": identity.CanonicalLoginName(slug)}
 			break
 		}
 		if *organizationID != "" || *memberID != "" {

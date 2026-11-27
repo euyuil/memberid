@@ -56,6 +56,7 @@ func (store *Store) SetMemberPassword(ctx context.Context, principal Principal, 
 	if principal.kind != operatorPrincipal {
 		return "", ErrForbidden
 	}
+	username = CanonicalLoginName(username)
 	if !ValidID(organizationID, OrganizationKind) || !ValidID(memberID, MemberKind) || !passwordUsername.MatchString(username) {
 		return "", ErrInvalid
 	}
@@ -141,6 +142,7 @@ func passwordAttemptKey(organizationID, username string) [32]byte {
 // verified credential is still current. Password reset and username changes
 // take an exclusive lock on the same credential.
 func (store *Store) VerifyPasswordAndApply(ctx context.Context, organizationID, username, password string, apply func(pgx.Tx, MemberAdmission) error) error {
+	username = CanonicalLoginName(username)
 	if !ValidID(organizationID, OrganizationKind) || !passwordUsername.MatchString(username) || len(password) == 0 || len(password) > 1024 {
 		return ErrPasswordCredential
 	}

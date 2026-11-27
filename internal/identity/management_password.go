@@ -26,6 +26,10 @@ func (service *ManagementService) GenerateMemberPassword(ctx context.Context, pr
 	if principal.kind != memberPrincipal {
 		return GeneratedMemberPassword{}, ErrForbidden
 	}
+	if username != nil {
+		canonical := CanonicalLoginName(*username)
+		username = &canonical
+	}
 	if !ValidID(organizationID, OrganizationKind) || !ValidID(memberID, MemberKind) ||
 		username != nil && !passwordUsername.MatchString(*username) {
 		return GeneratedMemberPassword{}, ErrInvalid
@@ -80,6 +84,8 @@ func (service *ManagementService) RenameMemberPassword(ctx context.Context, prin
 	if principal.kind != memberPrincipal {
 		return ErrForbidden
 	}
+	expectedUsername = CanonicalLoginName(expectedUsername)
+	username = CanonicalLoginName(username)
 	if !ValidID(organizationID, OrganizationKind) || !ValidID(memberID, MemberKind) ||
 		!passwordUsername.MatchString(expectedUsername) || !passwordUsername.MatchString(username) {
 		return ErrInvalid

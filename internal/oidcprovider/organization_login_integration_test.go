@@ -126,7 +126,7 @@ func TestOrganizationSlugLogin(t *testing.T) {
 		}
 		return want
 	}
-	f.openDirectLogin(alias("team-one", "?returnTo=https://example.invalid", path))
+	f.openDirectLogin(alias("Team-One", "?returnTo=https://example.invalid", path))
 	name := "Renamed team"
 	if _, err := f.store.UpdateOrganization(t.Context(), identity.OperatorPrincipal(), id, identity.OrganizationChange{Name: &name}); err != nil {
 		t.Fatal(err)
