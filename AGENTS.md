@@ -99,6 +99,7 @@ The repository is being bootstrapped. These guidelines define intended implement
 - When versioned hooks exist under `.githooks/`, enable them with `git config --local core.hooksPath .githooks`. Verify that the directory and hooks exist first; until then, run the required checks explicitly.
 - Describe the concrete problem, resulting behavior, and validation in each PR. Include relevant UI evidence where useful and identify any unperformed checks. Merge only within the authorized scope after required checks pass and blocking findings are resolved.
 - Treat releases, package or image publication, deployment, and shared-environment changes as separate operations that require authorization within the task scope.
+- Never implement, trigger, or coordinate deployments to operator-managed installations through GitHub Actions. Use Actions for CI, disposable test environments, and artifact publication. Keep installation-specific topology, rollout policy, and infrastructure references out of this repository.
 
 ## Secrets, Dependencies, and Licensing
 
