@@ -11,7 +11,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/euyuil/memberid/internal/identity"
+	"github.com/zhizhun-tech/memberid/internal/identity"
 )
 
 func TestMemberUpdateManagementContract(t *testing.T) {

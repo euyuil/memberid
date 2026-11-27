@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/euyuil/memberid/internal/testdb"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/zhizhun-tech/memberid/internal/testdb"
 )
 
 func TestRetentionCleanupIsBoundedAndUsesOccurrence(t *testing.T) {

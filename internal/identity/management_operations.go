@@ -4,7 +4,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/euyuil/memberid/internal/authorization"
+	"github.com/zhizhun-tech/memberid/internal/authorization"
 )
 
 const (

@@ -6,15 +6,15 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
-	"github.com/euyuil/memberid/internal/config"
+	"github.com/zhizhun-tech/memberid/internal/config"
 	"net/url"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/euyuil/memberid/internal/feishu"
-	"github.com/euyuil/memberid/internal/identity"
 	"github.com/jackc/pgx/v5"
+	"github.com/zhizhun-tech/memberid/internal/feishu"
+	"github.com/zhizhun-tech/memberid/internal/identity"
 )
 
 func providerKey(t *testing.T, f *fixture) []byte {

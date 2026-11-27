@@ -8,9 +8,9 @@ import (
 	"mime"
 	"net/http"
 
-	"github.com/euyuil/memberid/internal/config"
-	"github.com/euyuil/memberid/internal/identity"
 	"github.com/jackc/pgx/v5"
+	"github.com/zhizhun-tech/memberid/internal/config"
+	"github.com/zhizhun-tech/memberid/internal/identity"
 )
 
 const phoneAccountPath = "/account/link/phone"

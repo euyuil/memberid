@@ -23,10 +23,14 @@ The destination must not exist and its parent must already exist. Failed builds 
 ## Automatically published images
 
 A successful push to `main` or a `release/X.Y` stabilization branch publishes the Linux amd64 image to
-`ghcr.io/euyuil/memberid:sha-<full-commit-sha>`. Pull requests run validation without
+`ghcr.io/zhizhun-tech/memberid:sha-<full-commit-sha>`. Pull requests run validation without
 publishing. Publication waits for repository security. The Linux job packages the executable, checks
 its file hashes, builds the image, and verifies its version. Full CI independently pulls
 the published digest and compares its executable to the Linux package under test.
+
+Images published before the repository transfer remain under `ghcr.io/euyuil/memberid`.
+Keep the full image reference, including its original namespace and digest, when
+restoring a deployment from one of those snapshots.
 
 The workflow uses GitHub's short-lived `GITHUB_TOKEN` with `packages: write` only
 in the publishing job. It requires no custom registry credential or deployment
@@ -41,7 +45,7 @@ variables, build arguments, artifacts, or logs. CI has no deployment step or
 cluster access; a publication never updates a running installation.
 
 Select a fully validated stable release for a production rollout and use its
-`ghcr.io/euyuil/memberid@sha256:...` reference, including in a Kubernetes or k3s
+`ghcr.io/zhizhun-tech/memberid@sha256:...` reference, including in a Kubernetes or k3s
 Pod's `image` field. SHA tags identify the source
 revision, but are not registry-enforced immutable references; a rerun may replace
 the tag. The digest pins the exact published image. Only Linux amd64 is currently

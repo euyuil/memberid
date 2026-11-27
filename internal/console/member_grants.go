@@ -3,7 +3,7 @@ package console
 import (
 	"net/http"
 
-	"github.com/euyuil/memberid/internal/management"
+	"github.com/zhizhun-tech/memberid/internal/management"
 )
 
 func (s *Service) memberGrants(w http.ResponseWriter, r *http.Request) {

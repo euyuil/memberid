@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/euyuil/memberid/internal/config"
+	"github.com/zhizhun-tech/memberid/internal/config"
 )
 
 func TestManagementCredentialRotationCommand(t *testing.T) {

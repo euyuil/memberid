@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/euyuil/memberid/internal/dingtalk"
+	"github.com/zhizhun-tech/memberid/internal/dingtalk"
 )
 
 type dingTalkStreamProvider interface {

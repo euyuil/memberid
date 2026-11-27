@@ -6,9 +6,9 @@ import (
 	"context"
 	"time"
 
-	"github.com/euyuil/memberid/internal/config"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/zhizhun-tech/memberid/internal/config"
 )
 
 type Store struct {

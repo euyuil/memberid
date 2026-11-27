@@ -12,11 +12,11 @@ import (
 	"os"
 	"time"
 
-	"github.com/euyuil/memberid/internal/config"
-	"github.com/euyuil/memberid/internal/dingtalk"
-	"github.com/euyuil/memberid/internal/identity"
-	"github.com/euyuil/memberid/internal/management"
-	"github.com/euyuil/memberid/internal/server"
+	"github.com/zhizhun-tech/memberid/internal/config"
+	"github.com/zhizhun-tech/memberid/internal/dingtalk"
+	"github.com/zhizhun-tech/memberid/internal/identity"
+	"github.com/zhizhun-tech/memberid/internal/management"
+	"github.com/zhizhun-tech/memberid/internal/server"
 )
 
 func serveManagement(ctx context.Context, args []string, stdout, stderr io.Writer) error {

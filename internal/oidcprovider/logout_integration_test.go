@@ -3,7 +3,7 @@
 package oidcprovider
 
 import (
-	"github.com/euyuil/memberid/internal/identity"
+	"github.com/zhizhun-tech/memberid/internal/identity"
 	"net/http"
 	"net/url"
 	"strings"

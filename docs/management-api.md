@@ -30,8 +30,8 @@ MemberID will allocate all new organization and Member IDs, including those crea
 
 | Operation | Current API | Agreed change (pending implementation) |
 | --- | --- | --- |
-| Create an organization or a Member | Omit `id` to have MemberID allocate it. The response contains the new ID. The request also accepts an unused ordinary ID. | MemberID will reject a request that supplies `id` for the new record. The existing parent organization ID still belongs in the Member creation path. [Issue #195](https://github.com/euyuil/memberid/issues/195) |
-| Enroll an organization and its first Member | Supply both new IDs. The organization ID identifies the enrollment for retries. | Supply a separate enrollment idempotency key. MemberID will allocate both IDs and return them in the receipt. Retrying the same key and inputs will return the original receipt. Reusing an accepted key with different inputs will return 409. [Issue #196](https://github.com/euyuil/memberid/issues/196) |
+| Create an organization or a Member | Omit `id` to have MemberID allocate it. The response contains the new ID. The request also accepts an unused ordinary ID. | MemberID will reject a request that supplies `id` for the new record. The existing parent organization ID still belongs in the Member creation path. [Issue #195](https://github.com/zhizhun-tech/memberid/issues/195) |
+| Enroll an organization and its first Member | Supply both new IDs. The organization ID identifies the enrollment for retries. | Supply a separate enrollment idempotency key. MemberID will allocate both IDs and return them in the receipt. Retrying the same key and inputs will return the original receipt. Reusing an accepted key with different inputs will return 409. [Issue #196](https://github.com/zhizhun-tech/memberid/issues/196) |
 
 ### Current endpoints
 

@@ -4,9 +4,9 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/euyuil/memberid/internal/authevent"
-	"github.com/euyuil/memberid/internal/identity"
 	"github.com/jackc/pgx/v5"
+	"github.com/zhizhun-tech/memberid/internal/authevent"
+	"github.com/zhizhun-tech/memberid/internal/identity"
 	"github.com/zitadel/oidc/v3/pkg/oidc"
 )
 

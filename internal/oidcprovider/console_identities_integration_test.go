@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/euyuil/memberid/internal/identity"
+	"github.com/zhizhun-tech/memberid/internal/identity"
 )
 
 func consoleSwitchFixture(t *testing.T) (*fixture, *httptest.Server) {

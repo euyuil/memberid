@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/euyuil/memberid/internal/feishu"
+	"github.com/zhizhun-tech/memberid/internal/feishu"
 )
 
 type checkFeishuFunc func(context.Context, string, string) error

@@ -7,7 +7,7 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/euyuil/memberid/internal/config"
+	"github.com/zhizhun-tech/memberid/internal/config"
 )
 
 func TestRevocationRejectsUnverifiedInputAndIgnoresTypeHints(t *testing.T) {

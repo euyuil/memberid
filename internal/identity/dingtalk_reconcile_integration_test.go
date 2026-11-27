@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/euyuil/memberid/internal/dingtalk"
+	"github.com/zhizhun-tech/memberid/internal/dingtalk"
 )
 
 func reconciliationFixture(t *testing.T) (*Store, *DingTalkApplications, *DingTalkDirectory, *DingTalkVerifier, DingTalkApplication, Member) {

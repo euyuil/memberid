@@ -1,4 +1,4 @@
-module github.com/euyuil/memberid
+module github.com/zhizhun-tech/memberid
 
 go 1.27.4
 

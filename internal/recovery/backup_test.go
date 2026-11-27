@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/euyuil/memberid/internal/config"
-	"github.com/euyuil/memberid/internal/identity"
+	"github.com/zhizhun-tech/memberid/internal/config"
+	"github.com/zhizhun-tech/memberid/internal/identity"
 )
 
 func TestRecoveryRejectsChangedMissingAndExtraFiles(t *testing.T) {

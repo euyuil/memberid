@@ -4,9 +4,9 @@ import (
 	"io"
 	"testing"
 
-	"github.com/euyuil/memberid/internal/authevent"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/zhizhun-tech/memberid/internal/authevent"
 	"github.com/zitadel/oidc/v3/pkg/oidc"
 )
 

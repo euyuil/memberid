@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/euyuil/memberid/internal/config"
-	"github.com/euyuil/memberid/internal/identity"
+	"github.com/zhizhun-tech/memberid/internal/config"
+	"github.com/zhizhun-tech/memberid/internal/identity"
 )
 
 // All upstream exchanges in this file use synthetic Feishu responses.

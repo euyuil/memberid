@@ -12,12 +12,12 @@ import (
 	"slices"
 	"time"
 
-	"github.com/euyuil/memberid/internal/browserauth"
-	"github.com/euyuil/memberid/internal/config"
-	"github.com/euyuil/memberid/internal/identity"
-	"github.com/euyuil/memberid/internal/samlprovider"
 	jose "github.com/go-jose/go-jose/v4"
 	"github.com/jackc/pgx/v5"
+	"github.com/zhizhun-tech/memberid/internal/browserauth"
+	"github.com/zhizhun-tech/memberid/internal/config"
+	"github.com/zhizhun-tech/memberid/internal/identity"
+	"github.com/zhizhun-tech/memberid/internal/samlprovider"
 	"github.com/zitadel/oidc/v3/pkg/oidc"
 	"github.com/zitadel/oidc/v3/pkg/op"
 )

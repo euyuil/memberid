@@ -92,7 +92,7 @@ Upstream callbacks recheck current organization, Member, binding, factor, and pr
 
 ## Initial profile acceptance
 
-The initial profile in [issue #99](https://github.com/euyuil/memberid/issues/99) is supported by the following implementation and acceptance evidence. The [independent consumer guide](saml-interop.md#observed-acceptance-and-limits) records the tested package versions, executable hashes, environment, and observed results.
+The initial profile in [issue #99](https://github.com/zhizhun-tech/memberid/issues/99) is supported by the following implementation and acceptance evidence. The [independent consumer guide](saml-interop.md#observed-acceptance-and-limits) records the tested package versions, executable hashes, environment, and observed results.
 
 | Acceptance criterion | Evidence |
 | --- | --- |

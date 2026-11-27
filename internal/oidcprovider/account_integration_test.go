@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/euyuil/memberid/internal/config"
-	"github.com/euyuil/memberid/internal/identity"
+	"github.com/zhizhun-tech/memberid/internal/config"
+	"github.com/zhizhun-tech/memberid/internal/identity"
 )
 
 const accountReturn = "http://127.0.0.1:8484/settings"

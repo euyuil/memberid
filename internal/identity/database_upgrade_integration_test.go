@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/euyuil/memberid/internal/testdb"
 	"github.com/jackc/pgx/v5"
+	"github.com/zhizhun-tech/memberid/internal/testdb"
 )
 
 // Frozen from a7c3ebed19d4cfb7196108f80c6360fc9449f882, before migrations.

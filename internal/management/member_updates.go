@@ -3,7 +3,7 @@ package management
 import (
 	"net/http"
 
-	"github.com/euyuil/memberid/internal/identity"
+	"github.com/zhizhun-tech/memberid/internal/identity"
 )
 
 const memberUpdateRoute = "/v1/organizations/{organizationId}/members/{memberId}/updates/{updateId}"

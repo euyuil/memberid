@@ -8,7 +8,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/euyuil/memberid/internal/identity"
+	"github.com/zhizhun-tech/memberid/internal/identity"
 )
 
 func manageSetup(ctx context.Context, args []string, stdout, stderr io.Writer) error {

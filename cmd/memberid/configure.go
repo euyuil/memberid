@@ -8,9 +8,9 @@ import (
 	"io"
 	"os"
 
-	"github.com/euyuil/memberid/internal/config"
-	"github.com/euyuil/memberid/internal/identity"
-	"github.com/euyuil/memberid/internal/sms"
+	"github.com/zhizhun-tech/memberid/internal/config"
+	"github.com/zhizhun-tech/memberid/internal/identity"
+	"github.com/zhizhun-tech/memberid/internal/sms"
 )
 
 type repeatedFlag []string

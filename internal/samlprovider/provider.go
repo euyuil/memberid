@@ -22,9 +22,9 @@ import (
 	"time"
 
 	"github.com/crewjam/saml"
-	"github.com/euyuil/memberid/internal/config"
-	"github.com/euyuil/memberid/internal/identity"
 	dsig "github.com/russellhaering/goxmldsig"
+	"github.com/zhizhun-tech/memberid/internal/config"
+	"github.com/zhizhun-tech/memberid/internal/identity"
 )
 
 const MetadataPath = "/saml/metadata"

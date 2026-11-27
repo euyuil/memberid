@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/euyuil/memberid/internal/authevent"
-	"github.com/euyuil/memberid/internal/config"
+	"github.com/zhizhun-tech/memberid/internal/authevent"
+	"github.com/zhizhun-tech/memberid/internal/config"
 )
 
 func enableAuthenticationEvents(t *testing.T, f *fixture) *authevent.Recorder {

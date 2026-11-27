@@ -7,9 +7,9 @@ import (
 	"slices"
 	"time"
 
-	"github.com/euyuil/memberid/internal/authevent"
-	"github.com/euyuil/memberid/internal/config"
 	"github.com/jackc/pgx/v5"
+	"github.com/zhizhun-tech/memberid/internal/authevent"
+	"github.com/zhizhun-tech/memberid/internal/config"
 	"github.com/zitadel/oidc/v3/pkg/oidc"
 	"github.com/zitadel/oidc/v3/pkg/op"
 )

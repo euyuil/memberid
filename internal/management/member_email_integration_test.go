@@ -5,7 +5,7 @@ package management
 import (
 	"testing"
 
-	"github.com/euyuil/memberid/internal/identity"
+	"github.com/zhizhun-tech/memberid/internal/identity"
 )
 
 func TestMemberEmailManagementHTTP(t *testing.T) {

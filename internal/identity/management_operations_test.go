@@ -5,7 +5,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/euyuil/memberid/internal/authorization"
+	"github.com/zhizhun-tech/memberid/internal/authorization"
 )
 
 func TestManagementOperationMatrix(t *testing.T) {

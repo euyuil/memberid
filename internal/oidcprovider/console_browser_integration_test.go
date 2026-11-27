@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/euyuil/memberid/internal/identity"
+	"github.com/zhizhun-tech/memberid/internal/identity"
 )
 
 // TestConsoleBrowserFixture is an opt-in, disposable manual inspection fixture.

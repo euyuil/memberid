@@ -5,7 +5,7 @@ package browserauth
 import (
 	"time"
 
-	"github.com/euyuil/memberid/internal/identity"
+	"github.com/zhizhun-tech/memberid/internal/identity"
 )
 
 type Policy struct {

@@ -9,12 +9,12 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/euyuil/memberid/internal/config"
-	"github.com/euyuil/memberid/internal/console"
-	"github.com/euyuil/memberid/internal/dingtalk"
-	"github.com/euyuil/memberid/internal/feishu"
-	"github.com/euyuil/memberid/internal/identity"
-	"github.com/euyuil/memberid/internal/server"
+	"github.com/zhizhun-tech/memberid/internal/config"
+	"github.com/zhizhun-tech/memberid/internal/console"
+	"github.com/zhizhun-tech/memberid/internal/dingtalk"
+	"github.com/zhizhun-tech/memberid/internal/feishu"
+	"github.com/zhizhun-tech/memberid/internal/identity"
+	"github.com/zhizhun-tech/memberid/internal/server"
 )
 
 func serveConsole(ctx context.Context, args []string, stdout, stderr io.Writer) error {

@@ -5,8 +5,8 @@ import (
 	"errors"
 	"time"
 
-	"github.com/euyuil/memberid/internal/dingtalk"
-	"github.com/euyuil/memberid/internal/feishu"
+	"github.com/zhizhun-tech/memberid/internal/dingtalk"
+	"github.com/zhizhun-tech/memberid/internal/feishu"
 )
 
 type ProviderCredentialCheck struct {

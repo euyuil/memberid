@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/euyuil/memberid/internal/identity"
+	"github.com/zhizhun-tech/memberid/internal/identity"
 )
 
 const MaximumFileSize = 1 << 20

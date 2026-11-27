@@ -43,7 +43,7 @@ func TestGitLab(t *testing.T) {
 	}
 	for {
 		data, err := os.ReadFile(filepath.Join(root, "go.mod"))
-		if err == nil && strings.HasPrefix(string(data), "module github.com/euyuil/memberid\n") {
+		if err == nil && strings.HasPrefix(string(data), "module github.com/zhizhun-tech/memberid\n") {
 			break
 		}
 		parent := filepath.Dir(root)

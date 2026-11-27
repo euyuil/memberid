@@ -6,7 +6,7 @@ import (
 	"flag"
 	"io"
 
-	"github.com/euyuil/memberid/internal/config"
+	"github.com/zhizhun-tech/memberid/internal/config"
 )
 
 func manageSAMLSigning(args []string, stdout, stderr io.Writer) error {

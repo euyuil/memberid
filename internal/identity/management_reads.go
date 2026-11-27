@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/euyuil/memberid/internal/authorization"
+	"github.com/zhizhun-tech/memberid/internal/authorization"
 )
 
 // Management read services authorize the complete response before querying its

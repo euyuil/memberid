@@ -14,7 +14,7 @@ import (
 
 	"github.com/go-jose/go-jose/v4"
 
-	"github.com/euyuil/memberid/internal/config"
+	"github.com/zhizhun-tech/memberid/internal/config"
 )
 
 func TestExportJWKSCommand(t *testing.T) {

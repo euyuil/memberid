@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/euyuil/memberid/internal/authorization"
 	"github.com/jackc/pgx/v5"
+	"github.com/zhizhun-tech/memberid/internal/authorization"
 )
 
 // SAMLServiceProvider is organization-owned protocol admission, not application authorization.

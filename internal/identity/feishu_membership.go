@@ -5,8 +5,8 @@ import (
 	"errors"
 	"time"
 
-	"github.com/euyuil/memberid/internal/feishu"
 	"github.com/jackc/pgx/v5"
+	"github.com/zhizhun-tech/memberid/internal/feishu"
 )
 
 const FeishuMembershipBatchSize = 100

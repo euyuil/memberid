@@ -6,10 +6,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/euyuil/memberid/internal/browserauth"
-	"github.com/euyuil/memberid/internal/config"
-	"github.com/euyuil/memberid/internal/identity"
 	"github.com/jackc/pgx/v5"
+	"github.com/zhizhun-tech/memberid/internal/browserauth"
+	"github.com/zhizhun-tech/memberid/internal/config"
+	"github.com/zhizhun-tech/memberid/internal/identity"
 )
 
 type loginPolicy struct {

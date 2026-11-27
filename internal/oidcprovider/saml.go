@@ -7,12 +7,12 @@ import (
 	"slices"
 	"time"
 
-	"github.com/euyuil/memberid/internal/authevent"
-	"github.com/euyuil/memberid/internal/browserauth"
-	"github.com/euyuil/memberid/internal/config"
-	"github.com/euyuil/memberid/internal/identity"
-	"github.com/euyuil/memberid/internal/samlprovider"
 	"github.com/jackc/pgx/v5"
+	"github.com/zhizhun-tech/memberid/internal/authevent"
+	"github.com/zhizhun-tech/memberid/internal/browserauth"
+	"github.com/zhizhun-tech/memberid/internal/config"
+	"github.com/zhizhun-tech/memberid/internal/identity"
+	"github.com/zhizhun-tech/memberid/internal/samlprovider"
 )
 
 func (service *Service) samlSSO(w http.ResponseWriter, r *http.Request) {
