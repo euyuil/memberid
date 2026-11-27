@@ -9,6 +9,7 @@ import (
 )
 
 func TestUntrustedPrincipalsCannotUseInstallationMutations(t *testing.T) {
+	org, _ := NewID(OrganizationKind)
 	memberID, err := NewID(MemberKind)
 	if err != nil {
 		t.Fatal(err)
@@ -35,32 +36,32 @@ func TestUntrustedPrincipalsCannotUseInstallationMutations(t *testing.T) {
 			operations := map[string]func() error{
 				"create organization": func() error { _, err := store.CreateOrganization(t.Context(), principal, "", "Example"); return err },
 				"create member": func() error {
-					_, err := store.CreateMember(t.Context(), principal, SystemOrganizationID, "", "Example")
+					_, err := store.CreateMember(t.Context(), principal, org, "", "Example")
 					return err
 				},
 				"update organization": func() error {
-					_, err := store.UpdateOrganization(t.Context(), principal, SystemOrganizationID, OrganizationChange{})
+					_, err := store.UpdateOrganization(t.Context(), principal, org, OrganizationChange{})
 					return err
 				},
 				"update member": func() error {
-					_, err := store.UpdateMember(t.Context(), principal, SystemOrganizationID, memberID, MemberChange{})
+					_, err := store.UpdateMember(t.Context(), principal, org, memberID, MemberChange{})
 					return err
 				},
 				"update receipt": func() error {
-					_, _, err := store.UpdateMemberOnce(t.Context(), principal, SystemOrganizationID, memberID, "", MemberChange{})
+					_, _, err := store.UpdateMemberOnce(t.Context(), principal, org, memberID, "", MemberChange{})
 					return err
 				},
 				"bind": func() error {
-					_, err := store.BindFactor(t.Context(), principal, SystemOrganizationID, memberID, "")
+					_, err := store.BindFactor(t.Context(), principal, org, memberID, "")
 					return err
 				},
-				"revoke binding": func() error { return store.RevokeBinding(t.Context(), principal, SystemOrganizationID, memberID, "") },
+				"revoke binding": func() error { return store.RevokeBinding(t.Context(), principal, org, memberID, "") },
 				"enroll": func() error {
 					_, err := store.EnrollOrganization(t.Context(), principal, OrganizationEnrollment{})
 					return err
 				},
 				"provider credentials": func() error {
-					_, err := (&DingTalkApplications{}).Configure(t.Context(), principal, SystemOrganizationID, DingTalkApplicationInput{})
+					_, err := (&DingTalkApplications{}).Configure(t.Context(), principal, org, DingTalkApplicationInput{})
 					return err
 				},
 				"system admission": func() error { return store.PrepareSystemDingTalkAdmission(t.Context(), principal, memberID, "") },
@@ -75,7 +76,8 @@ func TestUntrustedPrincipalsCannotUseInstallationMutations(t *testing.T) {
 }
 
 func TestEmptyPrincipalCannotAcquireManagementAuthority(t *testing.T) {
-	if err := authorizeAll(t.Context(), nil, Principal{}, authorization.Requirement{Target: "organizations/" + SystemOrganizationID, Action: "get"}); !errors.Is(err, ErrForbidden) {
+	org, _ := NewID(OrganizationKind)
+	if err := authorizeAll(t.Context(), nil, Principal{}, authorization.Requirement{Target: "organizations/" + org, Action: "get"}); !errors.Is(err, ErrForbidden) {
 		t.Fatal("empty principal acquired authority", err)
 	}
 	if _, err := (Principal{}).auditID(); !errors.Is(err, ErrForbidden) {

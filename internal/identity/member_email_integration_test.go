@@ -15,7 +15,7 @@ func TestMemberEmailAuthorityConflictsAndAudit(t *testing.T) {
 	org, member := organizationAndMember(t, store)
 	other, foreign := organizationAndMember(t, store)
 	admin, factor := administratorMember(t, store, org.ID, 81)
-	platform, platformFactor := administratorMember(t, store, SystemOrganizationID, 82)
+	platform, platformFactor := administratorMember(t, store, store.SystemOrganizationID(), 82)
 	principal := administratorActor(t, store, admin, factor).Principal()
 	platformPrincipal := administratorActor(t, store, platform, platformFactor).Principal()
 	service := NewManagementService(store, nil, nil, time.Hour)

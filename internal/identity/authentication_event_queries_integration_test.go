@@ -29,7 +29,7 @@ func TestAuthenticationEventQueryIsolationProjectionAndRetention(t *testing.T) {
 	org, member := organizationAndMember(t, s)
 	other, _ := organizationAndMember(t, s)
 	admin, factor := administratorMember(t, s, org.ID, 81)
-	platform, platformFactor := administratorMember(t, s, SystemOrganizationID, 82)
+	platform, platformFactor := administratorMember(t, s, s.SystemOrganizationID(), 82)
 	local := administratorActor(t, s, admin, factor).Principal()
 	global := administratorActor(t, s, platform, platformFactor).Principal()
 	service := NewManagementService(s, nil, nil, 24*time.Hour)
@@ -39,7 +39,7 @@ func TestAuthenticationEventQueryIsolationProjectionAndRetention(t *testing.T) {
 		id, org, cause string
 		age            time.Duration
 	}{
-		{"global", "", "", 0}, {"foreign", other.ID, "", 0}, {"system", SystemOrganizationID, "", 0},
+		{"global", "", "", 0}, {"foreign", other.ID, "", 0}, {"system", s.SystemOrganizationID(), "", 0},
 		{"expired", org.ID, "", 48 * time.Hour}, {"local-cause", org.ID, "", 0},
 		{"local-global-cause", org.ID, "global", 0}, {"local-foreign-cause", org.ID, "foreign", 0},
 		{"local-expired-cause", org.ID, "expired", 0}, {"local-missing-cause", org.ID, "missing", 0},
@@ -81,7 +81,7 @@ func TestAuthenticationEventQueryIsolationProjectionAndRetention(t *testing.T) {
 	if err != nil || len(all.Items) != 9 {
 		t.Fatal(all, err)
 	}
-	if len(all.OrganizationNames) != 3 || all.OrganizationNames[other.ID] != other.Name || all.OrganizationNames[SystemOrganizationID] == "" {
+	if len(all.OrganizationNames) != 3 || all.OrganizationNames[other.ID] != other.Name || all.OrganizationNames[s.SystemOrganizationID()] == "" {
 		t.Fatal("missing organization display names", all.OrganizationNames)
 	}
 	renamed := "Renamed organization"
@@ -105,7 +105,7 @@ func TestAuthenticationEventQueryIsolationProjectionAndRetention(t *testing.T) {
 			t.Fatal("foreign/expired record visible", id, err)
 		}
 	}
-	for _, scope := range []string{"", other.ID, SystemOrganizationID} {
+	for _, scope := range []string{"", other.ID, s.SystemOrganizationID()} {
 		if _, err := service.AuthenticationEvents(t.Context(), local, scope, filter); !errors.Is(err, ErrForbidden) {
 			t.Fatal("escaped scope", scope, err)
 		}

@@ -29,18 +29,17 @@ type ManagementActor struct {
 
 func managementActor(ctx context.Context, db queryer, memberID, grantID string) (ManagementActor, error) {
 	var actor ManagementActor
-	err := db.QueryRow(ctx, `SELECT m.id,m.organization_id,m.display_name`+eligibleBindings+`
+	err := db.QueryRow(ctx, `SELECT m.id,m.organization_id,m.display_name,m.organization_id=system_organization_id()`+eligibleBindings+`
  AND m.id=$1 AND EXISTS(SELECT 1 FROM administrators a WHERE a.member_id=m.id)
  AND EXISTS(SELECT 1 FROM oidc_grants g JOIN authentication_sessions s ON s.id=g.session_id
  WHERE g.id=$2 AND g.revoked_at IS NULL AND s.revoked_at IS NULL
  AND g.expires_at>clock_timestamp() AND g.absolute_expires_at>clock_timestamp()
  AND s.expires_at>clock_timestamp() AND s.absolute_expires_at>clock_timestamp()
  AND g.data->>'memberId'=m.id AND g.data->>'factorId'=f.id
- AND g.data->>'bindingId'=b.id::text)`, memberID, grantID).Scan(&actor.MemberID, &actor.OrganizationID, &actor.DisplayName)
+ AND g.data->>'bindingId'=b.id::text)`, memberID, grantID).Scan(&actor.MemberID, &actor.OrganizationID, &actor.DisplayName, &actor.Platform)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return actor, ErrManagementSession
 	}
-	actor.Platform = actor.OrganizationID == SystemOrganizationID
 	actor.GrantID = grantID
 	return actor, err
 }
@@ -178,7 +177,7 @@ func (service *ManagementService) Manage(ctx context.Context, principal Principa
 			}
 			result, err = readOrganization(tx.QueryRow(ctx, "INSERT INTO organizations(id,name) VALUES($1,$2) RETURNING "+organizationColumns, organizationID, *change.Name))
 		case "organization.update":
-			result, err = updateOrganization(ctx, tx, organizationID, OrganizationChange{Name: change.Name, Status: change.Status})
+			result, err = service.store.updateOrganization(ctx, tx, organizationID, OrganizationChange{Name: change.Name, Status: change.Status})
 		case "member.create":
 			if !ValidID(organizationID, OrganizationKind) || change.DisplayName == nil || !validText(*change.DisplayName, 128) {
 				return ErrInvalid

@@ -79,11 +79,11 @@ func TestDatabaseInitSavesInitialRootPasswordExclusively(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer store.Close()
-	admins, err := store.AdministratorIDs(t.Context(), identity.SystemOrganizationID)
-	if err != nil || len(admins) != 1 || admins[0] != identity.RootMemberID {
+	admins, err := store.AdministratorIDs(t.Context(), store.SystemOrganizationID())
+	if err != nil || len(admins) != 1 || admins[0] != store.RootMemberID() {
 		t.Fatal("fresh installation did not create exactly one platform administrator", err)
 	}
-	root, err := store.Member(t.Context(), identity.SystemOrganizationID, admins[0])
+	root, err := store.Member(t.Context(), store.SystemOrganizationID(), admins[0])
 	if err != nil || root.DisplayName != identity.RootUsername {
 		t.Fatal("the initial administrator was not the system root Member", err)
 	}
@@ -100,7 +100,7 @@ func TestDatabaseInitSavesInitialRootPasswordExclusively(t *testing.T) {
 	if !regexp.MustCompile(`^[A-Za-z0-9_-]{32}\n$`).Match(stdout.Bytes()) || bytes.Equal(stdout.Bytes(), contents) {
 		t.Fatal("local reset did not return a newly generated password")
 	}
-	if stderr.String() != "Login org_system/root\n" {
+	if stderr.String() != "Login system/root\n" {
 		t.Fatal("local reset did not report the current login alongside the password")
 	}
 	if retained, err := os.ReadFile(path); err != nil || !bytes.Equal(retained, contents) {

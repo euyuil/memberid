@@ -15,7 +15,7 @@ import (
 func TestManagementEventSnapshotsSurviveRenaming(t *testing.T) {
 	s := testStore(t)
 	org, member := organizationAndMember(t, s)
-	administrator, factor := administratorMember(t, s, SystemOrganizationID, 81)
+	administrator, factor := administratorMember(t, s, s.SystemOrganizationID(), 81)
 	principal := administratorActor(t, s, administrator, factor).Principal()
 	name, blocked := "Historical member", true
 	if _, err := NewManagementService(s, nil, nil, 90*24*time.Hour).Manage(t.Context(), principal, "member.update", org.ID, member.ID, ManagementChange{DisplayName: &name, ManualBlocked: &blocked}); err != nil {

@@ -141,7 +141,7 @@ func TestManagementAuthenticationAndListenerSeparation(t *testing.T) {
 	}
 	var organizations identity.Page[identity.Organization]
 	f.call(t, "GET", "/v1/organizations", "", 200, &organizations)
-	if len(organizations.Items) != 1 || organizations.Items[0].ID != identity.SystemOrganizationID {
+	if len(organizations.Items) != 1 || organizations.Items[0].ID != f.store.SystemOrganizationID() {
 		t.Fatal("unauthorized request created an identity")
 	}
 	for _, path := range []string{"/.well-known/openid-configuration", "/oauth/token", "/login", "/v1/factors"} {
@@ -270,7 +270,7 @@ func TestManagementPaginationAndConflicts(t *testing.T) {
 	nextAfter := page.NextAfter
 	page = identity.Page[identity.Organization]{}
 	f.call(t, "GET", "/v1/organizations?after="+nextAfter, "", 200, &page)
-	if len(page.Items) != 2 || page.Items[1].ID != identity.SystemOrganizationID || page.NextAfter != "" {
+	if len(page.Items) != 2 || page.NextAfter != "" {
 		t.Fatal("incorrect final organization page")
 	}
 	f.call(t, "PATCH", path+"/"+member.ID, `{"status":"active"}`, 400, nil)

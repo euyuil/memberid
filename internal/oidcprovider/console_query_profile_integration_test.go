@@ -26,7 +26,7 @@ func TestConsoleQueryProfile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	platform, err := f.store.CreateMember(t.Context(), identity.OperatorPrincipal(), identity.SystemOrganizationID, "", "Profile administrator")
+	platform, err := f.store.CreateMember(t.Context(), identity.OperatorPrincipal(), f.store.SystemOrganizationID(), "", "Profile administrator")
 	if err != nil {
 		t.Fatal(err)
 	}

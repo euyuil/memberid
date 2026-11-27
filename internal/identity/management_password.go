@@ -30,6 +30,9 @@ func (service *ManagementService) GenerateMemberPassword(ctx context.Context, pr
 		username != nil && !passwordUsername.MatchString(*username) {
 		return GeneratedMemberPassword{}, ErrInvalid
 	}
+	if username != nil && organizationID == service.store.systemOrganizationID && *username == RootUsername {
+		return GeneratedMemberPassword{}, ErrForbidden
+	}
 	action := actionUpdate
 	if username != nil {
 		action = actionCreate
@@ -97,6 +100,9 @@ func (service *ManagementService) RenameMemberPassword(ctx context.Context, prin
 		}
 		if currentUsername == username {
 			return nil
+		}
+		if organizationID == service.store.systemOrganizationID && (memberID == service.store.rootMemberID || username == RootUsername) {
+			return ErrForbidden
 		}
 		if currentUsername != expectedUsername {
 			return ErrConflict

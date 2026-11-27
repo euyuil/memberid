@@ -141,7 +141,7 @@ func (store *Store) UpdateOrganization(ctx context.Context, principal Principal,
 		if err != nil {
 			return err
 		}
-		result, err = updateOrganization(ctx, tx, id, change)
+		result, err = store.updateOrganization(ctx, tx, id, change)
 		if err != nil {
 			return err
 		}
@@ -150,8 +150,8 @@ func (store *Store) UpdateOrganization(ctx context.Context, principal Principal,
 	return result, err
 }
 
-func updateOrganization(ctx context.Context, database queryer, id string, change OrganizationChange) (Organization, error) {
-	if id == SystemOrganizationID && change.Status != nil && *change.Status != "enabled" {
+func (store *Store) updateOrganization(ctx context.Context, database queryer, id string, change OrganizationChange) (Organization, error) {
+	if id == store.systemOrganizationID && change.Status != nil && *change.Status != "enabled" {
 		return Organization{}, ErrForbidden
 	}
 	if !ValidID(id, OrganizationKind) || change.Name == nil && change.Status == nil || change.Name != nil && !validText(*change.Name, 128) || change.Status != nil && *change.Status != "enabled" && *change.Status != "disabled" {

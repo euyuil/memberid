@@ -13,7 +13,7 @@ func TestManagementReadServicesEnforceScope(t *testing.T) {
 	org, target := organizationAndMember(t, s)
 	otherOrg, otherTarget := organizationAndMember(t, s)
 	local, factor := administratorMember(t, s, org.ID, 81)
-	platform, platformFactor := administratorMember(t, s, SystemOrganizationID, 82)
+	platform, platformFactor := administratorMember(t, s, s.SystemOrganizationID(), 82)
 	administratorMember(t, s, otherOrg.ID, 83)
 	actor := administratorActor(t, s, local, factor)
 	// Presentation fields cannot select the navigation organization or role.

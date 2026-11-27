@@ -73,7 +73,7 @@ func (apps *FeishuApplications) configure(ctx context.Context, principal Princip
 	if principal.kind != memberPrincipal {
 		return Provider{}, ErrForbidden
 	}
-	if !validProviderInput(organizationID, namespace, input, true) || organizationID == SystemOrganizationID ||
+	if !validProviderInput(organizationID, namespace, input, true) || organizationID == apps.store.systemOrganizationID ||
 		!feishu.ValidApplication(input.TenantID, input.ClientID) || input.ClientSecret != "" && !feishu.ValidSecret(input.ClientSecret) {
 		return Provider{}, ErrInvalid
 	}
@@ -333,7 +333,7 @@ func (apps *FeishuApplications) Admit(ctx context.Context, tx pgx.Tx, proof Feis
 
 func (apps *FeishuApplications) admit(ctx context.Context, tx pgx.Tx, proof FeishuProof, source *Principal, targetID string) (MemberAdmission, error) {
 	login := proof.login
-	if proof.applications != apps || proof.authenticatedAt.IsZero() || proof.authenticatedAt.After(time.Now()) || !proof.authenticatedAt.Add(5*time.Minute).After(time.Now()) || login.OrganizationID == SystemOrganizationID {
+	if proof.applications != apps || proof.authenticatedAt.IsZero() || proof.authenticatedAt.After(time.Now()) || !proof.authenticatedAt.Add(5*time.Minute).After(time.Now()) || login.OrganizationID == apps.store.systemOrganizationID {
 		return MemberAdmission{}, ErrIneligible
 	}
 	org, err := readOrganization(tx.QueryRow(ctx, "SELECT "+organizationColumns+" FROM organizations WHERE id=$1 FOR UPDATE", login.OrganizationID))

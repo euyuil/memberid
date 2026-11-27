@@ -12,7 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-const SchemaVersion = 37
+const SchemaVersion = 38
 
 // The two-int key space is separate from existing bigint initialization,
 // administration and worker locks. MID identifies this maintenance namespace.
@@ -55,6 +55,9 @@ var upgrade36 string
 //go:embed migrations/0037_enrollment_keys.sql
 var upgrade37 string
 
+//go:embed migrations/0038_installation_ids.sql
+var upgrade38 string
+
 type DatabasePlan struct {
 	CurrentVersion  int  `json:"currentVersion"`
 	TargetVersion   int  `json:"targetVersion"`
@@ -68,6 +71,7 @@ type UpgradeBackup struct {
 }
 
 type UpgradePreparation struct {
+	ProviderKey    []byte
 	Backup         UpgradeBackup
 	OIDCClients    []OIDCClientRegistration
 	ApplicationIDs []ApplicationIDAssignment
@@ -219,7 +223,7 @@ func UpgradeDatabase(ctx context.Context, databaseURL string, prepare func(conte
 		for _, migration := range []struct {
 			from, to int
 			sql      string
-		}{{26, 27, upgrade27}, {27, 28, upgrade28}, {28, 29, upgrade29}, {29, 30, upgrade30}, {30, 31, upgrade31}, {31, 32, upgrade32}, {32, 33, upgrade33}, {33, 34, upgrade34}, {34, 35, upgrade35}, {35, 36, upgrade36}, {36, 37, upgrade37}} {
+		}{{26, 27, upgrade27}, {27, 28, upgrade28}, {28, 29, upgrade29}, {29, 30, upgrade30}, {30, 31, upgrade31}, {31, 32, upgrade32}, {32, 33, upgrade33}, {33, 34, upgrade34}, {34, 35, upgrade35}, {35, 36, upgrade36}, {36, 37, upgrade37}, {37, 38, upgrade38 + "\n" + installationIdentitySchema}} {
 			if migration.from < plan.CurrentVersion {
 				continue
 			}
@@ -233,8 +237,20 @@ func UpgradeDatabase(ctx context.Context, databaseURL string, prepare func(conte
 					return err
 				}
 			}
+			var systemID, rootID string
+			if migration.to == 38 {
+				systemID, rootID, err = stageInstallationIDs(ctx, tx, prepared.ProviderKey)
+				if err != nil {
+					return err
+				}
+			}
 			if _, err := tx.Exec(ctx, migration.sql); err != nil {
 				return err
+			}
+			if migration.to == 38 {
+				if err := reserveInstallationIdentities(ctx, tx, systemID, rootID); err != nil {
+					return err
+				}
 			}
 			migrationHash := sha256.Sum256([]byte(migration.sql))
 			if _, err := tx.Exec(ctx, "INSERT INTO database_upgrades(from_version,to_version,migration_sha256,backup_id,backup_sha256) VALUES($1,$2,$3,$4,$5)", migration.from, migration.to, hex.EncodeToString(migrationHash[:]), receipt.ID, receipt.SHA256); err != nil {

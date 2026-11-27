@@ -52,7 +52,7 @@ Submitting a password, requesting an SMS code, or starting DingTalk or Feishu au
 
 The stable account key is `(iss, sub)`, where ordinary clients receive the independent Member identifier as `sub`. Two Members using the same verified phone remain two subjects. Display names and contact attributes must not be used for account matching. Missing verified email is omitted, not manufactured from a phone number or Member identifier.
 
-Use a distinct issuer for a separate installation with a fresh database. The reserved installation administrator ID `mbr_root` is scoped to its issuer in client account associations.
+Use a distinct issuer for a separate installation with a fresh database. Always store the issuer alongside the subject, including for the installation administrator. Follow the [schema 38 cutover](database-upgrades.md#system-organization-and-root-cutover) for pre-existing root accounts.
 
 Clients receive only requested supported identity information. `profile` supplies the Member display name and a stable Member-based `preferred_username` through UserInfo; `phone` supplies the verified phone number and verification flag for phone authentication; external-provider login does not assert upstream contact values as verified phone claims. The `email` scope is accepted for standard client compatibility, but neither `email` nor `email_verified` is issued. [Administrator-managed SAML email](member-email.md) does not change this contract or establish mailbox ownership; OIDC release requires a separate explicit policy. Applications that require email-based provisioning must use an explicit account-linking or provisioning process.
 
@@ -168,7 +168,7 @@ memberid serve --directory .local/memberid --listen 127.0.0.1:8080
 
 Member clients can authenticate with an [organization-scoped password](administration.md#organization-scoped-passwords) and receive `amr=["pwd"]`. The username belongs to the password credential; subject and profile claims retain their existing Member semantics. The password form is part of the browser authorization flow. Token requests continue to use the documented Authorization Code and Refresh Token grants.
 
-Phone, DingTalk, and Feishu can be enabled independently of password login. Omitting `--directory` starts health-only mode. Local signing and installation configuration is loaded at startup. Client policy and organization provider credentials use the current database registrations. The current schema is version 37. Startup refuses older schemas and preserves existing database contents.
+Phone, DingTalk, and Feishu can be enabled independently of password login. Omitting `--directory` starts health-only mode. Local signing and installation configuration is loaded at startup. Client policy and organization provider credentials use the current database registrations. The current schema is version 38. Startup refuses older schemas and preserves existing database contents.
 
 For the first Member, create its organization and Member through the operator CLI, then let the person verify their phone in an application login. Verification creates only the factor. An authorized operator can inspect that existing factor and explicitly bind it:
 

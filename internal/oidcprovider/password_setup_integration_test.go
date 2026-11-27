@@ -41,7 +41,7 @@ func TestConsoleFirstLoginAndMemberPasswordManagement(t *testing.T) {
 		f.status(response, 303)
 	}
 	fields := url.Values{"username": {identity.RootUsername}, "password": {"incorrect"}}
-	login := f.submit(loginPage(identity.SystemOrganizationID).body, "password", fields)
+	login := f.submit(loginPage(f.store.SystemOrganizationID()).body, "password", fields)
 	f.status(login, 200)
 	if !strings.Contains(login.body, "password is incorrect") {
 		t.Fatal("wrong password was not rejected")
@@ -50,8 +50,8 @@ func TestConsoleFirstLoginAndMemberPasswordManagement(t *testing.T) {
 	finishLogin(f.submit(login.body, "password", fields))
 	session := consoleJSON(t, f, server, "GET", "/api/session", "", "", 200)
 	who := session["actor"].(map[string]any)
-	if who["memberId"] != identity.RootMemberID || who["displayName"] != "root" ||
-		who["organizationId"] != "org_system" || who["platform"] != true {
+	if who["memberId"] != f.store.RootMemberID() || who["displayName"] != "root" ||
+		who["organizationId"] != f.store.SystemOrganizationID() || who["platform"] != true {
 		t.Fatal("root did not reach the console as platform administrator")
 	}
 
@@ -94,41 +94,23 @@ func TestConsoleFirstLoginAndMemberPasswordManagement(t *testing.T) {
 	}
 	f.browser = rootBrowser
 
-	rootCredential := "/api/organizations/org_system/members/" + rootMemberID + "/password"
-	consoleJSON(t, f, server, "PATCH", rootCredential, csrf, `{"expectedUsername":"root","username":"platform-login"}`, 200)
-	consoleJSON(t, f, server, "PATCH", rootCredential, csrf, `{"expectedUsername":"root","username":"stale-replacement"}`, 409)
-	consoleJSON(t, f, server, "GET", "/api/session", "", "", 200)
-	f.browser = browserClient()
-	login = f.submit(loginPage(identity.SystemOrganizationID).body, "password", fields)
-	f.status(login, 200)
-	if !strings.Contains(login.body, "password is incorrect") {
-		t.Fatal("the old root username was accepted")
-	}
-	fields.Set("username", "platform-login")
-	finishLogin(f.submit(login.body, "password", fields))
-	session = consoleJSON(t, f, server, "GET", "/api/session", "", "", 200)
-	if session["actor"].(map[string]any)["memberId"] != rootMemberID {
-		t.Fatal("changing the root username changed the signed-in Member")
-	}
-	csrf = session["csrf"].(string)
-	other := consoleJSON(t, f, server, "POST", "/api/organizations/org_system/members", csrf, `{"displayName":"Other system Member"}`, 200)
-	otherCredential := "/api/organizations/org_system/members/" + other["id"].(string) + "/password"
-	consoleJSON(t, f, server, "POST", otherCredential, csrf, `{"username":"root"}`, 200)
-	conflict := consoleJSON(t, f, server, "PATCH", rootCredential, csrf, `{"expectedUsername":"platform-login","username":"root"}`, 409)
-	if conflict["error"] != "username_taken" {
-		t.Fatal("the username collision was not reported")
-	}
+	base := "/api/organizations/" + f.store.SystemOrganizationID() + "/members"
+	rootCredential := base + "/" + rootMemberID + "/password"
+	consoleJSON(t, f, server, "PATCH", rootCredential, csrf, `{"expectedUsername":"root","username":"platform-login"}`, 403)
+	other := consoleJSON(t, f, server, "POST", base, csrf, `{"displayName":"Other system Member"}`, 200)
+	otherCredential := base + "/" + other["id"].(string) + "/password"
+	consoleJSON(t, f, server, "POST", otherCredential, csrf, `{"username":"root"}`, 403)
 
 	rootReset := rootCredential + "/reset"
 	consoleJSON(t, f, server, "POST", rootReset, csrf, `{"username":"another-root"}`, 400)
 	rotated := consoleJSON(t, f, server, "POST", rootReset, csrf, `{}`, 200)
 	next, ok := rotated["password"].(string)
-	if !ok || len(next) != 32 || next == password || rotated["username"] != "platform-login" {
+	if !ok || len(next) != 32 || next == password || rotated["username"] != "root" {
 		t.Fatal("root password was not rotated under its existing username")
 	}
 	consoleJSON(t, f, server, "GET", "/api/session", "", "", 401)
 	f.browser = browserClient()
-	login = f.submit(loginPage(identity.SystemOrganizationID).body, "password", fields)
+	login = f.submit(loginPage(f.store.SystemOrganizationID()).body, "password", fields)
 	f.status(login, 200)
 	if !strings.Contains(login.body, "password is incorrect") {
 		t.Fatal("old root password was accepted after rotation")
@@ -138,8 +120,7 @@ func TestConsoleFirstLoginAndMemberPasswordManagement(t *testing.T) {
 	for _, expected := range []struct{ organizationID, memberID, action string }{
 		{f.otherMember.OrganizationID, f.otherMember.ID, "password.create"},
 		{f.otherMember.OrganizationID, f.otherMember.ID, "password.username.update"},
-		{identity.SystemOrganizationID, rootMemberID, "password.username.update"},
-		{identity.SystemOrganizationID, rootMemberID, "password.reset"},
+		{f.store.SystemOrganizationID(), rootMemberID, "password.reset"},
 	} {
 		events := consoleJSON(t, f, server, "GET", "/api/events?organizationId="+expected.organizationID+"&memberId="+expected.memberID, "", "", 200)["items"].([]any)
 		found := false
@@ -155,12 +136,12 @@ func TestConsoleFirstLoginAndMemberPasswordManagement(t *testing.T) {
 		}
 	}
 	recovered, err := f.store.ResetRootPassword(t.Context(), identity.OperatorPrincipal())
-	if err != nil || recovered.Username != "platform-login" || len(recovered.Password) != 32 || recovered.Password == next {
-		t.Fatal("local recovery did not rotate the original root account after its old username was reused", err)
+	if err != nil || recovered.Username != "root" || len(recovered.Password) != 32 || recovered.Password == next {
+		t.Fatal("local recovery did not rotate the original root account", err)
 	}
 	f.browser = browserClient()
 	fields.Set("password", recovered.Password)
-	finishLogin(f.submit(loginPage(identity.SystemOrganizationID).body, "password", fields))
+	finishLogin(f.submit(loginPage(f.store.SystemOrganizationID()).body, "password", fields))
 	who = consoleJSON(t, f, server, "GET", "/api/session", "", "", 200)["actor"].(map[string]any)
 	if who["memberId"] != rootMemberID || who["platform"] != true {
 		t.Fatal("local recovery changed the selected administrator")

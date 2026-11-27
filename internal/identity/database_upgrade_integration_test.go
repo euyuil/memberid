@@ -152,7 +152,7 @@ func TestDatabaseUpgradeAtomicFailureAndRetry(t *testing.T) {
 	if err := store.pool.QueryRow(t.Context(), "SELECT count(*) FROM database_upgrades WHERE from_version=26 AND to_version=27 AND backup_id='synthetic-backup'").Scan(&count); err != nil || count != 1 {
 		t.Fatal(count, err)
 	}
-	if err := store.pool.QueryRow(t.Context(), "SELECT name FROM organizations WHERE id='org_system'").Scan(&name); err != nil || name != "retained organization" {
+	if err := store.pool.QueryRow(t.Context(), "SELECT name FROM organizations WHERE id=system_organization_id()").Scan(&name); err != nil || name != "retained organization" {
 		t.Fatal(name, err)
 	}
 	freshDSN := testdb.Create(t)
@@ -252,7 +252,7 @@ func TestSchema30UpgradePreservesOIDCRegistrations(t *testing.T) {
 			}
 		}
 		got, err := store.OIDCClient(ctx, client.ID)
-		if err != nil || got.OwnerOrganizationID != SystemOrganizationID || !got.Enabled || got.DisplayName != oldID ||
+		if err != nil || got.OwnerOrganizationID != store.SystemOrganizationID() || !got.Enabled || got.DisplayName != oldID ||
 			got.System != (oldID == protected.ID) || got.Revision != 7 || !reflect.DeepEqual(got.Client, client) {
 			t.Fatalf("upgrade did not preserve %s registration and assign platform ownership: %v", client.ID, err)
 		}

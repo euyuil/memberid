@@ -50,7 +50,7 @@ const feishuMemberDeparture = `EXISTS(SELECT 1 FROM feishu_memberships fm
  WHERE fb.member_id=members.id AND fb.factor_type='feishu' AND fm.departed)`
 
 func (apps *FeishuApplications) observeMembership(ctx context.Context, snapshot feishuMembershipSnapshot) (feishuMembershipSnapshot, bool, error) {
-	if !snapshot.enabled || snapshot.authorizationStatus != "active" || snapshot.factorStatus != "active" || snapshot.organizationID == SystemOrganizationID {
+	if !snapshot.enabled || snapshot.authorizationStatus != "active" || snapshot.factorStatus != "active" || snapshot.organizationID == apps.store.systemOrganizationID {
 		return snapshot, false, ErrIneligible
 	}
 	// Persist retry ordering independently of authoritative membership evidence.

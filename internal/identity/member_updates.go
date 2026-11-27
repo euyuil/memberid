@@ -64,8 +64,23 @@ func (store *Store) UpdateMemberOnce(ctx context.Context, principal Principal, o
 			return err
 		}
 		var accepted, response []byte
-		err := tx.QueryRow(ctx, "SELECT request_hash,response FROM member_updates WHERE id=$1", updateID).Scan(&accepted, &response)
+		var oldOrg, oldMember *string
+		err := tx.QueryRow(ctx, "SELECT request_hash,response,original_organization_id,original_member_id FROM member_updates WHERE id=$1", updateID).Scan(&accepted, &response, &oldOrg, &oldMember)
 		if err == nil {
+			if oldOrg != nil && oldMember != nil {
+				if err := json.Unmarshal(response, &receipt); err != nil {
+					return err
+				}
+				if receipt.OrganizationID != organizationID || receipt.MemberID != memberID {
+					return ErrConflict
+				}
+				input.OrganizationID, input.MemberID = *oldOrg, *oldMember
+				encoded, err = json.Marshal(input)
+				if err != nil {
+					return err
+				}
+				fingerprint = sha256.Sum256(encoded)
+			}
 			if !bytes.Equal(accepted, fingerprint[:]) {
 				return ErrConflict
 			}

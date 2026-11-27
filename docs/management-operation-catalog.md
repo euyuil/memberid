@@ -154,7 +154,7 @@ No additional role-name check is needed after those permission decisions.
 
 System organization membership grants nothing by itself, and there is no system
 organization administrator role. Platform authority does not override the rule
-that `org_system` cannot be disabled. Provider support restrictions also remain:
+that the system organization cannot be disabled. Provider support restrictions also remain:
 Feishu configuration and binding in the system organization are not supported.
 
 ## SAML registration operations

@@ -39,13 +39,13 @@ self-service is limited to the authenticated Member and its explicitly allowed
 operations. It does not require a baseline role-assignment record. The operation
 catalog maps existing functionality to these roles without enabling new APIs.
 
-The system organization, `org_system`, is one organization, not the platform
+The system organization is one organization, not the platform
 scope. The selector `organizations/?/*` includes it, along with all ordinary
 organizations and their descendants, but excludes the top-level organization
 collection and unrelated global platform resources. Selecting only ordinary
 organizations requires an explicit distinction; wildcard matching does not
 silently exclude the system organization. The role rules still prohibit
-organization administrators in `org_system`.
+organization administrators in the system organization.
 
 A Member's identity remains organization-specific. A contextual reference to
 "self" resolves to the authenticated Member's actual ID and owning organization;

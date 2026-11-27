@@ -25,7 +25,7 @@ func consoleProviderFixture(t *testing.T, f *fixture, dingTalk identity.DingTalk
 	server := httptest.NewUnstartedServer(nil)
 	origin := "http://" + server.Listener.Addr().String()
 	registration := config.Client{SecretSHA256: config.SecretHash(f.secret), RedirectURIs: []string{origin + "/auth/callback"}, SubjectKind: "member", Preauthorized: true}
-	app, err := f.store.CreateOIDCClient(t.Context(), identity.OperatorPrincipal(), identity.OIDCClientRegistration{Client: registration, OwnerOrganizationID: identity.SystemOrganizationID, DisplayName: "Console", System: true}, true)
+	app, err := f.store.CreateOIDCClient(t.Context(), identity.OperatorPrincipal(), identity.OIDCClientRegistration{Client: registration, OwnerOrganizationID: f.store.SystemOrganizationID(), DisplayName: "Console", System: true}, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -185,7 +185,7 @@ func TestConsoleOIDCOrganizationScopeAndRevocation(t *testing.T) {
 	consoleJSON(t, f, server, "POST", base+"/members/"+f.member.ID+"/password/reset", csrf, `{}`, 403)
 	consoleJSON(t, f, server, "PATCH", base+"/members/"+f.member.ID+"/password", csrf, `{"expectedUsername":"example","username":"another"}`, 403)
 	consoleJSON(t, f, server, "GET", "/api/organizations/"+f.otherMember.OrganizationID, "", "", 403)
-	consoleJSON(t, f, server, "GET", "/api/organizations/org_system", "", "", 403)
+	consoleJSON(t, f, server, "GET", "/api/organizations/"+f.store.SystemOrganizationID(), "", "", 403)
 	consoleJSON(t, f, server, "GET", "/api/events?organizationId="+f.otherMember.OrganizationID, "", "", 403)
 	consoleJSON(t, f, server, "GET", "/api/members", "", "", 403)
 	consoleJSON(t, f, server, "POST", "/api/organizations", csrf, `{"name":"Forbidden"}`, 403)
@@ -272,7 +272,7 @@ func TestConsoleMemberSearchAcrossPagesAndWithinOrganization(t *testing.T) {
 
 func TestConsoleAllOrganizationMembers(t *testing.T) {
 	f := newFixture(t)
-	operator, err := f.store.CreateMember(t.Context(), identity.OperatorPrincipal(), identity.SystemOrganizationID, "", "Platform operator")
+	operator, err := f.store.CreateMember(t.Context(), identity.OperatorPrincipal(), f.store.SystemOrganizationID(), "", "Platform operator")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -356,7 +356,7 @@ func TestConsoleAllOrganizationMembers(t *testing.T) {
 
 func TestConsolePlatformLoginAndPersonalAudit(t *testing.T) {
 	f := newFixture(t)
-	m, e := f.store.CreateMember(t.Context(), identity.OperatorPrincipal(), identity.SystemOrganizationID, "", "Platform operator")
+	m, e := f.store.CreateMember(t.Context(), identity.OperatorPrincipal(), f.store.SystemOrganizationID(), "", "Platform operator")
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -380,7 +380,7 @@ func TestConsolePlatformLoginAndPersonalAudit(t *testing.T) {
 	if v["actor"].(map[string]any)["platform"] != true {
 		t.Fatal("platform scope missing")
 	}
-	consoleJSON(t, f, server, "PATCH", "/api/organizations/org_system", csrf, `{"status":"disabled"}`, 403)
+	consoleJSON(t, f, server, "PATCH", "/api/organizations/"+f.store.SystemOrganizationID(), csrf, `{"status":"disabled"}`, 403)
 	created := consoleJSON(t, f, server, "POST", "/api/organizations", csrf, `{"name":"Created by operator"}`, 200)
 	events := consoleJSON(t, f, server, "GET", "/api/events?organizationId="+created["id"].(string), "", "", 200)
 	if events["items"].([]any)[0].(map[string]any)["actor"] != m.ID {
@@ -416,7 +416,7 @@ func TestConsoleInvalidatesExistingSession(t *testing.T) {
 			queries := map[string]string{
 				"administrator":    "DELETE FROM administrators",
 				"member":           "UPDATE members SET manual_block=true",
-				"organization":     "UPDATE organizations SET status='disabled' WHERE id<>'org_system'",
+				"organization":     "UPDATE organizations SET status='disabled' WHERE id<>system_organization_id()",
 				"binding":          "UPDATE member_auth_factor_bindings SET status='revoked',revoked_at=clock_timestamp()",
 				"factor":           "UPDATE authentication_factors SET status='disabled'",
 				"grant":            "UPDATE oidc_grants SET revoked_at=clock_timestamp()",

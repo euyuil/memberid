@@ -1022,10 +1022,10 @@ test(
         const legacyReceipt = await management(enrollmentRoute, legacyBody);
         const receiptRoute =
           "/v1/organizations/" + legacyReceipt.organizationId + "/enrollment";
-        const snapshot = () =>
+        const snapshot = (systemID) =>
           Object.fromEntries(
             pg(
-              "SELECT tablename FROM pg_tables WHERE schemaname='public' AND tablename NOT IN ('memberid_schema','database_upgrades','feishu_memberships','oidc_clients','organization_login_slugs','application_ids','oidc_application_enablements','saml_application_enablements') ORDER BY tablename",
+              "SELECT tablename FROM pg_tables WHERE schemaname='public' AND tablename NOT IN ('memberid_schema','installation_identities','database_upgrades','feishu_memberships','oidc_clients','organization_login_slugs','application_ids','oidc_application_enablements','saml_application_enablements') ORDER BY tablename",
             )
               .split(/\r?\n/)
               .map((name) => {
@@ -1033,6 +1033,9 @@ test(
                 // Compare every field except the columns intentionally changed by cutover.
                 const row =
                   {
+                    organizations: `CASE WHEN t.id='${systemID}' THEN to_jsonb(t) - 'id' ELSE to_jsonb(t) END`,
+                    member_updates:
+                      "to_jsonb(t) - 'original_organization_id' - 'original_member_id'",
                     organization_enrollments: "to_jsonb(t) - 'idempotency_key'",
                     oidc_grants: "to_jsonb(t) - 'revoked_at'",
                     authentication_requests:
@@ -1119,7 +1122,7 @@ test(
         );
         assert.equal(claims.sub, member.id);
         await stopProvider();
-        const before = snapshot();
+        const before = snapshot("org_system");
         const pgDump = path.join(
           directory,
           process.platform === "win32" ? "pgdump.exe" : "pgdump",
@@ -1162,9 +1165,13 @@ test(
         ];
         const upgraded = JSON.parse(cli(...upgradeArgs));
         assert.equal(upgraded.upgraded, true);
-        assert.equal(upgraded.currentVersion, 37);
-        t.diagnostic("upgrade rehearsal: schema 37 committed");
-        assert.deepEqual(snapshot(), before);
+        assert.equal(upgraded.currentVersion, 38);
+        t.diagnostic("upgrade rehearsal: schema 38 committed");
+        const { organizationId: systemID } = JSON.parse(
+          cli("setup", "identities"),
+        );
+        assert.match(systemID, /^org_[0-9bcdfghjkmnpqrstvwxz]{27}$/);
+        assert.deepEqual(snapshot(systemID), before);
         assert.deepEqual(await management(receiptRoute), legacyReceipt);
         const newBody = {
           idempotencyKey: randomUUID(),
@@ -1180,7 +1187,7 @@ test(
           pg(
             "SELECT owner_organization_id FROM oidc_clients WHERE display_name='upgrade-client'",
           ),
-          "org_system",
+          systemID,
         );
         cli(
           "client",
@@ -1204,7 +1211,7 @@ test(
         );
         assert.equal(
           Number(pg("SELECT count(*) FROM organization_login_slugs")),
-          0,
+          1,
         );
         assert.equal(JSON.parse(cli(...upgradeArgs)).upgraded, false);
         assert.equal(

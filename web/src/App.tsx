@@ -779,7 +779,8 @@ export default function App() {
     selected && data.detail && data.organization
       ? signInBlockers(data.organization, selected, data.detail.bindings)
       : []
-  const adminTitle = org === "org_system" ? "平台管理员" : "组织管理员"
+  const systemOrganizationId = actor.platform ? actor.organizationId : undefined
+  const adminTitle = org === systemOrganizationId ? "平台管理员" : "组织管理员"
   const rename = (field: string, value: string, path: string, title: string) =>
     setAction({
       title,
@@ -890,6 +891,7 @@ export default function App() {
         <OrganizationSwitcher
           organizationId={org}
           name={scopeName}
+          system={org === systemOrganizationId}
           canSwitch={actor.platform}
           onSelect={(id) =>
             navigate({ view: activeView, ...(id ? { org: id } : {}) })
@@ -1202,7 +1204,7 @@ export default function App() {
                                 >
                                   {o.name}
                                 </Link>
-                                {o.id === "org_system" && (
+                                {o.id === systemOrganizationId && (
                                   <Badge variant="outline">系统</Badge>
                                 )}
                               </div>
@@ -1230,7 +1232,7 @@ export default function App() {
                 selectedId={params.get("providerId") ?? undefined}
                 directory={data.providers}
                 enabled={data.organization.status === "enabled"}
-                system={org === "org_system"}
+                system={org === systemOrganizationId}
                 base={base}
                 csrf={session.csrf}
                 save={request}
@@ -1253,7 +1255,7 @@ export default function App() {
               <OrganizationDetails
                 key={data.organization.id}
                 organization={data.organization}
-                canChangeStatus={actor.platform && org !== "org_system"}
+                canChangeStatus={actor.platform && org !== systemOrganizationId}
                 save={(name) =>
                   request<Organization>(base, {
                     method: "PATCH",
@@ -1373,7 +1375,7 @@ export default function App() {
                             <TableCell>
                               {(m.administrator ??
                               data.members?.administratorIds?.includes(m.id))
-                                ? m.organizationId === "org_system"
+                                ? m.organizationId === systemOrganizationId
                                   ? "平台管理员"
                                   : "组织管理员"
                                 : "普通成员"}
@@ -1569,26 +1571,30 @@ export default function App() {
                     </CardContent>
                     {actor.platform && (
                       <CardFooter className="flex flex-wrap gap-2">
-                        {data.detail.passwordUsername && (
-                          <Button
-                            variant="outline"
-                            onClick={() =>
-                              setAction({
-                                title: "修改登录用户名",
-                                path: `${base}/members/${member}/password`,
-                                method: "PATCH",
-                                field: "username",
-                                value: data.detail?.passwordUsername,
-                                body: {
-                                  expectedUsername:
-                                    data.detail?.passwordUsername,
-                                },
-                              })
-                            }
-                          >
-                            修改登录用户名
-                          </Button>
-                        )}
+                        {data.detail.passwordUsername &&
+                          !(
+                            org === systemOrganizationId &&
+                            data.detail.passwordUsername === "root"
+                          ) && (
+                            <Button
+                              variant="outline"
+                              onClick={() =>
+                                setAction({
+                                  title: "修改登录用户名",
+                                  path: `${base}/members/${member}/password`,
+                                  method: "PATCH",
+                                  field: "username",
+                                  value: data.detail?.passwordUsername,
+                                  body: {
+                                    expectedUsername:
+                                      data.detail?.passwordUsername,
+                                  },
+                                })
+                              }
+                            >
+                              修改登录用户名
+                            </Button>
+                          )}
                         <MemberPassword
                           key={member}
                           configured={data.detail.bindings.some(
@@ -1796,11 +1802,13 @@ export default function App() {
 function OrganizationSwitcher({
   organizationId,
   name,
+  system,
   canSwitch,
   onSelect,
 }: {
   organizationId: string
   name: string
+  system: boolean
   canSwitch: boolean
   onSelect: (id: string) => void
 }) {
@@ -1816,7 +1824,7 @@ function OrganizationSwitcher({
           {name}
         </span>
         <span className="truncate text-xs">
-          {organizationId === "org_system" ? "MemberID · 系统组织" : "MemberID"}
+          {system ? "MemberID · 系统组织" : "MemberID"}
         </span>
       </div>
     </>

@@ -103,7 +103,7 @@ func configure(ctx context.Context, args []string, stdout, stderr io.Writer) err
 		if args[1] == "add" {
 			flags.BoolVar(&system, "system", false, "protect an all-organization console client from administrative mutation")
 			flags.StringVar(&displayName, "name", "", "application display name (defaults to the generated ID)")
-			flags.StringVar(&ownerOrganizationID, "owner-organization", identity.SystemOrganizationID, "organization that owns the registration")
+			flags.StringVar(&ownerOrganizationID, "owner-organization", "", "organization that owns the registration")
 			flags.Var(&redirects, "redirect", "exact callback URL; repeat for multiple URLs")
 			flags.Var(&logouts, "post-logout-redirect", "exact post-logout URL")
 			flags.Var(&accountReturns, "account-return", "exact account-management return URL")
@@ -138,6 +138,9 @@ func configure(ctx context.Context, args []string, stdout, stderr io.Writer) err
 		defer store.Close()
 		principal := identity.OperatorPrincipal()
 		if args[1] == "add" {
+			if ownerOrganizationID == "" {
+				ownerOrganizationID = store.SystemOrganizationID()
+			}
 			var application identity.OIDCApplication
 			application, err = store.CreateOIDCClient(ctx, principal, identity.OIDCClientRegistration{
 				Client: client, DisplayName: displayName, System: system, OwnerOrganizationID: ownerOrganizationID,

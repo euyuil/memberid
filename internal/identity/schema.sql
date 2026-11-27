@@ -1,7 +1,7 @@
 CREATE TABLE memberid_schema (
-    version integer PRIMARY KEY CHECK (version = 37)
+    version integer PRIMARY KEY CHECK (version = 38)
 );
-INSERT INTO memberid_schema(version) VALUES (37);
+INSERT INTO memberid_schema(version) VALUES (38);
 
 CREATE TABLE database_upgrades (
     to_version integer PRIMARY KEY,
@@ -13,27 +13,23 @@ CREATE TABLE database_upgrades (
 );
 
 CREATE TABLE organizations (
-    id text COLLATE "C" PRIMARY KEY CHECK (id = 'org_system' OR id ~ '^org_[0-9bcdfghjkmnpqrstvwxz]{27}$'),
+    id text COLLATE "C" PRIMARY KEY CHECK (id ~ '^org_[0-9bcdfghjkmnpqrstvwxz]{27}$'),
     name text NOT NULL CHECK (char_length(name) BETWEEN 1 AND 128),
     status text NOT NULL DEFAULT 'enabled' CHECK (status IN ('enabled', 'disabled')),
     lifecycle_revision bigint NOT NULL DEFAULT 0 CHECK (lifecycle_revision >= 0),
     created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-    updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-    CHECK (id <> 'org_system' OR status = 'enabled')
+    updated_at timestamptz NOT NULL DEFAULT clock_timestamp()
 );
-INSERT INTO organizations(id,name) VALUES ('org_system','System organization');
 
 CREATE TABLE organization_login_slugs (
     slug text COLLATE "C" PRIMARY KEY CHECK (
         char_length(slug) BETWEEN 1 AND 63 AND slug ~ '^[a-z0-9]+(-[a-z0-9]+)*$'
-        AND slug <> 'system'
     ),
     organization_id text COLLATE "C" NOT NULL UNIQUE REFERENCES organizations(id) ON DELETE RESTRICT
-        CHECK (organization_id <> 'org_system')
 );
 
 CREATE TABLE members (
-    id text COLLATE "C" PRIMARY KEY CHECK (id = 'mbr_root' OR id ~ '^mbr_[0-9bcdfghjkmnpqrstvwxz]{27}$'),
+    id text COLLATE "C" PRIMARY KEY CHECK (id ~ '^mbr_[0-9bcdfghjkmnpqrstvwxz]{27}$'),
     organization_id text COLLATE "C" NOT NULL REFERENCES organizations(id),
     display_name text NOT NULL CHECK (char_length(display_name) BETWEEN 1 AND 128),
     manual_block boolean NOT NULL DEFAULT false,
@@ -41,8 +37,7 @@ CREATE TABLE members (
     eligibility_revision bigint NOT NULL DEFAULT 0 CHECK (eligibility_revision >= 0),
     created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
     updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-    UNIQUE (id, organization_id),
-    CHECK (id <> 'mbr_root' OR organization_id = 'org_system')
+    UNIQUE (id, organization_id)
 );
 CREATE INDEX member_directory ON members (organization_id, created_at, id);
 
@@ -191,7 +186,6 @@ CREATE TABLE oidc_clients (
         OR registration @> '{"allowOrganizationScope": false}'
         OR registration @> '{"allowOrganizationScope": true, "subjectKind": "member"}'
     ),
-    CONSTRAINT oidc_clients_system_owner_check CHECK (NOT system OR owner_organization_id = 'org_system'),
     CHECK (NOT system OR enabled),
     CHECK ((registration->>'client_id') IS NOT DISTINCT FROM client_id)
 );
@@ -333,6 +327,8 @@ CREATE INDEX account_link_session ON account_link_requests(session_id,expires_at
 CREATE INDEX account_link_expiry ON account_link_requests(expires_at);
 
 CREATE TABLE member_updates (
+    original_organization_id text,
+    original_member_id text,
     id uuid PRIMARY KEY,
     organization_id text COLLATE "C" NOT NULL,
     member_id text COLLATE "C" NOT NULL,

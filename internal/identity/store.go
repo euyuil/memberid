@@ -66,7 +66,7 @@ func (store *Store) CreateOrganization(ctx context.Context, principal Principal,
 	if !principal.installation() {
 		return Organization{}, ErrForbidden
 	}
-	if id == SystemOrganizationID {
+	if id == store.systemOrganizationID {
 		return Organization{}, ErrInvalid
 	}
 	if !validText(name, 128) {
@@ -109,7 +109,7 @@ func (store *Store) CreateMember(ctx context.Context, principal Principal, organ
 			return Member{}, err
 		}
 	}
-	if id == RootMemberID || !ValidID(id, MemberKind) {
+	if id == store.rootMemberID || !ValidID(id, MemberKind) {
 		return Member{}, ErrInvalid
 	}
 	if err := authorizeAll(ctx, store.pool, principal, membersResource.require(actionCreate, organizationID)); err != nil {
@@ -213,7 +213,7 @@ func (store *Store) BindFactor(ctx context.Context, principal Principal, organiz
 			if err := transaction.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM feishu_applications WHERE organization_id=$1 AND namespace=$2)", organizationID, factor.Namespace).Scan(&configured); err != nil {
 				return err
 			}
-			if !configured || organizationID == SystemOrganizationID {
+			if !configured || organizationID == store.systemOrganizationID {
 				return ErrIneligible
 			}
 			namespace = &factor.Namespace
@@ -246,12 +246,15 @@ func (store *Store) RevokeBinding(ctx context.Context, principal Principal, orga
 		if err := managementLock(ctx, tx); err != nil {
 			return err
 		}
-		var bindingID string
-		if err := tx.QueryRow(ctx, "SELECT id::text FROM member_auth_factor_bindings WHERE member_id=$1 AND organization_id=$2 AND authentication_factor_id=$3", memberID, organizationID, factorID).Scan(&bindingID); err != nil {
+		var bindingID, factorType string
+		if err := tx.QueryRow(ctx, "SELECT id::text,factor_type FROM member_auth_factor_bindings WHERE member_id=$1 AND organization_id=$2 AND authentication_factor_id=$3", memberID, organizationID, factorID).Scan(&bindingID, &factorType); err != nil {
 			return storageError(err)
 		}
 		if err := authorizeAll(ctx, tx, principal, bindingResource.require(actionDelete, organizationID, memberID, bindingID)); err != nil {
 			return err
+		}
+		if memberID == store.rootMemberID && factorType == "password" {
+			return ErrForbidden
 		}
 		before, err := availableAdministrators(ctx, tx, organizationID)
 		if err != nil {

@@ -8,7 +8,7 @@ import (
 var organizationSlugPattern = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
 
 func ValidOrganizationSlug(slug string) bool {
-	return slug != "system" && len(slug) <= 63 && organizationSlugPattern.MatchString(slug)
+	return len(slug) <= 63 && organizationSlugPattern.MatchString(slug)
 }
 
 // AssignOrganizationSlug reserves both identifiers in one insert. Disabled
@@ -17,7 +17,7 @@ func (store *Store) AssignOrganizationSlug(ctx context.Context, principal Princi
 	if principal.kind != operatorPrincipal {
 		return ErrForbidden
 	}
-	if !ValidID(id, OrganizationKind) || id == SystemOrganizationID || !ValidOrganizationSlug(slug) {
+	if !ValidID(id, OrganizationKind) || id == store.systemOrganizationID || slug == SystemOrganizationSlug || !ValidOrganizationSlug(slug) {
 		return ErrInvalid
 	}
 	_, err := store.pool.Exec(ctx, "INSERT INTO organization_login_slugs(organization_id,slug) VALUES($1,$2)", id, slug)

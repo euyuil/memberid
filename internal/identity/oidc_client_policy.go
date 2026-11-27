@@ -36,6 +36,15 @@ func validOIDCClientID(id string) bool { return clientID.MatchString(id) }
 var evidenceScope = regexp.MustCompile(`^[a-z][a-z0-9:_-]{0,127}$`)
 
 func ValidateOIDCClients(clients []OIDCClient, allowLoopback bool) error {
+	return validateClients(clients, allowLoopback, false)
+}
+
+// ValidateLegacyOIDCClients checks the source configuration during an explicit upgrade.
+func ValidateLegacyOIDCClients(clients []OIDCClient, allowLoopback bool) error {
+	return validateClients(clients, allowLoopback, true)
+}
+
+func validateClients(clients []OIDCClient, allowLoopback, legacy bool) error {
 	seen := map[string]bool{}
 	for _, client := range clients {
 		if !validOIDCClientID(client.ID) || seen[client.ID] || !validOIDCSecretHash(client.SecretSHA256) {
@@ -45,7 +54,7 @@ func ValidateOIDCClients(clients []OIDCClient, allowLoopback bool) error {
 		if client.SubjectKind != "member" && client.SubjectKind != "factor" {
 			return errors.New("client subjectKind must be member or factor")
 		}
-		if client.OrganizationID != "" && !ValidID(client.OrganizationID, OrganizationKind) {
+		if client.OrganizationID != "" && !ValidID(client.OrganizationID, OrganizationKind) && !(legacy && client.OrganizationID == "org_system") {
 			return errors.New("invalid client organization restriction")
 		}
 		if len(client.RedirectURIs) == 0 {

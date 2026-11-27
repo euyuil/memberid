@@ -14,7 +14,7 @@ func TestScopedOrganizationUpdates(t *testing.T) {
 	s := testStore(t)
 	org, _ := organizationAndMember(t, s)
 	local, factor := administratorMember(t, s, org.ID, 41)
-	platform, platformFactor := administratorMember(t, s, SystemOrganizationID, 42)
+	platform, platformFactor := administratorMember(t, s, s.SystemOrganizationID(), 42)
 	principal := administratorActor(t, s, local, factor).Principal()
 	platformPrincipal := administratorActor(t, s, platform, platformFactor).Principal()
 	name := "Allowed name"
@@ -31,7 +31,7 @@ func TestScopedOrganizationUpdates(t *testing.T) {
 			t.Fatal("denied combined update had an effect", current, err)
 		}
 	}
-	if _, err := NewManagementService(s, nil, nil, 90*24*time.Hour).Manage(t.Context(), principal, "organization.update", SystemOrganizationID, "", ManagementChange{Name: &name}); !errors.Is(err, ErrForbidden) {
+	if _, err := NewManagementService(s, nil, nil, 90*24*time.Hour).Manage(t.Context(), principal, "organization.update", s.SystemOrganizationID(), "", ManagementChange{Name: &name}); !errors.Is(err, ErrForbidden) {
 		t.Fatal("organization scope escaped", err)
 	}
 	disabled, enabled := "disabled", "enabled"
@@ -41,7 +41,7 @@ func TestScopedOrganizationUpdates(t *testing.T) {
 	if _, err := NewManagementService(s, nil, nil, 90*24*time.Hour).Manage(t.Context(), platformPrincipal, "organization.update", org.ID, "", ManagementChange{Name: &name, Status: &enabled}); err != nil {
 		t.Fatal("platform combined permission", err)
 	}
-	if _, err := NewManagementService(s, nil, nil, 90*24*time.Hour).Manage(t.Context(), platformPrincipal, "organization.update", SystemOrganizationID, "", ManagementChange{Status: &disabled}); !errors.Is(err, ErrForbidden) {
+	if _, err := NewManagementService(s, nil, nil, 90*24*time.Hour).Manage(t.Context(), platformPrincipal, "organization.update", s.SystemOrganizationID(), "", ManagementChange{Status: &disabled}); !errors.Is(err, ErrForbidden) {
 		t.Fatal("permission bypassed system lifecycle constraint", err)
 	}
 	for _, requirement := range []authorization.Requirement{
@@ -86,7 +86,7 @@ func TestScopedAuthorizationRevocationBoundary(t *testing.T) {
 	}
 	// The evaluator adds no permission lock and does not invalidate an already
 	// admitted bounded operation. Existing service lifecycle locks remain separate.
-	if _, err := updateOrganization(t.Context(), tx, org.ID, OrganizationChange{Name: &name}); err != nil {
+	if _, err := s.updateOrganization(t.Context(), tx, org.ID, OrganizationChange{Name: &name}); err != nil {
 		t.Fatal(err)
 	}
 	if err := managementEvent(t.Context(), tx, principal, org.ID, "", "organization.update", OrganizationChange{Name: &name}, nil); err != nil {
@@ -112,7 +112,7 @@ func TestScopedManagementWrites(t *testing.T) {
 	org, target := organizationAndMember(t, s)
 	otherOrg, otherMember := organizationAndMember(t, s)
 	local, factor := administratorMember(t, s, org.ID, 61)
-	platform, platformFactor := administratorMember(t, s, SystemOrganizationID, 62)
+	platform, platformFactor := administratorMember(t, s, s.SystemOrganizationID(), 62)
 	localPrincipal := administratorActor(t, s, local, factor).Principal()
 	platformPrincipal := administratorActor(t, s, platform, platformFactor).Principal()
 	name, blocked := "Scoped member", true
@@ -132,7 +132,7 @@ func TestScopedManagementWrites(t *testing.T) {
 			return err
 		},
 		func() error {
-			_, err := NewManagementService(s, nil, nil, 90*24*time.Hour).Manage(t.Context(), localPrincipal, "member.create", SystemOrganizationID, "", ManagementChange{DisplayName: &name})
+			_, err := NewManagementService(s, nil, nil, 90*24*time.Hour).Manage(t.Context(), localPrincipal, "member.create", s.SystemOrganizationID(), "", ManagementChange{DisplayName: &name})
 			return err
 		},
 	} {
@@ -146,7 +146,7 @@ func TestScopedManagementWrites(t *testing.T) {
 	if _, err := NewManagementService(s, nil, nil, 90*24*time.Hour).Manage(t.Context(), platformPrincipal, "organization.create", "", "", ManagementChange{Name: &name}); err != nil {
 		t.Fatal(err)
 	}
-	result, err := NewManagementService(s, nil, nil, 90*24*time.Hour).Manage(t.Context(), platformPrincipal, "member.create", SystemOrganizationID, "", ManagementChange{DisplayName: &name})
+	result, err := NewManagementService(s, nil, nil, 90*24*time.Hour).Manage(t.Context(), platformPrincipal, "member.create", s.SystemOrganizationID(), "", ManagementChange{DisplayName: &name})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -173,14 +173,14 @@ func TestScopedAdministratorAssignments(t *testing.T) {
 	org, _ := organizationAndMember(t, s)
 	local, factor := administratorMember(t, s, org.ID, 71)
 	recipient, _ := administratorMember(t, s, org.ID, 72)
-	platform, platformFactor := administratorMember(t, s, SystemOrganizationID, 73)
+	platform, platformFactor := administratorMember(t, s, s.SystemOrganizationID(), 73)
 	localPrincipal := administratorActor(t, s, local, factor).Principal()
 	platformPrincipal := administratorActor(t, s, platform, platformFactor).Principal()
 	for _, enabled := range []bool{false, true} {
 		if err := NewManagementService(s, nil, nil, 90*24*time.Hour).SetAdministrator(t.Context(), localPrincipal, org.ID, recipient.ID, enabled); err != nil {
 			t.Fatal(err)
 		}
-		if err := NewManagementService(s, nil, nil, 90*24*time.Hour).SetAdministrator(t.Context(), localPrincipal, SystemOrganizationID, platform.ID, enabled); !errors.Is(err, ErrForbidden) {
+		if err := NewManagementService(s, nil, nil, 90*24*time.Hour).SetAdministrator(t.Context(), localPrincipal, s.SystemOrganizationID(), platform.ID, enabled); !errors.Is(err, ErrForbidden) {
 			t.Fatal("cross-scope assignment", err)
 		}
 		if err := NewManagementService(s, nil, nil, 90*24*time.Hour).SetAdministrator(t.Context(), localPrincipal, org.ID, platform.ID, enabled); !errors.Is(err, ErrNotFound) {

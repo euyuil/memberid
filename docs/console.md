@@ -19,13 +19,13 @@ Both processes currently use the protected installation configuration and the sa
 
 ## First-version access model
 
-Fresh database initialization creates the enabled organization `org_system`, named `System organization`. This exact ID is reserved and immutable. It cannot be created by ordinary organization APIs, adopted through enrollment, or disabled. There is no organization-kind field, default customer organization, or organization-less Member.
+Fresh database initialization creates the enabled system organization with a generated ID and the permanent login name `system`. It cannot be created by ordinary organization APIs, adopted through enrollment, or disabled. There is no organization-kind field, default customer organization, or organization-less Member.
 
 A stored administrator assignment plus a currently eligible Member is required for console access. System organization membership alone grants nothing. Assignments are Member-specific; a second Member sharing a phone number or natural person receives no implied access.
 
 The [Member role definitions](roles.md) and [management scopes and actions](management-permissions.md) record the agreed design. The following matrix describes currently implemented console behavior; it does not implement the resource selectors or replace the remaining per-role operation design.
 
-| Operation | Platform administrator (`org_system`) | Organization administrator |
+| Operation | Platform administrator (system organization) | Organization administrator |
 | --- | --- | --- |
 | List/view organizations | All organizations | Own organization only |
 | Create or enable/disable ordinary organizations | Yes | No |
@@ -33,7 +33,7 @@ The [Member role definitions](roles.md) and [management scopes and actions](mana
 | List/create/rename/block/unblock Members | Any organization | Own organization |
 | Grant/revoke administrator assignment | Any organization | Own organization |
 | Read bindings and management events | Any organization | Own organization |
-| Set or reset a Member password or change the password username | Any organization, including `org_system` | No |
+| Set or reset a Member password or change the password username | Any organization, including the system organization (the root username is permanent) | No |
 | List, configure and disable identity providers | Any organization | Own organization |
 | Create, inspect, update, disable and retire SAML applications | Any organization | Own organization |
 | List OIDC applications | All or selected owner | Own organization |
@@ -170,7 +170,7 @@ or `/organizations/{organizationId}/members` for an organization administrator.
 Concrete links keep their explicit scope; an unauthorized link displays an access
 error instead of silently substituting another organization. Server-side API
 authorization remains authoritative. The system organization uses the ordinary
-`/organizations/org_system` path.
+`/organizations/{systemOrganizationId}` path.
 
 Member lists use query parameters `q`, `status` (`active` or `blocked`),
 `administrator` (`yes` or `no`), and `after`. Organization directories also use
@@ -208,7 +208,7 @@ targets. Explicit console logout returns to `/`.
 
 Build with `sh scripts/check.sh` or `sh scripts/package.sh VERSION NEW_OUTPUT_DIRECTORY`. Both build the locked frontend before embedding it in Go. Node/npm are build dependencies; the resulting executable needs neither at runtime.
 
-Initialize a protected installation and a new database as described in [operator setup](operations.md). Fresh installations use schema version **37**. Existing schema 26–36 databases use the [explicit forward upgrade](database-upgrades.md); startup never migrates or erases data. Start the OIDC process before starting the console so its discovery and keys are reachable.
+Initialize a protected installation and a new database as described in [operator setup](operations.md). Fresh installations use schema version **38**. Existing schema 26–37 databases use the [explicit forward upgrade](database-upgrades.md); startup never migrates or erases data. Start the OIDC process before starting the console so its discovery and keys are reachable.
 
 Register a dedicated confidential Member client with no organization restriction:
 
@@ -239,7 +239,7 @@ For production, set the console origin to the HTTPS origin at the root of its ho
 
 ## Bootstrap and recovery
 
-Follow [first-time setup](administration.md#first-time-setup) to provision `org_system/root` during deployment. Then open the standard administration console and sign in with the password from the protected file. The [operator bootstrap](administration.md#bootstrap-and-recovery) supports installations that prefer a verified phone or DingTalk binding. The console checks administrator access at the OIDC callback and on subsequent management requests.
+Follow [first-time setup](administration.md#first-time-setup) to provision `system/root` during deployment. Then open the standard administration console and sign in with the password from the protected file. The [operator bootstrap](administration.md#bootstrap-and-recovery) supports installations that prefer a verified phone or DingTalk binding. The console checks administrator access at the OIDC callback and on subsequent management requests.
 
 Ordinary organization administrators can then be assigned in the console once their login binding is available. Creating a Member does not verify a phone or fabricate an external binding. Operator recovery, last-available-administrator protection, and external-departure precedence are described in the same guide.
 
