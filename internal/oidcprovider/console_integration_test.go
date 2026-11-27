@@ -121,6 +121,9 @@ func TestConsoleLoginReturnTargetValidationAndFailure(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if age := authorization.Query().Get("max_age"); age != "86400" {
+		t.Fatalf("authorization max_age = %q, want 86400", age)
+	}
 	callback := server.URL + "/auth/callback?" + url.Values{
 		"state": {authorization.Query().Get("state")}, "error": {"access_denied"}, "returnTo": {"//example.invalid"},
 	}.Encode()
@@ -405,6 +408,42 @@ func TestConsoleRejectsOrdinaryMember(t *testing.T) {
 		t.Fatal(r.header)
 	}
 	consoleJSON(t, f, server, "GET", "/api/session", "", "", 401)
+}
+
+func TestConsoleSessionDeadlines(t *testing.T) {
+	f, server := consoleSwitchFixture(t)
+	db := f.store.Database()
+	ctx := t.Context()
+	checkDeadlines := func(stage, memberID string) {
+		t.Helper()
+		var idle, absolute bool
+		err := db.QueryRow(ctx, `SELECT
+ c.expires_at BETWEEN now() + interval '3 hours 59 minutes' AND now() + interval '4 hours',
+ c.absolute_expires_at = date_trunc('second', (g.data->>'authTime')::timestamptz) + interval '24 hours'
+ FROM console_sessions c JOIN oidc_grants g ON g.id=c.grant_id WHERE c.member_id=$1`, memberID).Scan(&idle, &absolute)
+		if err != nil || !idle || !absolute {
+			t.Fatalf("%s: four-hour idle deadline = %t, original 24-hour deadline = %t, error = %v", stage, idle, absolute, err)
+		}
+	}
+	checkDeadlines("sign-in", f.member.ID)
+	if _, err := db.Exec(ctx, "UPDATE console_sessions SET expires_at=now()+interval '10 minutes'"); err != nil {
+		t.Fatal(err)
+	}
+	consoleJSON(t, f, server, "GET", "/api/session", "", "", 200)
+	checkDeadlines("renewal", f.member.ID)
+
+	callback := authorizeConsoleSwitch(t, f, startConsoleSwitch(t, f, server, f.otherMember.ID))
+	f.status(f.call(f.browser, "GET", callback, nil, nil), 303)
+	checkDeadlines("identity switch", f.otherMember.ID)
+
+	if _, err := db.Exec(ctx, "UPDATE console_sessions SET absolute_expires_at=now()+interval '1 hour', expires_at=now()+interval '10 minutes'"); err != nil {
+		t.Fatal(err)
+	}
+	consoleJSON(t, f, server, "GET", "/api/session", "", "", 200)
+	var capped bool
+	if err := db.QueryRow(ctx, "SELECT expires_at=absolute_expires_at FROM console_sessions").Scan(&capped); err != nil || !capped {
+		t.Fatal("renewal did not stop at the stored absolute deadline", err)
+	}
 }
 
 func TestConsoleInvalidatesExistingSession(t *testing.T) {
