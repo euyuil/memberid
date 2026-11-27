@@ -47,7 +47,7 @@ func TestSAMLRegistryAuthorityRevisionsAndPermanentSubjects(t *testing.T) {
 				if _, err := LockSAMLServiceProvider(t.Context(), tx, sp.ID); err != nil {
 					return err
 				}
-				value, err := SAMLNameID(t.Context(), tx, sp, member.ID, true)
+				value, err := SAMLNameID(t.Context(), tx, sp, sp.OrganizationID, member.ID, true)
 				if err == nil {
 					values <- value
 				}

@@ -8,6 +8,7 @@ export type SAMLServiceProvider = {
   enabled: boolean
   allowUnsignedRequests: boolean
   signingCertificates: string[] | null
+  published?: boolean
   preauthorized: boolean
   attributes: string[] | null
   revision: number
@@ -47,6 +48,7 @@ export function registrationInput(item: SAMLServiceProvider) {
     enabled,
     allowUnsignedRequests,
     signingCertificates,
+    published,
     preauthorized,
     attributes,
     revision,
@@ -60,6 +62,7 @@ export function registrationInput(item: SAMLServiceProvider) {
     enabled,
     allowUnsignedRequests,
     signingCertificates: signingCertificates ?? [],
+    published,
     preauthorized,
     attributes: attributes ?? [],
     revision,

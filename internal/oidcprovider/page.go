@@ -87,7 +87,10 @@ func (service *Service) renderLogin(w http.ResponseWriter, r *http.Request, requ
 	}
 	if request.browserHeldSAML() {
 		// Callback failures render a form for canceling the upstream attempt.
-		data.Action = "/login/" + request.SAML.OrganizationID
+		data.Action = "/login"
+		if request.ProviderOrganizationID != "" {
+			data.Action += "/" + request.ProviderOrganizationID
+		}
 	}
 	if request.SAML == nil && len(choices) == 1 {
 		data.SelectedMemberID = choices[0].ID

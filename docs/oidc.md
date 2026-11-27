@@ -166,7 +166,7 @@ memberid serve --directory .local/memberid --listen 127.0.0.1:8080
 
 Member clients can authenticate with an [organization-scoped password](administration.md#organization-scoped-passwords) and receive `amr=["pwd"]`. The username belongs to the password credential; subject and profile claims retain their existing Member semantics. The password form is part of the browser authorization flow. Token requests continue to use the documented Authorization Code and Refresh Token grants.
 
-Phone, DingTalk, and Feishu can be enabled independently of password login. Omitting `--directory` starts health-only mode. Local signing and installation configuration is loaded at startup. Client policy and organization provider credentials use the current database registrations. The current schema is version 34. Startup refuses older schemas and preserves existing database contents.
+Phone, DingTalk, and Feishu can be enabled independently of password login. Omitting `--directory` starts health-only mode. Local signing and installation configuration is loaded at startup. Client policy and organization provider credentials use the current database registrations. The current schema is version 35. Startup refuses older schemas and preserves existing database contents.
 
 For the first Member, create its organization and Member through the operator CLI, then let the person verify their phone in an application login. Verification creates only the factor. An authorized operator can inspect that existing factor and explicitly bind it:
 

@@ -15,7 +15,7 @@ import (
 type loginPolicy struct {
 	registration browserauth.Policy
 	displayName  string
-	sharedClient *client
+	activation   func(context.Context, string) (string, error)
 }
 
 func directLoginPolicy(organizationID string) loginPolicy {
@@ -37,7 +37,18 @@ func (service *Service) loginPolicy(ctx context.Context, request *authorizationR
 		if !sp.Enabled || sp.Retired || sp.Revision != request.SAML.Revision {
 			return loginPolicy{}, identity.ErrIneligible
 		}
-		return loginPolicy{registration: browserauth.Policy{ID: sp.ID, OrganizationID: sp.OrganizationID, SubjectKind: "member", Preauthorized: sp.Preauthorized, ReturnURI: sp.ACSURL, IdentityInformation: strings.Join(append([]string{"persistent identifier"}, sp.Attributes...), ", ")}}, nil
+		var activation func(context.Context, string) (string, error)
+		if sp.Published {
+			activation = func(ctx context.Context, org string) (string, error) {
+				return sp.OrganizationActivation(ctx, service.store.Database(), org)
+			}
+			if request.ProviderOrganizationID != "" {
+				if err := sp.CheckActivation(ctx, service.store.Database(), request.ProviderOrganizationID, request.EnablementID); err != nil {
+					return loginPolicy{}, err
+				}
+			}
+		}
+		return loginPolicy{activation: activation, displayName: sp.DisplayName, registration: browserauth.Policy{ID: sp.ID, OrganizationID: sp.LoginOrganizationID(), SubjectKind: "member", Preauthorized: sp.Preauthorized, ReturnURI: sp.ACSURL, IdentityInformation: strings.Join(append([]string{"persistent identifier"}, sp.Attributes...), ", ")}}, nil
 	}
 	registered, err := service.storage.client(ctx, request.ClientID)
 	if err != nil {
@@ -46,9 +57,11 @@ func (service *Service) loginPolicy(ctx context.Context, request *authorizationR
 	if !request.permitsClient(registered) {
 		return loginPolicy{}, identity.ErrIneligible
 	}
-	var shared *client
+	var activation func(context.Context, string) (string, error)
 	if registered.sharedOwner != "" {
-		shared = &registered
+		activation = func(ctx context.Context, org string) (string, error) {
+			return registered.organizationActivation(ctx, service.store.Database(), org)
+		}
 		if request.ProviderOrganizationID != "" {
 			if err := registered.checkActivation(ctx, service.store.Database(), request.ProviderOrganizationID, request.EnablementID); err != nil {
 				return loginPolicy{}, err
@@ -57,7 +70,7 @@ func (service *Service) loginPolicy(ctx context.Context, request *authorizationR
 	}
 	c := registered.registration
 	return loginPolicy{
-		sharedClient: shared,
+		activation:   activation,
 		registration: browserauth.Policy{ID: c.ID, OrganizationID: c.OrganizationID, SubjectKind: c.SubjectKind, Preauthorized: c.Preauthorized, ReturnURI: request.Input.RedirectURI, IdentityInformation: strings.Join(request.Scopes, ", ")},
 		displayName:  registered.displayName,
 	}, nil
@@ -108,7 +121,7 @@ func (service *Service) validateLoginPolicy(ctx context.Context, tx pgx.Tx, requ
 	if service.saml == nil || !sp.Enabled || sp.Retired || sp.Revision != request.SAML.Revision {
 		return identity.ErrIneligible
 	}
-	return nil
+	return sp.CheckActivation(ctx, tx, request.ProviderOrganizationID, request.EnablementID)
 }
 
 // Store fresh verification and its session in the credential verification

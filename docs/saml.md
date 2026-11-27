@@ -4,7 +4,7 @@ MemberID implements a restricted, SP-initiated SAML 2.0 Web Browser SSO profile 
 
 ## Enable signing and register an SP
 
-Use schema 34, initialized in a fresh database or [explicitly upgraded from schema 26–33](database-upgrades.md). Earlier demo schemas are unsupported; no automatic migration or data reset is performed. Follow [operator setup](operations.md) to create the installation, organization, Member, and authentication source.
+Use schema 35, initialized in a fresh database or [explicitly upgraded from schema 26–34](database-upgrades.md). Earlier demo schemas are unsupported; no automatic migration or data reset is performed. Follow [operator setup](operations.md) to create the installation, organization, Member, and authentication source.
 
 Provision a dedicated RSA private key of at least 2048 bits and its matching X.509 signing certificate in the protected installation directory. The certificate must be currently valid and permit digital signatures if it declares key usage. Use separate key material from TLS and OIDC. MemberID rejects an OIDC key found in its retained public key set. The SAML certificate is an explicitly distributed signing trust anchor; a publicly trusted TLS certificate is not required.
 
@@ -54,6 +54,14 @@ Each registration has exactly one HTTPS POST ACS. No metadata fetching, wildcard
 
 An enabled SAML installation can start without OIDC clients if it has at least one active SP. It still uses the standard installation secrets and OIDC key files. Disabled SAML exposes neither endpoint. Unknown or disabled SPs cannot start authentication.
 
+## Sharing a registration
+
+A new or upgraded SP admits its owner's Members by default. For one SaaS with the same entity ID, exact ACS and signing trust for all workspaces, the owner can set `published: true` and share the console link. Each consumer administrator reviews the link and confirms enrollment for their own organization. At the common SSO endpoint a shared SP asks for the login organization before interactive authentication. Passive authentication can select the sole eligible Member from a preauthorized session. The signed `OrganizationID` attribute, when enabled, identifies the authenticated Member's organization.
+
+Operators can perform the same consumer transitions with `memberid saml sp enable-use` and `withdraw-use`, supplying `--directory`, `--id` and `--organization`. Withdrawal stops new assertions immediately, including pending attempts for that enrollment. Other organizations retain access and existing SP sessions are controlled by the SaaS. Setting `published: false` removes all external enrollments. Re-publication requires fresh enrollment. Global disable suspends all sign-ins. Pairwise NameIDs remain reserved through withdrawal and re-enrollment.
+
+A SaaS issuing distinct entity IDs and trust configurations per customer uses separate registrations. A shared entity ID has one ACS and one trust policy across its workspaces.
+
 ## Protocol contract
 
 | Surface | Implemented behavior |
@@ -76,7 +84,7 @@ After validating the Redirect request, MemberID atomically reserves the SP and A
 
 The same reservation covers successful responses and signed protocol errors. MemberID commits consumption before returning either response. If delivery is interrupted after commit, the SP starts again with a new AuthnRequest ID.
 
-Consent is required unless the operator preauthorizes the SP. `IsPassive` succeeds only with a usable shared session, one eligible Member in the registered organization, and preauthorization; otherwise it returns `NoPassive` without an interactive page. `ForceAuthn=true` returns `RequestUnsupported`, because upstream provider login cannot currently prove fresh credentials. Requested authentication context returns `NoAuthnContext`. Unsupported NameID policy, including a first-time mapping with `AllowCreate=false`, returns `InvalidNameIDPolicy`. Unknown SPs, unsafe destinations, invalid signatures, malformed/expired requests, and replay are local HTTP errors. Trusted supported error delivery is a signed SAML status response without an assertion.
+Consent is required unless the operator preauthorizes the SP. `IsPassive` succeeds only with a usable shared session, exactly one eligible Member among the organizations admitted by the registration, and preauthorization; otherwise it returns `NoPassive` without an interactive page. `ForceAuthn=true` returns `RequestUnsupported`, because upstream provider login cannot currently prove fresh credentials. Requested authentication context returns `NoAuthnContext`. Unsupported NameID policy, including a first-time mapping with `AllowCreate=false`, returns `InvalidNameIDPolicy`. Unknown SPs, unsafe destinations, invalid signatures, malformed/expired requests, and replay are local HTTP errors. Trusted supported error delivery is a signed SAML status response without an assertion.
 
 Immediately before issuance, a database transaction rechecks the session, request revision, SP revision, organization, Member, factor, binding, and provider eligibility. SP changes during login invalidate the continuation. External directory checks occur before the final transaction and their revision-bound observations are revalidated inside it. After acquiring the locks, issuance samples the current time again and rejects an expired interaction, idle session, or absolute session. Time spent waiting on a provider or database lock cannot extend those deadlines. No response is emitted before commit. Logout/revocation prevents future issuance but does not revoke an already issued assertion or end a downstream SP session. SAML Single Logout is not implemented.
 

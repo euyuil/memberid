@@ -28,6 +28,7 @@ type SAMLServiceProvider struct {
 	Enabled               bool     `json:"enabled"`
 	AllowUnsignedRequests bool     `json:"allowUnsignedRequests"`
 	SigningCertificates   []string `json:"signingCertificates"`
+	Published             bool     `json:"published,omitempty"`
 	Preauthorized         bool     `json:"preauthorized"`
 	Attributes            []string `json:"attributes"`
 	Revision              int64    `json:"revision"`
@@ -214,6 +215,15 @@ func (store *Store) mutateSAMLServiceProvider(ctx context.Context, principal Pri
 		sp.Revision = revision + 1
 		if sp.Retired {
 			sp.Enabled = false
+			sp.Published = false
+		}
+		if sp.Published && !current.Published && !sp.Enabled {
+			return ErrConflict
+		}
+		if current.Published && !sp.Published {
+			if _, err := tx.Exec(ctx, "DELETE FROM saml_application_enablements WHERE service_provider_id=$1", id); err != nil {
+				return err
+			}
 		}
 		data, err := json.Marshal(sp)
 		if err != nil {
@@ -245,7 +255,7 @@ func (store *Store) mutateSAMLServiceProvider(ctx context.Context, principal Pri
 // The caller must hold LockSAMLServiceProvider before allocation. This serializes
 // issuance with format changes and operator provisioning, including absent rows.
 // Retired registrations retain their mappings permanently.
-func SAMLNameID(ctx context.Context, tx pgx.Tx, sp SAMLServiceProvider, memberID string, allowCreate bool) (string, error) {
+func SAMLNameID(ctx context.Context, tx pgx.Tx, sp SAMLServiceProvider, organizationID, memberID string, allowCreate bool) (string, error) {
 	var value string
 	err := tx.QueryRow(ctx, "SELECT value FROM saml_name_ids WHERE service_provider_id=$1 AND member_id=$2", sp.ID, memberID).Scan(&value)
 	if err == nil {
@@ -260,15 +270,15 @@ func SAMLNameID(ctx context.Context, tx pgx.Tx, sp SAMLServiceProvider, memberID
 	value = rand.Text()
 	err = tx.QueryRow(ctx, `INSERT INTO saml_name_ids(service_provider_id,member_id,value)
  SELECT $1,id,$3 FROM members WHERE id=$2 AND organization_id=$4
- ON CONFLICT(service_provider_id,member_id) DO UPDATE SET value=saml_name_ids.value RETURNING value`, sp.ID, memberID, value, sp.OrganizationID).Scan(&value)
+ ON CONFLICT(service_provider_id,member_id) DO UPDATE SET value=saml_name_ids.value RETURNING value`, sp.ID, memberID, value, organizationID).Scan(&value)
 	return value, storageError(err)
 }
 
 // LockSAMLMemberEvidence prevents a concurrent local eligibility mutation from
 // committing between the final check and assertion issuance.
-func LockSAMLMemberEvidence(ctx context.Context, tx pgx.Tx, sp SAMLServiceProvider, memberID, factorID string) (string, error) {
+func LockSAMLMemberEvidence(ctx context.Context, tx pgx.Tx, organizationID, memberID, factorID string) (string, error) {
 	var binding string
-	err := tx.QueryRow(ctx, "SELECT b.id::text"+eligibleBindings+" AND b.organization_id=$1 AND m.id=$2 AND f.id=$3 FOR SHARE OF b,m,o,f", sp.OrganizationID, memberID, factorID).Scan(&binding)
+	err := tx.QueryRow(ctx, "SELECT b.id::text"+eligibleBindings+" AND b.organization_id=$1 AND m.id=$2 AND f.id=$3 FOR SHARE OF b,m,o,f", organizationID, memberID, factorID).Scan(&binding)
 	if err != nil {
 		return "", storageError(err)
 	}
@@ -282,7 +292,7 @@ func LockSAMLMemberEvidence(ctx context.Context, tx pgx.Tx, sp SAMLServiceProvid
 			table = "feishu_applications"
 		}
 		var enabled bool
-		if err := tx.QueryRow(ctx, "SELECT enabled AND authorization_status='active' FROM "+table+" WHERE organization_id=$1 AND namespace=$2 FOR SHARE", sp.OrganizationID, namespace).Scan(&enabled); err != nil {
+		if err := tx.QueryRow(ctx, "SELECT enabled AND authorization_status='active' FROM "+table+" WHERE organization_id=$1 AND namespace=$2 FOR SHARE", organizationID, namespace).Scan(&enabled); err != nil {
 			return "", storageError(err)
 		}
 		if !enabled {

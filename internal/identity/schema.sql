@@ -1,7 +1,7 @@
 CREATE TABLE memberid_schema (
-    version integer PRIMARY KEY CHECK (version = 34)
+    version integer PRIMARY KEY CHECK (version = 35)
 );
-INSERT INTO memberid_schema(version) VALUES (34);
+INSERT INTO memberid_schema(version) VALUES (35);
 
 CREATE TABLE database_upgrades (
     to_version integer PRIMARY KEY,
@@ -137,6 +137,12 @@ CREATE TABLE saml_service_providers (
     revision bigint NOT NULL CHECK (revision > 0),
     data jsonb NOT NULL,
     retired_at timestamptz
+);
+CREATE TABLE saml_application_enablements (
+    service_provider_id text COLLATE "C" NOT NULL REFERENCES saml_service_providers(id),
+    organization_id text COLLATE "C" NOT NULL REFERENCES organizations(id),
+    activation_id uuid NOT NULL DEFAULT gen_random_uuid(),
+    PRIMARY KEY (service_provider_id, organization_id)
 );
 CREATE TABLE saml_name_ids (
     service_provider_id text COLLATE "C" NOT NULL REFERENCES saml_service_providers(id) ON UPDATE CASCADE,

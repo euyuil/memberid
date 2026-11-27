@@ -28,7 +28,7 @@ func allocateNameID(t *testing.T, store *Store, sp SAMLServiceProvider, memberID
 		if err != nil {
 			return err
 		}
-		value, err = SAMLNameID(t.Context(), tx, locked, memberID, true)
+		value, err = SAMLNameID(t.Context(), tx, locked, locked.OrganizationID, memberID, true)
 		return err
 	})
 	return value, err
@@ -183,7 +183,7 @@ func TestSAMLNameIDFormatRacesFirstAllocation(t *testing.T) {
 					return err
 				}
 				issuedFormat = locked.NameIDFormat
-				_, err = SAMLNameID(t.Context(), tx, locked, member.ID, true)
+				_, err = SAMLNameID(t.Context(), tx, locked, locked.OrganizationID, member.ID, true)
 				return err
 			})
 		})

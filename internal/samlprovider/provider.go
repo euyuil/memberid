@@ -38,7 +38,6 @@ var ErrRequest = errors.New("invalid SAML authentication request")
 // Transaction contains only the immutable, validated protocol continuation.
 type Transaction struct {
 	ServiceProviderID string `json:"serviceProviderId"`
-	OrganizationID    string `json:"organizationId"`
 	Revision          int64  `json:"revision"`
 	RequestID         string `json:"requestId"`
 	RelayState        string `json:"relayState"`
@@ -236,7 +235,7 @@ func (provider *Provider) Parse(r *http.Request, sp identity.SAMLServiceProvider
 	if input.Destination != idp.SSOURL.String() || input.IssueInstant.Before(now.Add(-5*time.Minute)) || input.IssueInstant.After(now.Add(ClockSkew)) || len(input.ID) > 256 {
 		return nil, "", ErrRequest
 	}
-	txn := &Transaction{ServiceProviderID: sp.ID, OrganizationID: sp.OrganizationID, Revision: sp.Revision, RequestID: input.ID, RelayState: req.RelayState, Passive: input.IsPassive != nil && *input.IsPassive, AllowCreate: input.NameIDPolicy == nil}
+	txn := &Transaction{ServiceProviderID: sp.ID, Revision: sp.Revision, RequestID: input.ID, RelayState: req.RelayState, Passive: input.IsPassive != nil && *input.IsPassive, AllowCreate: input.NameIDPolicy == nil}
 	if input.NameIDPolicy != nil {
 		policy := input.NameIDPolicy
 		txn.AllowCreate = policy.AllowCreate != nil && *policy.AllowCreate

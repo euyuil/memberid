@@ -50,7 +50,7 @@ func (service *Service) samlSSO(w http.ResponseWriter, r *http.Request) {
 	if newBrowser {
 		browser = config.RandomSecret()
 	}
-	request := &authorizationRequest{grant: grant{ID: newID(), InteractionID: newID(), ClientID: sp.ID}, Interaction: browserauth.Interaction{Revision: 1, BrowserHash: config.SecretHash(browser), CSRF: config.RandomSecret(), ProviderOrganizationID: sp.OrganizationID}, SAML: txn}
+	request := &authorizationRequest{grant: grant{ID: newID(), InteractionID: newID(), ClientID: sp.ID}, Interaction: browserauth.Interaction{Revision: 1, BrowserHash: config.SecretHash(browser), CSRF: config.RandomSecret(), ProviderOrganizationID: sp.LoginOrganizationID()}, SAML: txn}
 	request.entryToken, err = service.sealSAMLLogin(request, request.Revision)
 	if err != nil {
 		http.Error(w, "SAML unavailable", http.StatusServiceUnavailable)
@@ -138,8 +138,11 @@ func (service *Service) finishSAML(w http.ResponseWriter, r *http.Request, reque
 		}
 		acs = sp.ACSURL
 		if status == "" {
-			if request.OrganizationID != sp.OrganizationID || request.MemberID == "" {
+			if request.OrganizationID == "" || request.OrganizationID != request.ProviderOrganizationID || request.MemberID == "" {
 				return identity.ErrIneligible
+			}
+			if err := sp.CheckActivation(r.Context(), tx, request.OrganizationID, request.EnablementID); err != nil {
+				return err
 			}
 			if observationErr != nil {
 				return observationErr
@@ -149,7 +152,7 @@ func (service *Service) finishSAML(w http.ResponseWriter, r *http.Request, reque
 					return err
 				}
 			}
-			binding, err := identity.LockSAMLMemberEvidence(r.Context(), tx, sp, request.MemberID, request.FactorID)
+			binding, err := identity.LockSAMLMemberEvidence(r.Context(), tx, request.OrganizationID, request.MemberID, request.FactorID)
 			if err != nil {
 				return err
 			}
@@ -157,7 +160,7 @@ func (service *Service) finishSAML(w http.ResponseWriter, r *http.Request, reque
 				return identity.ErrIneligible
 			}
 			request.BindingID = binding
-			auth.NameID, err = identity.SAMLNameID(r.Context(), tx, sp, request.MemberID, request.SAML.AllowCreate)
+			auth.NameID, err = identity.SAMLNameID(r.Context(), tx, sp, request.OrganizationID, request.MemberID, request.SAML.AllowCreate)
 			if errors.Is(err, identity.ErrNotFound) {
 				status = "InvalidNameIDPolicy"
 			} else if err != nil {
@@ -167,7 +170,7 @@ func (service *Service) finishSAML(w http.ResponseWriter, r *http.Request, reque
 				return err
 			}
 			if slices.Contains(sp.Attributes, "Email") {
-				auth.Email, err = identity.SAMLMemberEmail(r.Context(), tx, sp.OrganizationID, request.MemberID)
+				auth.Email, err = identity.SAMLMemberEmail(r.Context(), tx, request.OrganizationID, request.MemberID)
 				if err != nil {
 					return err
 				}
@@ -231,7 +234,7 @@ func samlEventContext(r *http.Request, request *authorizationRequest) authevent.
 		event.ClientID = request.ClientID
 		event.OrganizationID = request.OrganizationID
 		if request.SAML != nil {
-			event.OrganizationID = request.SAML.OrganizationID
+			event.OrganizationID = request.ProviderOrganizationID
 		}
 		event.MemberID = request.MemberID
 		event.FactorID = request.FactorID

@@ -70,7 +70,7 @@ func (service *Service) loginEvent(ctx context.Context, request *authorizationRe
 	// workflow. A phone number or an arbitrary organization hint establishes none.
 	event := authevent.Event{InteractionID: request.InteractionID, ClientID: request.ClientID, ClientName: request.ClientName, Purpose: "login"}
 	if request.SAML != nil {
-		event.OrganizationID = request.SAML.OrganizationID
+		event.OrganizationID = request.ProviderOrganizationID
 		return event
 	}
 	if registered, err := service.storage.client(ctx, request.ClientID); err == nil {

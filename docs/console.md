@@ -136,6 +136,8 @@ Add an application with its external entity ID, exact HTTPS POST ACS, request-si
 
 The allowed attributes include independent `DisplayName`, `Email`, and `OrganizationID` checkboxes. `OrganizationID` releases the signed-in Member's organization ID and defaults to off. Email is disabled by default, comes only from the managed Member record, and is omitted when unset. Allowing it does not assert mailbox ownership.
 
+Select **开放跨组织使用** and save to publish a SAML application. Its detail view provides a share link. Consumer administrators can confirm enrollment and withdrawal under **本组织使用**. Returning to owner-only removes all external enrollments. The application controls its existing sessions.
+
 Edit an application's enabled state to disable it reversibly. The detail dialog offers permanent retirement with a separate confirmation and a reversible disable alternative. Retirement preserves the entity ID and NameID mappings, cannot be undone, and does not sign out existing downstream sessions. Retired applications remain inspectable. A concurrent update returns a conflict without overwriting the other administrator's work; refresh and inspect before saving again. An uncertain response is not retried automatically.
 
 The directory is paginated by stable registration ID, 50 per page. Its same-origin API uses `/api/organizations/{organizationId}/saml-service-providers` with the registration contract in the [private API guide](management-api.md#saml-service-provider-registration), but uses the console session, CSRF protection, and current Member authorization. It returns 200 for successful writes. Service authorization constrains every operation to its organization's resources; installation credentials and account self-service contexts cannot enter this boundary. Public before/after trust settings and the authenticated actor are captured atomically in operation history. History links open the referenced application even when it is not on the directory's first page.
@@ -206,7 +208,7 @@ targets. Explicit console logout returns to `/`.
 
 Build with `sh scripts/check.sh` or `sh scripts/package.sh VERSION NEW_OUTPUT_DIRECTORY`. Both build the locked frontend before embedding it in Go. Node/npm are build dependencies; the resulting executable needs neither at runtime.
 
-Initialize a protected installation and a new database as described in [operator setup](operations.md). Fresh installations use schema version **34**. Existing schema 26–33 databases use the [explicit forward upgrade](database-upgrades.md); startup never migrates or erases data. Start the OIDC process before starting the console so its discovery and keys are reachable.
+Initialize a protected installation and a new database as described in [operator setup](operations.md). Fresh installations use schema version **35**. Existing schema 26–34 databases use the [explicit forward upgrade](database-upgrades.md); startup never migrates or erases data. Start the OIDC process before starting the console so its discovery and keys are reachable.
 
 Register a dedicated confidential Member client with no organization restriction:
 

@@ -84,29 +84,30 @@ func (s *Service) registerOIDCApplicationRoutes(installation *config.Loaded) {
 	}
 	s.routes.HandleFunc("GET "+uses, readUses)
 	s.routes.HandleFunc("GET "+uses+"/{clientId}", readUses)
-	sharing := func(set func(context.Context, identity.Principal, string, string, bool) error) http.HandlerFunc {
-		return func(w http.ResponseWriter, r *http.Request) {
-			var input struct {
-				Enabled *bool `json:"enabled"`
-			}
-			if !management.DecodeRequest(w, r, &input) {
-				return
-			}
-			if input.Enabled == nil {
-				respond(w, nil, identity.ErrInvalid)
-				return
-			}
-			err := set(r.Context(), r.Context().Value(sessionKey{}).(session).principal(), r.PathValue("organizationId"), r.PathValue("clientId"), *input.Enabled)
-			respond(w, map[string]bool{"enabled": *input.Enabled}, err)
-		}
-	}
-	s.routes.HandleFunc("PUT "+scopedCollection+"/{clientId}/publication", sharing(s.management.SetOIDCPublication))
-	s.routes.HandleFunc("PUT "+scopedCollection+"/{clientId}/enablement", sharing(s.management.SetOIDCEnablement))
+	s.routes.HandleFunc("PUT "+scopedCollection+"/{clientId}/publication", sharingHandler("clientId", s.management.SetOIDCPublication))
+	s.routes.HandleFunc("PUT "+scopedCollection+"/{clientId}/enablement", sharingHandler("clientId", s.management.SetOIDCEnablement))
 	for _, path := range []string{collection, scopedCollection} {
 		item := path + "/{clientId}"
 		s.routes.HandleFunc("GET "+path, list)
 		s.routes.HandleFunc("POST "+path, create)
 		s.routes.HandleFunc("PATCH "+item, update)
 		s.routes.HandleFunc("POST "+item+"/rotate-secret", rotate)
+	}
+}
+
+func sharingHandler(param string, set func(context.Context, identity.Principal, string, string, bool) error) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var input struct {
+			Enabled *bool `json:"enabled"`
+		}
+		if !management.DecodeRequest(w, r, &input) {
+			return
+		}
+		if input.Enabled == nil {
+			respond(w, nil, identity.ErrInvalid)
+			return
+		}
+		err := set(r.Context(), r.Context().Value(sessionKey{}).(session).principal(), r.PathValue("organizationId"), r.PathValue(param), *input.Enabled)
+		respond(w, map[string]bool{"enabled": *input.Enabled}, err)
 	}
 }

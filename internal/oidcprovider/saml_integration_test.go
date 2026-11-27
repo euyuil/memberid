@@ -183,6 +183,35 @@ func verifySAMLResponse(t *testing.T, f *fixture, sp identity.SAMLServiceProvide
 	return response
 }
 
+func TestSAMLSharedPassiveRequiresOneEligibleMember(t *testing.T) {
+	f := newConfiguredFixture(t, true)
+	sp := enableSAML(t, f)
+	page := f.verifyPhone(samlPage(t, f, sp))
+	first := verifySAMLResponse(t, f, sp, f.submit(page.body, "continue", url.Values{"member": {f.member.ID}, "consent": {"yes"}}))
+	sp.Published, sp.Preauthorized = true, true
+	var err error
+	sp, err = f.store.PutSAMLServiceProvider(t.Context(), identity.OperatorPrincipal(), sp, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	passive := func() saml.Response {
+		t.Helper()
+		url := samlURL(t, f, sp, func(input *saml.AuthnRequest) { v := true; input.IsPassive = &v })
+		start := f.call(f.browser, "GET", url, nil, nil)
+		f.status(start, 303)
+		return verifySAMLResponse(t, f, sp, f.call(f.browser, "GET", start.header.Get("Location"), nil, nil))
+	}
+	if response := passive(); response.Assertion == nil || response.Assertion.Subject.NameID.Value != first.Assertion.Subject.NameID.Value {
+		t.Fatal("sole admitted Member could not reuse session")
+	}
+	if err := f.store.SetSAMLEnablement(t.Context(), identity.OperatorPrincipal(), f.otherMember.OrganizationID, sp.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	if response := passive(); response.Assertion != nil || response.Status.StatusCode.StatusCode.Value != saml.StatusNoPassive {
+		t.Fatal("ambiguous session did not return NoPassive")
+	}
+}
+
 func TestSAMLPasswordSessionCanContinueIntoOIDC(t *testing.T) {
 	f := newFixture(t)
 	sp := enableSAML(t, f)

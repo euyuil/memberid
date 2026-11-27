@@ -216,6 +216,27 @@ export function SAMLServiceProviders({
             <dl>
               <dt>状态</dt>
               <dd>{status(viewing)}</dd>
+              <dt>使用范围</dt>
+              <dd>{viewing.published ? "已开放跨组织使用" : "仅归属组织"}</dd>
+              {viewing.published && !viewing.retired && (
+                <>
+                  <dt>分享链接</dt>
+                  <dd>
+                    <RecordIdentifier
+                      label="分享链接"
+                      value={
+                        new URL(
+                          routeURL({
+                            view: "saml-service-providers",
+                            join: viewing.id,
+                          }),
+                          window.location.origin
+                        ).href
+                      }
+                    />
+                  </dd>
+                </>
+              )}
               <dt>应用 ID</dt>
               <dd>
                 <RecordIdentifier value={viewing.id} label="应用 ID" />
@@ -320,6 +341,7 @@ function RegistrationDialog({
 }) {
   const [pending, setPending] = useState(false)
   const [error, setError] = useState("")
+  const [published, setPublished] = useState(item?.published ?? false)
   const [unsigned, setUnsigned] = useState(item?.allowUnsignedRequests ?? false)
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -343,6 +365,7 @@ function RegistrationDialog({
         allowUnsignedRequests: unsigned,
         signingCertificates: certificates,
         preauthorized: fields.has("preauthorized"),
+        published,
         attributes: [
           ...(fields.has("displayNameAttribute") ? ["DisplayName"] : []),
           ...(fields.has("emailAttribute") ? ["Email"] : []),
@@ -499,13 +522,33 @@ function RegistrationDialog({
                   name="organizationAttribute"
                   nativeButton
                   render={<button type="button" />}
-                  defaultChecked={item?.attributes?.includes("OrganizationID") ?? false}
+                  defaultChecked={
+                    item?.attributes?.includes("OrganizationID") ?? false
+                  }
                   disabled={pending}
                 />
                 <FieldLabel htmlFor="saml-organization-attribute">
                   向应用发送登录成员的组织 ID（OrganizationID）
                 </FieldLabel>
               </Field>
+              <Field orientation="horizontal" data-disabled={pending}>
+                <Checkbox
+                  id="saml-published"
+                  checked={published}
+                  onCheckedChange={setPublished}
+                  disabled={pending}
+                  nativeButton
+                  render={<button type="button" />}
+                />
+                <FieldLabel htmlFor="saml-published">开放跨组织使用</FieldLabel>
+              </Field>
+              {item?.published && !published && (
+                <Alert>
+                  <AlertDescription>
+                    保存后，外部组织将失去登录权限。再次共享后，各组织需要重新启用。
+                  </AlertDescription>
+                </Alert>
+              )}
               <Field orientation="horizontal" data-disabled={pending}>
                 <Checkbox
                   id="saml-enabled"

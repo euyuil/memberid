@@ -70,7 +70,7 @@ test("a shared application link acquires only the signed-in organization scope",
   assert.equal(target.org, "")
   assert.equal(target.query.get("join"), join)
   assert.equal(
-    routeURL({ view: "oidc-applications", org: "org_example", oidcUse: true }),
+    routeURL({ view: "oidc-applications", org: "org_example", used: true }),
     "/organizations/org_example/oidc-applications?tab=used"
   )
 })

@@ -55,6 +55,17 @@ test("SAML directory links retain scope, cursor and selected registration", () =
   assert.equal(route?.org, "org_example")
   assert.equal(route?.query.get("after"), "first-sp")
   assert.equal(route?.query.get("serviceProviderId"), "selected-sp")
+  const join = routeURL({ view: "saml-service-providers", join: "app_example" })
+  assert.equal(join, "/saml-service-providers?join=app_example")
+  assert.equal(parseRoute(join)?.query.get("join"), "app_example")
+  assert.equal(
+    routeURL({
+      view: "saml-service-providers",
+      org: "org_example",
+      used: true,
+    }),
+    "/organizations/org_example/saml-service-providers?tab=used"
+  )
   assert.equal(parseRoute("/saml-service-providers")?.org, "")
   assert.equal(
     parseRoute("/organizations/org_example/saml-service-providers/arbitrary"),
