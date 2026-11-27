@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
-import { createHash, randomBytes, X509Certificate } from "node:crypto";
+import {
+  createHash,
+  randomBytes,
+  randomUUID,
+  X509Certificate,
+} from "node:crypto";
 import { once } from "node:events";
 import {
   cpSync,
@@ -941,6 +946,82 @@ test(
             "--command",
             sql,
           ]);
+        // Each request uses a fresh management process against the selected installation.
+        async function management(route, body) {
+          const probe = net.createServer();
+          await new Promise((resolve) => probe.listen(0, "127.0.0.1", resolve));
+          const address = "127.0.0.1:" + probe.address().port;
+          await new Promise((resolve) => probe.close(resolve));
+          const processHandle = spawn(
+            executable,
+            [
+              "serve-management",
+              "--directory",
+              installation,
+              "--listen",
+              address,
+            ],
+            {
+              env,
+              windowsHide: true,
+              stdio: "ignore",
+            },
+          );
+          const exited = once(processHandle, "exit");
+          const headers = {
+            Authorization:
+              "Bearer " +
+              readFileSync(
+                path.join(installation, "management-secret"),
+                "utf8",
+              ).trim(),
+            "Content-Type": "application/json",
+          };
+          try {
+            let ready = false;
+            for (let i = 0; i < 100 && processHandle.exitCode === null; i++) {
+              try {
+                ready = (
+                  await fetch("http://" + address + "/healthz", { headers })
+                ).ok;
+              } catch {
+                /* startup */
+              }
+              if (ready) break;
+              await sleep(50);
+            }
+            assert.ok(ready, "private management process ready");
+            const response = await fetch("http://" + address + route, {
+              headers,
+              method: body ? "POST" : "GET",
+              body: body && JSON.stringify(body),
+            });
+            assert.equal(response.status, 200);
+            return response.json();
+          } finally {
+            if (
+              processHandle.exitCode === null &&
+              processHandle.signalCode === null
+            )
+              processHandle.kill();
+            await exited;
+          }
+        }
+        const factorID = organization.id.replace("org_", "af_");
+        pg(
+          `INSERT INTO authentication_factors(id,type,namespace,subject) VALUES('${factorID}','phone','phone:e164','+8619900000001')`,
+        );
+        const enrollmentRoute = "/v1/organization-enrollments";
+        const legacyBody = {
+          organizationId: member.id.replace("mbr_", "org_"),
+          memberId: organization.id.replace("org_", "mbr_"),
+          name: "Legacy enrollment",
+          bindingId: randomUUID(),
+          authenticationFactorId: factorID,
+        };
+        const legacyReceipt = await management(enrollmentRoute, legacyBody);
+        const receiptRoute =
+          "/v1/organizations/" + legacyReceipt.organizationId + "/enrollment";
         const snapshot = () =>
           Object.fromEntries(
             pg(
@@ -952,6 +1033,7 @@ test(
                 // Compare every field except the columns intentionally changed by cutover.
                 const row =
                   {
+                    organization_enrollments: "to_jsonb(t) - 'idempotency_key'",
                     oidc_grants: "to_jsonb(t) - 'revoked_at'",
                     authentication_requests:
                       "to_jsonb(t) - 'consumed_at' - 'saml_service_provider_id'",
@@ -1080,9 +1162,20 @@ test(
         ];
         const upgraded = JSON.parse(cli(...upgradeArgs));
         assert.equal(upgraded.upgraded, true);
-        assert.equal(upgraded.currentVersion, 36);
-        t.diagnostic("upgrade rehearsal: schema 36 committed");
+        assert.equal(upgraded.currentVersion, 37);
+        t.diagnostic("upgrade rehearsal: schema 37 committed");
         assert.deepEqual(snapshot(), before);
+        assert.deepEqual(await management(receiptRoute), legacyReceipt);
+        const newBody = {
+          idempotencyKey: randomUUID(),
+          name: "Keyed enrollment",
+          bindingId: randomUUID(),
+          authenticationFactorId: factorID,
+        };
+        const accepted = await management(enrollmentRoute, newBody);
+        assert.deepEqual(await management(enrollmentRoute, newBody), accepted);
+        assert.notEqual(accepted.memberId, legacyReceipt.memberId);
+        assert.notEqual(accepted.organizationId, legacyReceipt.organizationId);
         assert.equal(
           pg(
             "SELECT owner_organization_id FROM oidc_clients WHERE display_name='upgrade-client'",
@@ -1243,6 +1336,11 @@ test(
         );
         executable = oldExecutable;
         cli("database", "check");
+        assert.deepEqual(await management(receiptRoute), legacyReceipt);
+        assert.deepEqual(
+          await management(enrollmentRoute, legacyBody),
+          legacyReceipt,
+        );
         await startProvider();
         t.diagnostic("upgrade rehearsal: recovered source schema started");
         assert.equal(

@@ -1,7 +1,7 @@
 CREATE TABLE memberid_schema (
-    version integer PRIMARY KEY CHECK (version = 36)
+    version integer PRIMARY KEY CHECK (version = 37)
 );
-INSERT INTO memberid_schema(version) VALUES (36);
+INSERT INTO memberid_schema(version) VALUES (37);
 
 CREATE TABLE database_upgrades (
     to_version integer PRIMARY KEY,
@@ -256,6 +256,7 @@ CREATE TABLE organization_enrollments (
     authentication_factor_id text COLLATE "C" NOT NULL REFERENCES authentication_factors(id),
     request_hash bytea NOT NULL CHECK (octet_length(request_hash) = 32),
     created_at timestamptz NOT NULL,
+    idempotency_key uuid UNIQUE,
     FOREIGN KEY (member_id, organization_id) REFERENCES members(id, organization_id)
 );
 

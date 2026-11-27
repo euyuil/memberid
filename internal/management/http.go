@@ -127,8 +127,6 @@ func respond(w http.ResponseWriter, status int, value any, err error) {
 			problem(w, http.StatusBadRequest, "invalid_request")
 		case errors.Is(err, identity.ErrNotFound):
 			problem(w, http.StatusNotFound, "not_found")
-		case errors.Is(err, identity.ErrMemberIDConflict):
-			problem(w, http.StatusUnprocessableEntity, "member_id_conflict")
 		case errors.Is(err, identity.ErrConflict):
 			problem(w, http.StatusConflict, "conflict")
 		case errors.Is(err, identity.ErrMemberEmailTaken):

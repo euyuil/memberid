@@ -30,7 +30,7 @@ MemberID allocates the ID for each standalone create. Send `name` for an organiz
 
 Callers that previously preallocated IDs must omit that field and persist the ID returned in the 201 response before creating dependent records. If the response is lost, reconcile the outcome with the operator before retrying. A repeated standalone POST can create a second identity. Display names are nonunique.
 
-Atomic enrollment currently requires caller-supplied IDs and has its own [retry contract](#atomic-organization-enrollment).
+Atomic enrollment allocates both IDs and has its own [retry contract](#atomic-organization-enrollment).
 
 ### Current endpoints
 
@@ -130,7 +130,7 @@ A Member qualifies when at least one of its explicit bindings passes the same st
 
 The candidates and eligibility gates are evaluated in one SQL statement and therefore share one database snapshot. Separate requests or batches do not share a snapshot or reserve future eligibility. This query performs no fresh upstream provider verification and does not establish an authentication time, authenticate a token's specific factor, or grant application permissions. Resource servers must still verify the presented token and check its explicit binding through `POST /v1/eligibility`. Applications retain their own permission rules and coordination for subsequent changes.
 
-Domain failures return a JSON `error` code with 400 (`invalid_request`), 401 (`unauthorized`), 403 (`ineligible` or `browser_access_denied`), 404 (`not_found`), 409 (`conflict`), 415 (`json_required`), 422 (`member_id_conflict`), 500 (`internal_error`), or 503 (`provider_unavailable`). Internal database details are not returned. Unknown routes and unsupported methods may use ordinary HTTP errors. For enrollment, follow the receipt and retry rules below.
+Domain failures return a JSON `error` code with 400 (`invalid_request`), 401 (`unauthorized`), 403 (`ineligible` or `browser_access_denied`), 404 (`not_found`), 409 (`conflict`), 415 (`json_required`), 500 (`internal_error`), or 503 (`provider_unavailable`). Internal database details are not returned. Unknown routes and unsupported methods may use ordinary HTTP errors. For enrollment, follow the receipt and retry rules below.
 
 ## Validation and current limits
 
@@ -140,14 +140,24 @@ Grant inspection and revocation are available through the [operator CLI](operati
 
 ## Atomic organization enrollment
 
-The following contract applies to the current implementation. The [planned enrollment change](#organization-and-member-id-allocation) introduces a separate idempotency key.
+An installation manager can create an organization, its first Member and an explicit binding to an active verified phone factor with one `POST /v1/organization-enrollments`. Persist a fresh UUID for each logical enrollment before sending it. Supply it as `idempotencyKey` in the JSON body. Keys are unique across the installation. Supply the existing verified phone factor ID, a new UUID for its binding, and the organization name. MemberID allocates both identity IDs. The initial Member's display name is `Member`. Supplying `organizationId` or `memberId` returns 400.
 
-Trusted integrations may use `POST /v1/organization-enrollments` to create a new organization, its initial independent Member, and an explicit binding in one database transaction. This operation requires the same installation management credential as the other management operations. It is a provisioning decision, not an authentication flow, and assigns no application role or permission.
+```json
+{
+  "idempotencyKey": "00000000-0000-4000-8000-000000000001",
+  "name": "Example organization",
+  "bindingId": "c65fb983-fa18-4e69-a6b2-da51897db959",
+  "authenticationFactorId": "VERIFIED_PHONE_FACTOR_ID"
+}
+```
 
-The request contains `organizationId`, `name`, `memberId`, `bindingId`, and `authenticationFactorId`. The caller supplies unused organization and Member identifiers in the documented formats and a UUID binding identifier. The factor must already have been verified by MemberID's phone authentication provider and remain active. Phone numbers or contact attributes cannot be supplied in place of verified factor evidence. DingTalk admission is a separate provider workflow; it is not phone enrollment. An initial Member uses the display name `Member`, which can be changed independently afterward.
+First acceptance commits both identities, the binding, the key and the receipt together. The 200 receipt contains `organizationId`, `memberId`, `bindingId`, `authenticationFactorId`, and `createdAt`. If the response is lost, send the same body again, including after a restart. Concurrent submissions return the same original receipt. UUID case is normalized. Reusing an accepted key with a different name, factor or binding returns 409. A failed transaction leaves the key available.
 
-The organization identifier is the operation's stable idempotency boundary. MemberID retains a hash of the accepted tuple and an immutable receipt. The first success and exact retries return status 200 with `organizationId`, `memberId`, `bindingId`, `authenticationFactorId`, and the original `createdAt`. UUID binding casing is normalized to lowercase before comparison. Reusing an accepted organization identifier with a different tuple returns 409. The operation cannot adopt an organization that already exists without an enrollment receipt.
+`GET /v1/organizations/{organizationId}/enrollment` retrieves a historical receipt, including one created before the upgrade. Replaying a receipt preserves subsequent renames, blocks and binding revocations. Check current eligibility separately. Enrollment grants no downstream application roles.
 
-A rejected transaction leaves no partially created organization, Member, binding, or receipt. If the candidate Member ID was already in use, status 422 with `error: member_id_conflict` lets the caller choose a fresh Member ID and retry the otherwise unaccepted request. Other identifier or binding conflicts return 409 and require investigation or a new unused candidate before retry. An uncertain network response does not justify changing accepted identifiers: retry the same tuple or read `GET /v1/organizations/{organizationId}/enrollment` first.
+### Cut over callers with pending enrollments
 
-A successful retry returns historical acceptance only. It does not rename an organization, recreate identities, reactivate factors or bindings, clear manual or departure blocks, or issue any new login proof. The receipt remains stable after later eligibility changes. Query current identity eligibility separately before applying the consuming application's authorization policy. If a consuming application needs business roles or enrollment steps of its own, it owns that coordination and its own idempotency rules.
+1. Pause legacy writers, drain their in-flight submissions and retain each outstanding request and its caller-selected organization ID.
+2. Fetch each receipt by its known organization ID. Match the original organization, Member, binding and factor IDs before recording success. Resolve any mismatched or ambiguous result with the operator before issuing a new request.
+3. For a confirmed 404 after draining the old writers, verify the intended resources were not separately provisioned. Submit the new contract once with a persisted key. Retain both the key and the returned identity IDs. Resume writers with the new contract.
+4. If recovering the source database and executable, reconcile acceptances after the backup against the restored installation before allowing either generation of caller to write.

@@ -1142,7 +1142,7 @@
     },
     "responses": {
       "Error": {
-        "description": "400 invalid request; 401 missing or invalid management credential; 403 browser access denied or ineligible factor; 404 record not found; 409 identifier, binding, email uniqueness or revision conflict; 415 JSON required; 422 candidate Member identifier collision; 500 internal error; 503 provider verification unavailable. Unknown routes and unsupported methods may use ordinary HTTP errors.",
+        "description": "400 invalid request; 401 missing or invalid management credential; 403 browser access denied or ineligible factor; 404 record not found; 409 identifier, binding, email uniqueness or revision conflict; 415 JSON required; 500 internal error; 503 provider verification unavailable. Unknown routes and unsupported methods may use ordinary HTTP errors.",
         "content": {
           "application/json": {
             "schema": {
@@ -1559,18 +1559,15 @@
         "type": "object",
         "additionalProperties": false,
         "properties": {
-          "organizationId": {
+          "idempotencyKey": {
             "type": "string",
-            "pattern": "^org_[0-9bcdfghjkmnpqrstvwxz]{27}$"
+            "format": "uuid",
+            "description": "Installation-wide enrollment key. Persist before sending and reuse for every retry."
           },
           "name": {
             "type": "string",
             "minLength": 1,
             "maxLength": 128
-          },
-          "memberId": {
-            "$ref": "#/components/schemas/MemberID",
-            "not": { "const": "mbr_root" }
           },
           "bindingId": {
             "type": "string",
@@ -1582,9 +1579,8 @@
           }
         },
         "required": [
-          "organizationId",
+          "idempotencyKey",
           "name",
-          "memberId",
           "bindingId",
           "authenticationFactorId"
         ]
