@@ -12,7 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-const SchemaVersion = 33
+const SchemaVersion = 34
 
 // The two-int key space is separate from existing bigint initialization,
 // administration and worker locks. MID identifies this maintenance namespace.
@@ -42,6 +42,9 @@ var upgrade32 string
 
 //go:embed migrations/0033_oidc_publication.sql
 var upgrade33 string
+
+//go:embed migrations/0034_oidc_organization_scope.sql
+var upgrade34 string
 
 type DatabasePlan struct {
 	CurrentVersion  int  `json:"currentVersion"`
@@ -207,7 +210,7 @@ func UpgradeDatabase(ctx context.Context, databaseURL string, prepare func(conte
 		for _, migration := range []struct {
 			from, to int
 			sql      string
-		}{{26, 27, upgrade27}, {27, 28, upgrade28}, {28, 29, upgrade29}, {29, 30, upgrade30}, {30, 31, upgrade31}, {31, 32, upgrade32}, {32, 33, upgrade33}} {
+		}{{26, 27, upgrade27}, {27, 28, upgrade28}, {28, 29, upgrade29}, {29, 30, upgrade30}, {30, 31, upgrade31}, {31, 32, upgrade32}, {32, 33, upgrade33}, {33, 34, upgrade34}} {
 			if migration.from < plan.CurrentVersion {
 				continue
 			}

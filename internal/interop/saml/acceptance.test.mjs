@@ -1045,8 +1045,8 @@ test(
         ];
         const upgraded = JSON.parse(cli(...upgradeArgs));
         assert.equal(upgraded.upgraded, true);
-        assert.equal(upgraded.currentVersion, 33);
-        t.diagnostic("upgrade rehearsal: schema 33 committed");
+        assert.equal(upgraded.currentVersion, 34);
+        t.diagnostic("upgrade rehearsal: schema 34 committed");
         assert.deepEqual(snapshot(), before);
         assert.equal(
           pg(

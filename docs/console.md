@@ -116,6 +116,8 @@ An owner administrator or platform administrator can publish an owner-restricted
 
 Withdrawing a consumer (`{"enabled":false}`) prevents further authorization and revokes its grants, including refresh and online UserInfo access. Other consumers remain eligible. A new enablement requires fresh authorization. Unpublishing removes all external enablements and revokes their grants. Global application disablement revokes every grant. Offline JWT validation can continue until token expiry, and relying parties control their own sessions.
 
+For a Member application, **允许应用读取登录组织 ID** permits the app to request the `memberid.organization` scope. The default is off. With consent, its ID token contains the signing-in Member’s organization ID. See [the relying-party example](oidc.md#current-organization-in-the-id-token).
+
 To release identity evidence, enter a custom scope such as `member:evidence` and an exact resource audience such as `https://api.example.test`. When the client requests that scope, the access token for that audience carries the organization, Member and binding IDs along with authentication factor ID, type, method and times. An ordinary login without the evidence scope uses the UserInfo audience. The recipient must validate the token and decide its own resource permissions. See [access-token claims](oidc.md#token-validation-and-eligibility).
 
 Send `evidenceScope` and `evidenceAudience` together when editing the policy. Omitting both preserves the existing pair. Two empty strings remove it. Omitted account-return and consent fields also retain their values. Changing or removing an existing pair revokes grants containing its old scope. An already issued JWT may still be accepted offline until expiry. Updates require the current revision, and the management history records policy changes.
@@ -204,7 +206,7 @@ targets. Explicit console logout returns to `/`.
 
 Build with `sh scripts/check.sh` or `sh scripts/package.sh VERSION NEW_OUTPUT_DIRECTORY`. Both build the locked frontend before embedding it in Go. Node/npm are build dependencies; the resulting executable needs neither at runtime.
 
-Initialize a protected installation and a new database as described in [operator setup](operations.md). Fresh installations use schema version **33**. Existing schema 26–32 databases use the [explicit forward upgrade](database-upgrades.md); startup never migrates or erases data. Start the OIDC process before starting the console so its discovery and keys are reachable.
+Initialize a protected installation and a new database as described in [operator setup](operations.md). Fresh installations use schema version **34**. Existing schema 26–33 databases use the [explicit forward upgrade](database-upgrades.md); startup never migrates or erases data. Start the OIDC process before starting the console so its discovery and keys are reachable.
 
 Register a dedicated confidential Member client with no organization restriction:
 

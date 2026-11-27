@@ -31,6 +31,7 @@ type OIDCApplication struct {
 	RedirectURIs           []string `json:"redirectUris"`
 	PostLogoutRedirectURIs []string `json:"postLogoutRedirectUris,omitempty"`
 	AccountReturnURIs      []string `json:"accountReturnUris"`
+	AllowOrganizationScope bool     `json:"allowOrganizationScope"`
 	Preauthorized          bool     `json:"preauthorized"`
 	SubjectKind            string   `json:"subjectKind"`
 	EvidenceScope          string   `json:"evidenceScope,omitempty"`
@@ -49,7 +50,8 @@ func (registration OIDCClientRegistration) Application() OIDCApplication {
 		OwnerOrganizationID: registration.OwnerOrganizationID,
 		RedirectURIs:        client.RedirectURIs, PostLogoutRedirectURIs: client.PostLogoutRedirectURIs, Refresh: client.Refresh,
 		AccountReturnURIs: client.AccountReturnURIs, Preauthorized: client.Preauthorized,
-		SubjectKind: client.SubjectKind, EvidenceScope: client.EvidenceScope, EvidenceAudience: client.EvidenceAudience,
+		AllowOrganizationScope: client.AllowOrganizationScope,
+		SubjectKind:            client.SubjectKind, EvidenceScope: client.EvidenceScope, EvidenceAudience: client.EvidenceAudience,
 		Published: registration.Published, Enabled: registration.Enabled, System: registration.System, Revision: registration.Revision,
 	}
 }
@@ -77,17 +79,19 @@ func LockOIDCClient(ctx context.Context, tx pgx.Tx, id string) (OIDCClientRegist
 }
 
 type OIDCClientCapabilities struct {
-	ActiveClients  int
-	Refresh        bool
-	EvidenceScopes []string
+	ActiveClients     int
+	Refresh           bool
+	OrganizationScope bool
+	EvidenceScopes    []string
 }
 
 func (store *Store) OIDCClientCapabilities(ctx context.Context) (OIDCClientCapabilities, error) {
 	var capabilities OIDCClientCapabilities
 	err := store.pool.QueryRow(ctx, `SELECT count(*),COALESCE(bool_or(registration->>'refresh'='true'),false),
+ COALESCE(bool_or(registration @> '{"allowOrganizationScope":true,"subjectKind":"member"}'),false),
  COALESCE(array_agg(DISTINCT registration->>'evidenceScope' ORDER BY registration->>'evidenceScope')
  FILTER (WHERE registration->>'evidenceScope' IS NOT NULL),'{}')
- FROM oidc_clients WHERE enabled`).Scan(&capabilities.ActiveClients, &capabilities.Refresh, &capabilities.EvidenceScopes)
+ FROM oidc_clients WHERE enabled`).Scan(&capabilities.ActiveClients, &capabilities.Refresh, &capabilities.OrganizationScope, &capabilities.EvidenceScopes)
 	return capabilities, err
 }
 
@@ -160,7 +164,8 @@ func (service *ManagementService) CreateOIDCApplication(ctx context.Context, pri
 			OrganizationID: application.OrganizationID, RedirectURIs: application.RedirectURIs,
 			PostLogoutRedirectURIs: application.PostLogoutRedirectURIs, Refresh: application.Refresh,
 			AccountReturnURIs: application.AccountReturnURIs, Preauthorized: application.Preauthorized,
-			EvidenceScope: application.EvidenceScope, EvidenceAudience: application.EvidenceAudience,
+			AllowOrganizationScope: application.AllowOrganizationScope,
+			EvidenceScope:          application.EvidenceScope, EvidenceAudience: application.EvidenceAudience,
 		},
 	}
 	return service.store.createOIDCClient(ctx, principal, registration, loopback, requirements...)
@@ -220,6 +225,7 @@ type OIDCApplicationChange struct {
 	AccountReturnURIs      *[]string `json:"accountReturnUris"`
 	EvidenceScope          *string   `json:"evidenceScope"`
 	EvidenceAudience       *string   `json:"evidenceAudience"`
+	AllowOrganizationScope *bool     `json:"allowOrganizationScope"`
 	Preauthorized          *bool     `json:"preauthorized"`
 	Refresh                bool      `json:"refresh"`
 	Enabled                *bool     `json:"enabled"`
@@ -228,7 +234,7 @@ type OIDCApplicationChange struct {
 func (service *ManagementService) UpdateOIDCApplication(ctx context.Context, principal Principal, ownerID, id string, change OIDCApplicationChange, loopback bool) (OIDCApplication, error) {
 	action := actionUpdate
 	if change.Enabled != nil {
-		if change.DisplayName != "" || change.OrganizationID != "" || change.RedirectURIs != nil || change.PostLogoutRedirectURIs != nil || change.AccountReturnURIs != nil || change.Preauthorized != nil || change.EvidenceScope != nil || change.EvidenceAudience != nil || change.Refresh {
+		if change.DisplayName != "" || change.OrganizationID != "" || change.RedirectURIs != nil || change.PostLogoutRedirectURIs != nil || change.AccountReturnURIs != nil || change.AllowOrganizationScope != nil || change.Preauthorized != nil || change.EvidenceScope != nil || change.EvidenceAudience != nil || change.Refresh {
 			return OIDCApplication{}, ErrInvalid
 		}
 		action = actionStatusUpdate
@@ -251,6 +257,9 @@ func (service *ManagementService) UpdateOIDCApplication(ctx context.Context, pri
 			change.OrganizationID = ownerID
 		}
 		client := &registration.Client
+		if change.AllowOrganizationScope != nil {
+			client.AllowOrganizationScope = *change.AllowOrganizationScope
+		}
 		if change.EvidenceScope != nil {
 			if client.SubjectKind != "member" {
 				return false, ErrForbidden
@@ -343,11 +352,16 @@ func (store *Store) changeOIDCClient(ctx context.Context, principal Principal, o
 			id, registration.DisplayName, registration.Enabled, registration.Revision, registration.Client); err != nil {
 			return storageError(err)
 		}
-		oldEvidenceChanged := previous.EvidenceScope != "" &&
-			(previous.EvidenceScope != registration.Client.EvidenceScope || previous.EvidenceAudience != registration.Client.EvidenceAudience)
-		if revoke || oldEvidenceChanged {
+		var removedScopes []string
+		if previous.EvidenceScope != "" && (previous.EvidenceScope != registration.Client.EvidenceScope || previous.EvidenceAudience != registration.Client.EvidenceAudience) {
+			removedScopes = append(removedScopes, previous.EvidenceScope)
+		}
+		if previous.AllowOrganizationScope && !registration.Client.AllowOrganizationScope {
+			removedScopes = append(removedScopes, OrganizationScope)
+		}
+		if revoke || len(removedScopes) > 0 {
 			if _, err := tx.Exec(ctx, `UPDATE oidc_grants SET revoked_at=$2 WHERE client_id=$1 AND revoked_at IS NULL
- AND ($3 OR (data->'scopes') ? $4)`, id, time.Now().UTC(), revoke, previous.EvidenceScope); err != nil {
+ AND ($3 OR (data->'scopes') ?| $4::text[])`, id, time.Now().UTC(), revoke, removedScopes); err != nil {
 				return err
 			}
 		}

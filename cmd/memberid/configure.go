@@ -111,6 +111,7 @@ func configure(ctx context.Context, args []string, stdout, stderr io.Writer) err
 			flags.StringVar(&client.SubjectKind, "subject", "member", "member, or explicitly authorized factor identity")
 			flags.StringVar(&client.EvidenceScope, "evidence-scope", "", "custom scope releasing identity evidence")
 			flags.StringVar(&client.EvidenceAudience, "evidence-audience", "", "fixed resource audience for identity evidence")
+			flags.BoolVar(&client.AllowOrganizationScope, "allow-organization-scope", false, "allow the memberid.organization ID token scope for Member clients")
 			flags.BoolVar(&client.Refresh, "refresh", false, "allow standard refresh grants")
 			flags.BoolVar(&client.Preauthorized, "preauthorized", false, "operator grants consent to registered scope policy")
 		}

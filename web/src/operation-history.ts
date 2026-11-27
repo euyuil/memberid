@@ -118,6 +118,7 @@ export function describeEvent(event: ManagementEvent) {
       break
     case "oidc.application.update":
       label = "编辑 OIDC 应用"
+      field("allowOrganizationScope", "更新登录组织 ID 读取权限", enabled)
       field("preauthorized", "更新授权确认策略", (value) =>
         typeof value === "boolean"
           ? value

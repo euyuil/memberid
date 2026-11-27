@@ -228,6 +228,10 @@ func (service *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		metadata.ScopesSupported = append([]string{"openid", "profile", "email", "phone"}, capabilities.EvidenceScopes...)
+		if capabilities.OrganizationScope {
+			metadata.ScopesSupported = append(metadata.ScopesSupported, identity.OrganizationScope)
+			metadata.ClaimsSupported = append(metadata.ClaimsSupported, "organizationId")
+		}
 		if capabilities.Refresh {
 			metadata.ScopesSupported = append(metadata.ScopesSupported, "offline_access")
 			metadata.GrantTypesSupported = append(metadata.GrantTypesSupported, oidc.GrantTypeRefreshToken)
