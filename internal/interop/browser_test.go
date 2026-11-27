@@ -97,6 +97,12 @@ func (f *gitlabFixture) login(clientID string) {
 				f.t.Fatal("MemberID login page failed")
 			}
 			form := url.Values{"request": {hiddenField(f.t, response.body, "request")}, "csrf": {hiddenField(f.t, response.body, "csrf")}}
+			if strings.Contains(response.body, `value="choose-organization"`) {
+				form.Set("action", "choose-organization")
+				form.Set("organization", f.organizationID)
+				response = request(issuer+"/login", form)
+				continue
+			}
 			if !verified {
 				form.Set("action", "send")
 				form.Set("phone", "19900000001")

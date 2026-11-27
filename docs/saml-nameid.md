@@ -21,14 +21,15 @@ Only the installation operator CLI can inspect or provision mappings. Possession
 Use a protected installation and `MEMBERID_DATABASE_URL` as in [operator setup](operations.md). Prefer registering the SP disabled with `nameIdFormat: "unspecified"`, provisioning its intended legacy accounts, then enabling it with the inspected current registration revision. Provision before the first login: an existing generated mapping cannot be overwritten, even with the same value or while the SP is disabled.
 
 ```sh
-memberid saml sp inspect --directory ./installation --id legacy-sp
+# Set SP_ID to the app_ ID returned when registering this service provider.
+memberid saml sp inspect --directory ./installation --id "$SP_ID"
 memberid saml nameid provision --directory ./installation \
   --organization org_REPLACE_WITH_ORGANIZATION \
-  --sp legacy-sp --member mbr_REPLACE_WITH_MEMBER \
+  --sp "$SP_ID" --member mbr_REPLACE_WITH_MEMBER \
   --value old-account-42 --revision 1
 memberid saml nameid inspect --directory ./installation \
   --organization org_REPLACE_WITH_ORGANIZATION \
-  --sp legacy-sp --member mbr_REPLACE_WITH_MEMBER
+  --sp "$SP_ID" --member mbr_REPLACE_WITH_MEMBER
 ```
 
 `--revision` is the expected current **SP registration revision**, not a mapping revision. Inspection never allocates a missing mapping. Retired registrations reject provisioning. A stale revision, different existing value, already generated mapping, or value reserved by another Member fails without changing either mapping. Inspect the registration and mapping after an uncertain response. Repeating an identical legacy provisioning at the current SP revision returns the original record without another audit event.
