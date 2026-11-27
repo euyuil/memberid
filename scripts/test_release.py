@@ -9,6 +9,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
+import ci_image
 import publish_release as publish
 from release_version import git, impact, plan
 
@@ -96,6 +97,8 @@ class ReleaseTests(unittest.TestCase):
         with (patch.object(publish, "os", SimpleNamespace(environ=env)),
               patch.object(publish, "from_run", return_value=(self.sha, digest)),
               patch.object(publish, "api", side_effect=api) as api_mock,
+              patch.object(ci_image, "api", side_effect=api),
+              patch.object(publish, "validated_run", return_value="321/1") as validate,
               patch.object(publish, "Registry") as registry, contextlib.redirect_stdout(io.StringIO())):
             registry.return_value.alias.side_effect = alias
             publish.main()
@@ -104,6 +107,11 @@ class ReleaseTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "plan changed"):
                 publish.main()
             env["CONFIRM_VERSION"] = "0.1.0-rc.1"
+            validate.side_effect = ValueError("Full CI failed")
+            with self.assertRaisesRegex(ValueError, "Full CI failed"):
+                publish.main()
+            self.assertFalse(aliases or releases)
+            validate.side_effect = None
             # Simulate a failure after the image tag is created.
             api_mock.side_effect = OSError("interrupted")
             with self.assertRaises(OSError):
@@ -119,6 +127,8 @@ class ReleaseTests(unittest.TestCase):
             self.assertEqual(aliases, {"0.1.0-rc.1": digest, "0.1.0": digest})
             receipt = json.loads(releases["0.1.0"]["body"].splitlines()[1])
             self.assertEqual((receipt["commit"], receipt["schemaVersion"]), (self.sha, 30))
+            self.assertEqual(receipt["fullValidation"], "321/1")
+            validate.assert_called_with(repo, "0.1.0-rc.1", self.sha, digest, "321/1", publish=True)
 
     def test_registry_preserves_exact_manifest(self):
         manifest = b'{"schemaVersion":2}'
@@ -156,11 +166,11 @@ class ReleaseTests(unittest.TestCase):
             self.assertIn("image-receipt-2", args)
             (Path(args[-1]) / "image.json").write_text(json.dumps(receipt))
 
-        with patch.object(publish, "api", return_value=run), patch.object(publish, "gh", side_effect=download):
-            self.assertEqual(publish.from_run(repo, "42/2"), (self.sha, receipt["digest"]))
+        with patch.object(ci_image, "api", return_value=run), patch.object(ci_image, "gh", side_effect=download):
+            self.assertEqual(ci_image.from_run(repo, "42/2"), (self.sha, receipt["digest"]))
             receipt["commit"] = "0" * 40
             with self.assertRaisesRegex(ValueError, "receipt"):
-                publish.from_run(repo, "42/2")
+                ci_image.from_run(repo, "42/2")
             run["event"] = "pull_request"
             with self.assertRaisesRegex(ValueError, "successful CI push"):
-                publish.from_run(repo, "42/2")
+                ci_image.from_run(repo, "42/2")

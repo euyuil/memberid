@@ -44,7 +44,7 @@ Select focused checks for the affected behavior and preserve the required PR CI 
 
 After the checks, run `sh scripts/package.sh VERSION NEW_OUTPUT_DIRECTORY` from the repository root. The output parent must exist. Packaging supports Linux and Windows amd64, includes notices and file checksums, and refuses existing destinations. The Linux package includes a container recipe that uses the same executable. See [distribution and deployment](docs/distribution.md) for cross-building, trust-store mounts, runtime configuration, and verification. These commands create local artifacts only.
 
-CI builds each native package, verifies its checksums and version, and checks that an existing destination cannot be overwritten. On Linux it also runs the minimal image and compares its executable with the native package. Runtime secrets, CA bundles, and databases are supplied separately. After all checks pass on a `main` push, CI publishes that tested Linux image to GitHub Container Registry. Pull requests never publish, and CI never deploys. See [published images](docs/distribution.md#automatically-published-images) for tags, digests, package visibility, and manual rollout.
+Push CI publishes a smoke-tested Linux SHA image. Full CI verifies Linux and Windows packages and compares the executable in that pinned registry image with the package under test. Production credentials, databases, and regional deployment remain outside both workflows. See [published images](docs/distribution.md#automatically-published-images) for tags, digests, package visibility, and manual rollout.
 
 ## Pull requests
 
@@ -56,9 +56,11 @@ Use an English Conventional Commit PR title. Configure the repository squash tit
 
 Direct pushes and force pushes to `main` are prohibited. Other branches may be merged, rebased, or force-pushed when needed. Update an existing PR by merging `main` into its branch or rebasing that branch. Push normally after a merge; after a rebase, use `git push --force-with-lease origin BRANCH` with the actual non-`main` branch name. A rejected lease means the remote branch changed; inspect and preserve that work before retrying.
 
-GitHub must retain the four required checks: `Build and test (ubuntu-24.04)`, `Build and test (windows-2025)`, `Repository security`, and `PostgreSQL integration`. Keep "Require branches to be up to date before merging" disabled and the PR branch-update option enabled. A newer `main` commit alone does not require updating or replacing the PR. Resolve merge conflicts or incompatible changes in the existing PR, and wait for required checks on its latest revision before squash merging.
+Require the two GitHub Actions checks `Repository security` and `PR checks` for merges to `main`. Keep "Require branches to be up to date before merging" disabled and the PR branch-update option enabled. A newer `main` commit alone does not require updating or replacing the PR. Resolve merge conflicts or incompatible changes in the existing PR, and wait for required checks on its latest revision before squash merging.
 
-CI runs the build and tests on Linux and Windows, Linux race tests, and full-history secret scanning. The security job checks the pinned Gitleaks baseline archive checksum before execution. Workflow dependencies are pinned to reviewed revisions.
+Every PR gets title, metadata and full-history secret checks with the checksum-verified Gitleaks baseline. Code PRs run Linux formatting, vet, unit tests and the build. Changes to CI or release scripts also run their tests. Schema, token and identity changes select focused PostgreSQL integration tests inside the required PR job. Markdown-only documentation skips runtime setup. Target ordinary code PRs at 1–2 minutes and documentation at tens of seconds.
+
+Full CI runs nightly at 19:17 UTC (03:17 Asia/Shanghai the following day) and on demand. It tests the selected SHA image, both supported platforms, race detection, PostgreSQL integration and the packaged SAML upgrade and recovery rehearsal. Maintainers monitor Actions failure notifications and fix failures on main. Release requires successful full evidence for its exact commit and digest. The release workflow can dispatch missing validation before publication.
 
 Before committing, inspect the full staged diff and verify the configured human author and committer. Run the staged secret scan; do not bypass hooks. Before publication, review public text, Git metadata, configuration, examples, and build output for private information. Automated secret scanning does not establish that all sensitive information has been removed.
 
@@ -86,4 +88,4 @@ See [the GitLab guide](docs/gitlab.md) for the pinned unmodified client, package
 
 ## SAML interoperability
 
-See [independent SAML consumer acceptance](docs/saml-interop.md) for the pinned Node-SAML consumer, ordinary packaged executable, temporary HTTPS environment, and replay/constraint checks. Its isolated npm lockfile is `internal/interop/saml/package-lock.json`; these dependencies are test-only and are not part of the console or MemberID distribution. Linux build CI runs this acceptance with its freshly built package.
+See [independent SAML consumer acceptance](docs/saml-interop.md) for the pinned Node-SAML consumer, ordinary packaged executable, temporary HTTPS environment, and replay/constraint checks. Its isolated npm lockfile is `internal/interop/saml/package-lock.json`; these dependencies are test-only and are not part of the console or MemberID distribution. Linux full CI runs this acceptance with its freshly built package.
