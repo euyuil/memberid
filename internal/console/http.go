@@ -386,16 +386,20 @@ func (s *Service) resetMemberPassword(w http.ResponseWriter, r *http.Request) {
 	}
 	s.generateMemberPassword(w, r, nil)
 }
-func (s *Service) renameMemberPassword(w http.ResponseWriter, r *http.Request) {
+func (s *Service) changeMemberLoginName(w http.ResponseWriter, r *http.Request) {
 	var input struct {
-		ExpectedUsername string `json:"expectedUsername"`
-		Username         string `json:"username"`
+		ExpectedUsername *string `json:"expectedUsername"`
+		Username         string  `json:"username"`
 	}
 	if !management.DecodeRequest(w, r, &input) {
 		return
 	}
+	if input.ExpectedUsername == nil || r.Method == http.MethodPatch && *input.ExpectedUsername == "" {
+		problem(w, 400, "invalid_request")
+		return
+	}
 	principal := r.Context().Value(sessionKey{}).(session).principal()
-	err := s.management.RenameMemberPassword(r.Context(), principal, r.PathValue("organizationId"), r.PathValue("memberId"), input.ExpectedUsername, input.Username)
+	err := s.management.ChangeMemberLoginName(r.Context(), principal, r.PathValue("organizationId"), r.PathValue("memberId"), *input.ExpectedUsername, input.Username)
 	respond(w, map[string]string{"username": identity.CanonicalLoginName(input.Username)}, err)
 }
 func (s *Service) generateMemberPassword(w http.ResponseWriter, r *http.Request, username *string) {

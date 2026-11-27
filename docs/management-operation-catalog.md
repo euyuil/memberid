@@ -40,7 +40,7 @@ operation requires extending that matrix and this catalog as well as the code.
 | O5-O6: organization updates | Shared scope/action checks at the existing transactional authorization point, including explicitly submitted unchanged status fields. Private/CLI updates retain their installation-only entry contract. |
 | O4, M4-M6, A2-A3: organization/Member creation, Member changes and administrator assignments | Shared checks for collection create, field-specific update/status.update, and assignment create/delete. Private/CLI Member writes and new update receipts use the same operation mappings under installation-only admission. |
 | M10: managed email writes | Transactional `update` authority on `M/email`, expected revision, organization-local uniqueness and atomic audit. Private/CLI writes retain installation-only admission. |
-| M7-M9: Member password and username writes | Member-only console admission and transactional create/update authority on the target Member's password. |
+| M7-M9: Member password and username writes | Console administrator admission with separate transactional permissions for the login username and password. |
 | O1-O3, M1-M3, A1, B1 (console), E1-E2: management reads | Shared service checks before querying any response contents. Composite Member responses require all listed pairs; navigation and event defaults select only a view permitted by current authority. |
 | P1-P4 and I2: provider management | Shared directory and typed create/update/status checks. The authoritative save check follows upstream verification; private/CLI credential configuration retains installation-only admission. |
 | S1-S3: account views and binding creation | Shared checks with an account principal restricted to the selected Member. Current SSO/source-binding evidence is resolved from storage; commit retains fresh verification, request, client and lifecycle checks. |
@@ -103,6 +103,7 @@ comes from stored relationships, not caller-supplied path strings.
 | `O` | One organization; ordinary properties and status share this target. |
 | `O/loginSlug` | `PUT /api/organizations/{organizationId}/login-slug` compares `expectedSlug` with the current mapping. An empty expected slug selects `create` and requires an administrator belonging to the organization. Renaming requires `update`. The system organization is protected. |
 | `O/members`, `M` | Member collection and individual Member. |
+| `M/loginName` | One Member’s organization-local login username, including a name awaiting its first password. |
 | `M/password` | One Member's local password credential. |
 | `M/email` | One Member's administrator-managed email and provenance; supported actions are `get` and `update`. |
 | `M/bindings`, `M/bindings/{bindingId}` | Explicit Member bindings; no authority over the shared factor or its other bindings. |
@@ -139,7 +140,8 @@ Member. All administrative entries require current identity/session eligibility.
 | Rename Member | `update` on any `M` | `update` on own organization's `M` | No self-service rename interface |
 | Manually block/unblock Member | `status.update` on any `M` | `status.update` on own organization's `M` | No |
 | Read bindings and assignment lists | Any organization | Own organization | No administrative list; only the account flow's necessary source context |
-| Set or reset a Member password or change its username | `create` / `update` on any `M/password`, including the system organization | No | No |
+| Assign or rename a Member login name | Any ordinary Member | Own organization, including self | No |
+| Set or reset a Member password | `create` / `update` on any `M/password`, including the system organization | No | No |
 | Grant/revoke administrator | `create` / `delete` for assignments in any organization | `create` / `delete` for assignments in own ordinary organization | No |
 | List/create/configure providers | Any supported organization: `list`, `create`, `update`, `status.update` on the relevant targets | Same operations within own organization | No |
 | Manage Member email | `get` / `update` on any `M/email` | Same operations within own organization | No |
@@ -186,7 +188,7 @@ and `M`. Source and test references are indexed by row ID below.
 | M6 | Same PATCH with `manualBlocked` | `M` | `status.update` | Platform; own organization admin | Console write; preserve administrator availability. Clearing manual block does not clear external departure. Combined fields require M5 and M6. |
 | M7 | `POST /api/M/password` with `username` | `M/password` | `create` | Platform | Console write; unique username within the organization and one password credential per Member. |
 | M8 | `POST /api/M/password/reset` with an empty JSON object | `M/password` | `update` | Platform | Console write; retain the username and revoke the Member's grants and password-authenticated SSO sessions. |
-| M9 | `PATCH /api/M/password` with `expectedUsername` and `username` | `M/password` | `update` | Platform | Console write; reject a stale or occupied name. Preserve the credential, binding and active sessions. Returns the current username on success. |
+| M9 | `PUT /api/M/login-name` with `expectedUsername` and `username` | `M/loginName` | `create` when expected is empty, otherwise `update` | Platform; own organization admin | First assignment works without a password. Rename checks the expected name and releases it immediately. The existing `PATCH /api/M/password` route supports rename with a nonempty expected username. |
 | M10 | `PUT /api/M/email`; `GET`/`PUT /v1/M/email`; `memberid member email inspect/set` | `M/email` | `get` on read; `update` on write | Console: Platform or own organization admin; private: Manager; CLI: operator | Console write or installation checkpoint; expected revision, address uniqueness within the organization and atomic audit. Self-service is denied. |
 
 Both password operations return the username and generated password in a

@@ -84,6 +84,9 @@ export function describeEvent(event: ManagementEvent) {
     case "password.reset":
       label = "重置密码"
       break
+    case "member.username.create":
+      label = "设置登录用户名"
+      break
     case "password.username.update":
       label = "修改登录用户名"
       break

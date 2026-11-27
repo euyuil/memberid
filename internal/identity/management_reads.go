@@ -104,6 +104,7 @@ type ManagementMemberDetail struct {
 	Member           Member              `json:"member"`
 	Bindings         []ManagementBinding `json:"bindings"`
 	AdministratorIDs []string            `json:"administratorIds"`
+	LoginUsername    string              `json:"loginUsername,omitempty"`
 	PasswordUsername string              `json:"passwordUsername,omitempty"`
 	Email            MemberEmail         `json:"email"`
 }
@@ -117,11 +118,11 @@ func (service *ManagementService) Member(ctx context.Context, principal Principa
 		return ManagementMemberDetail{}, err
 	}
 	var member Member
-	var username string
+	var username, passwordUsername string
 	row := store.pool.QueryRow(ctx, "SELECT "+memberColumns+
-		",COALESCE((SELECT f.subject"+memberPasswordBinding+"),'') FROM members WHERE organization_id=$1 AND id=$2",
+		",COALESCE((SELECT f.subject"+memberLoginBinding+"),''),COALESCE((SELECT f.subject"+memberPasswordBinding+"),'') FROM members WHERE organization_id=$1 AND id=$2",
 		organizationID, memberID)
-	err := scanMember(row, &member, &username)
+	err := scanMember(row, &member, &username, &passwordUsername)
 	if err != nil {
 		return ManagementMemberDetail{}, err
 	}
@@ -137,7 +138,7 @@ func (service *ManagementService) Member(ctx context.Context, principal Principa
 	if err != nil {
 		return ManagementMemberDetail{}, err
 	}
-	return ManagementMemberDetail{Member: member, Bindings: bindings, AdministratorIDs: ids, PasswordUsername: username, Email: email}, nil
+	return ManagementMemberDetail{Member: member, Bindings: bindings, AdministratorIDs: ids, LoginUsername: username, PasswordUsername: passwordUsername, Email: email}, nil
 }
 
 func (service *ManagementService) MemberDirectory(ctx context.Context, principal Principal, after string, limit int, filter MemberDirectoryFilter) (Page[MemberDirectoryEntry], error) {

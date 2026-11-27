@@ -27,6 +27,7 @@ const (
 	organizationSlugResource                 managementResource = organizationResource + "/loginSlug"
 	membersResource                          managementResource = organizationResource + "/members"
 	memberResource                           managementResource = membersResource + "/{memberId}"
+	memberLoginNameResource                  managementResource = memberResource + "/loginName"
 	memberPasswordResource                   managementResource = memberResource + "/password"
 	memberEmailResource                      managementResource = memberResource + "/email"
 	memberGrantsResource                     managementResource = memberResource + "/grants"
@@ -61,6 +62,7 @@ var managementOperations = map[managementResource][]string{
 	organizationSlugResource:                 {actionCreate, actionUpdate},
 	membersResource:                          {actionCreate, actionList},
 	memberResource:                           {actionGet, actionUpdate, actionStatusUpdate},
+	memberLoginNameResource:                  {actionCreate, actionUpdate},
 	memberPasswordResource:                   {actionCreate, actionUpdate},
 	memberEmailResource:                      {actionGet, actionUpdate},
 	memberGrantsResource:                     {actionList},

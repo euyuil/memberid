@@ -183,7 +183,14 @@ func TestConsoleOIDCOrganizationScopeAndRevocation(t *testing.T) {
 	base := "/api/organizations/" + f.member.OrganizationID
 	consoleJSON(t, f, server, "POST", base+"/members/"+f.member.ID+"/password", csrf, `{"username":"example"}`, 403)
 	consoleJSON(t, f, server, "POST", base+"/members/"+f.member.ID+"/password/reset", csrf, `{}`, 403)
-	consoleJSON(t, f, server, "PATCH", base+"/members/"+f.member.ID+"/password", csrf, `{"expectedUsername":"example","username":"another"}`, 403)
+	loginName := base + "/members/" + f.member.ID + "/login-name"
+	consoleJSON(t, f, server, "PUT", loginName, csrf, `{"expectedUsername":"","username":"Example"}`, 200)
+	consoleJSON(t, f, server, "PUT", loginName, csrf, `{"expectedUsername":"example","username":"another"}`, 200)
+	consoleJSON(t, f, server, "PUT", "/api/organizations/"+f.otherMember.OrganizationID+"/members/"+f.otherMember.ID+"/login-name", csrf, `{"expectedUsername":"","username":"another"}`, 403)
+	detail := consoleJSON(t, f, server, "GET", base+"/members/"+f.member.ID, "", "", 200)
+	if detail["loginUsername"] != "another" || detail["passwordUsername"] != nil {
+		t.Fatal("username assignment issued a credential")
+	}
 	consoleJSON(t, f, server, "GET", "/api/organizations/"+f.otherMember.OrganizationID, "", "", 403)
 	consoleJSON(t, f, server, "GET", "/api/organizations/"+f.store.SystemOrganizationID(), "", "", 403)
 	consoleJSON(t, f, server, "GET", "/api/events?organizationId="+f.otherMember.OrganizationID, "", "", 403)

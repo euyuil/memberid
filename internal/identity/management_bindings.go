@@ -23,7 +23,7 @@ func (store *Store) managementBindings(ctx context.Context, organizationID, memb
  LEFT JOIN feishu_applications fa ON f.type='feishu' AND fa.namespace=f.namespace AND fa.organization_id=b.organization_id
  LEFT JOIN dingtalk_applications da ON f.type='dingtalk' AND da.namespace=f.namespace AND da.organization_id=b.organization_id
  LEFT JOIN dingtalk_identities di ON f.type='dingtalk' AND di.member_id=b.member_id AND di.organization_id=b.organization_id AND di.namespace=f.namespace AND di.union_id=f.subject
- WHERE b.organization_id=$1 AND b.member_id=$2 ORDER BY b.factor_type,f.namespace,b.id`, organizationID, memberID)
+ WHERE b.organization_id=$1 AND b.member_id=$2 AND (b.factor_type<>'password' OR EXISTS(SELECT 1 FROM password_credentials c WHERE c.authentication_factor_id=b.authentication_factor_id)) ORDER BY b.factor_type,f.namespace,b.id`, organizationID, memberID)
 	if err != nil {
 		return nil, err
 	}
