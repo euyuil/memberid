@@ -250,7 +250,16 @@ func (service *Service) selectLoginOrganization(ctx context.Context, request *au
 }
 
 func (service *Service) selectedLoginOrganization(w http.ResponseWriter, r *http.Request, request *authorizationRequest, policy loginPolicy) string {
-	if err := service.selectLoginOrganization(r.Context(), request, policy, r.PostForm.Get("organization")); err != nil {
+	value := r.PostForm.Get("organization")
+	if r.PostForm.Get("action") == "password" {
+		name, suffix, qualified := splitPasswordLoginName(r.PostForm.Get("username"))
+		if !qualified || name == "" || suffix == "" {
+			service.renderLogin(w, r, request, policy, "Enter username@organization or select your organization below.")
+			return ""
+		}
+		value = suffix
+	}
+	if err := service.selectLoginOrganization(r.Context(), request, policy, value); err != nil {
 		if errors.Is(err, identity.ErrInvalid) || errors.Is(err, identity.ErrIneligible) || errors.Is(err, identity.ErrNotFound) {
 			service.renderLogin(w, r, request, policy, "Enter a valid organization login name or ID.")
 		} else {
@@ -367,7 +376,7 @@ func (service *Service) loginTransaction(w http.ResponseWriter, r *http.Request,
 				return
 			}
 		}
-		if registered.registration.SubjectKind == "member" && loginOrganizationID(request, registered) == "" && action != "choose-organization" && action != "cancel" {
+		if registered.registration.SubjectKind == "member" && loginOrganizationID(request, registered) == "" && action != "choose-organization" && action != "cancel" && action != "password" {
 			http.Error(w, "Select an organization before continuing", http.StatusBadRequest)
 			return
 		}

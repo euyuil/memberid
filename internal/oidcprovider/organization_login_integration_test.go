@@ -27,10 +27,14 @@ func TestOrganizationFirstLoginBindsMethodsAndMembers(t *testing.T) {
 	f.status(r, http.StatusFound)
 	r = f.call(f.browser, "GET", r.header.Get("Location"), nil, nil)
 	f.status(r, http.StatusOK)
-	if !strings.Contains(r.body, `value="choose-organization"`) || strings.Contains(r.body, `id="username"`) || strings.Contains(r.body, `id="phone"`) {
-		t.Fatal("organization selection did not precede authentication methods")
+	if !strings.Contains(r.body, `value="choose-organization"`) || !strings.Contains(r.body, `id="username"`) || strings.Contains(r.body, `id="phone"`) {
+		t.Fatal("common entry did not offer password sign-in and organization selection")
 	}
-	f.status(f.submit(r.body, "password", url.Values{"username": {"example"}, "password": {password}}), http.StatusBadRequest)
+	short := f.submit(r.body, "password", url.Values{"username": {"example"}, "password": {password}})
+	f.status(short, http.StatusOK)
+	if !strings.Contains(short.body, "select your organization below") {
+		t.Fatal("short username did not require an explicit organization")
+	}
 
 	selected := f.submit(r.body, "choose-organization", url.Values{"organization": {f.member.OrganizationID}})
 	f.status(selected, http.StatusSeeOther)
@@ -64,6 +68,77 @@ func TestOrganizationFirstLoginBindsMethodsAndMembers(t *testing.T) {
 	}
 	code := f.complete(r, f.member.ID)
 	f.status(f.exchange("example-web", code, verifier), http.StatusOK)
+}
+
+func TestCommonQualifiedPasswordLogin(t *testing.T) {
+	f := newFixture(t)
+	f.updateClient("example-web", func(c *config.Client) { c.OrganizationID = "" })
+	ctx, op := t.Context(), identity.OperatorPrincipal()
+	for _, member := range []identity.Member{f.member, f.otherMember} {
+		password, err := f.store.SetMemberPassword(ctx, op, member.OrganizationID, member.ID, "casey")
+		if err != nil {
+			t.Fatal(err)
+		}
+		suffix := member.OrganizationID
+		if member.ID == f.member.ID {
+			suffix = "north"
+			if err := f.store.AssignOrganizationSlug(ctx, op, member.OrganizationID, suffix); err != nil {
+				t.Fatal(err)
+			}
+		}
+		fields := url.Values{"username": {"Casey@" + suffix}, "password": {password}}
+		f.browser = browserClient()
+		common := f.openDirectLogin("/login")
+		result := f.submitDirect(common, "/login", "password", fields)
+		f.status(result, http.StatusSeeOther)
+		if result.header.Get("Location") != "/account?memberId="+member.ID {
+			t.Fatal("direct sign-in did not open the expected Member account")
+		}
+
+		f.browser = browserClient()
+		start, verifier := f.authorization("example-web", "openid", nil)
+		common = f.call(f.browser, "GET", start.header.Get("Location"), nil, nil)
+		consent := f.submit(common.body, "password", fields)
+		f.status(consent, http.StatusOK)
+		if !strings.Contains(consent.body, `action="/login/`+member.OrganizationID+`"`) {
+			t.Fatal("consent was not bound to the selected organization")
+		}
+		tokens := f.exchange("example-web", f.complete(consent, member.ID), verifier)
+		f.status(tokens, http.StatusOK)
+		if f.signedClaims(jsonObject(t, tokens)["id_token"].(string))["sub"] != member.ID {
+			t.Fatal("application sign-in returned the wrong subject")
+		}
+	}
+}
+
+func TestCommonAndScopedPasswordAttemptLimit(t *testing.T) {
+	f := newFixture(t)
+	member := f.member
+	ctx, op := t.Context(), identity.OperatorPrincipal()
+	password, err := f.store.SetMemberPassword(ctx, op, member.OrganizationID, member.ID, "casey")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.store.AssignOrganizationSlug(ctx, op, member.OrganizationID, "north"); err != nil {
+		t.Fatal(err)
+	}
+	path := "/login/" + member.OrganizationID
+	common := f.openDirectLogin("/login")
+	fields := url.Values{"username": {"CASEY@NORTH"}, "password": {"incorrect"}}
+	page := f.submitDirect(common, "/login", "password", fields)
+	fields.Set("username", "casey@"+member.OrganizationID)
+	for i := 1; i < 10; i++ {
+		if !strings.Contains(page.body, `action="`+path+`"`) || !strings.Contains(page.body, "password is incorrect") {
+			t.Fatalf("attempt %d did not preserve the scoped retry", i)
+		}
+		page = f.submitDirect(page, path, "password", fields)
+	}
+	fields.Set("username", "casey")
+	fields.Set("password", password)
+	page = f.submitDirect(page, path, "password", fields)
+	if !strings.Contains(page.body, "Too many sign-in attempts") {
+		t.Fatal("common and scoped entries did not share the password attempt limit")
+	}
 }
 
 func TestScopedQualifiedPasswordUsername(t *testing.T) {

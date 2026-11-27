@@ -112,18 +112,11 @@ a { color: var(--primary); }
 {{if .ConsentRequired}}<small>Requested identity information: {{.Scopes}}</small>{{end}}
 {{if and (not .OrganizationRequired) .ProviderOrganizationName}}<small class="organization-name">{{.ProviderOrganizationName}}</small>{{end}}
 <div class="feedback" role="status" aria-live="polite">{{.Message}}</div>
-{{if .OrganizationRequired}}
-<form method="post" action="{{.Action}}">
-<input type="hidden" name="request" value="{{.Request.GetID}}"><input type="hidden" name="csrf" value="{{.Request.CSRF}}">
-<label for="organization">Organization login name or ID</label><input id="organization" name="organization" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="63" required autofocus>
-<button name="action" value="choose-organization">Continue</button>
-</form>
-{{else}}
 {{if and .PasswordEnabled (not .Verified) (not .Pending)}}
-<form method="post" action="{{.Action}}" {{if or .PhoneEnabled .ProviderEnabled}}class="section"{{end}}>
+<form method="post" action="{{.Action}}" {{if and (not .OrganizationRequired) (or .PhoneEnabled .ProviderEnabled)}}class="section"{{end}}>
 <input type="hidden" name="request" value="{{.Request.GetID}}"><input type="hidden" name="csrf" value="{{.Request.CSRF}}">
-<label for="username">Username</label><input id="username" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" data-suffix="{{.PasswordSuffix}}" pattern="[A-Za-z0-9][A-Za-z0-9._\-]{0,63}(@[A-Za-z0-9_\-]{1,63})?" maxlength="128" value="{{.PasswordUsername}}" required>
-<label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" maxlength="1024" required {{if .PasswordUsername}}autofocus{{end}}>
+<label for="username">Username</label><input id="username" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" {{if .OrganizationRequired}}placeholder="username@organization" autofocus{{end}} data-suffix="{{.PasswordSuffix}}" pattern="[A-Za-z0-9][A-Za-z0-9._\-]{0,63}(@[A-Za-z0-9_\-]{1,63})?" maxlength="128" value="{{.PasswordUsername}}" required>
+<label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" maxlength="1024" required {{if and .PasswordUsername (not .OrganizationRequired)}}autofocus{{end}}>
 <button name="action" value="password">Sign in with password</button>
 </form>
 <script nonce="{{.Nonce}}">
@@ -132,7 +125,8 @@ function completeUsername() {
   if (!username.value || username.validity.patternMismatch) return;
   const [name, enteredSuffix] = username.value.split("@");
   const suffix = enteredSuffix ?? username.dataset.suffix;
-  username.value = name.toLowerCase() + "@" + (suffix.includes("_") ? suffix : suffix.toLowerCase());
+  username.value = name.toLowerCase();
+  if (suffix) username.value += "@" + (suffix.includes("_") ? suffix : suffix.toLowerCase());
 }
 username.addEventListener("blur", completeUsername);
 // Password managers can capture the fields before the submit event.
@@ -142,6 +136,13 @@ username.form.addEventListener("keydown", event => {
 username.form.addEventListener("submit", completeUsername);
 </script>
 {{end}}
+{{if .OrganizationRequired}}
+<form method="post" action="{{.Action}}" {{if .PasswordEnabled}}class="section"{{end}}>
+<input type="hidden" name="request" value="{{.Request.GetID}}"><input type="hidden" name="csrf" value="{{.Request.CSRF}}">
+<label for="organization">Organization login name or ID</label><input id="organization" name="organization" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="63" required {{if not .PasswordEnabled}}autofocus{{end}}>
+<button name="action" value="choose-organization">Continue with organization</button>
+</form>
+{{else}}
 {{if and .PhoneEnabled (not .Verified) (or (not .Pending) .PhonePending)}}
 <form method="post" action="{{.Action}}">
 <input type="hidden" name="request" value="{{.Request.GetID}}"><input type="hidden" name="csrf" value="{{.Request.CSRF}}">

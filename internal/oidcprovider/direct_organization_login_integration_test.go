@@ -125,7 +125,7 @@ func TestDirectOrganizationPasswordLoginOpensMemberAccount(t *testing.T) {
 	for previous, value := range []string{f.member.OrganizationID, strings.ToUpper(loginName)} {
 		f.browser = browserClient()
 		page := f.openDirectLogin("/login")
-		if !strings.Contains(page.body, `value="choose-organization"`) || strings.Contains(page.body, `id="username"`) {
+		if !strings.Contains(page.body, `value="choose-organization"`) || !strings.Contains(page.body, `id="username"`) {
 			t.Fatal("direct login did not start with organization selection")
 		}
 		path := "/login/" + f.member.OrganizationID

@@ -86,7 +86,7 @@ func (service *Service) directLogin(w http.ResponseWriter, r *http.Request, orga
 	}
 	action := r.PostForm.Get("action")
 	if organizationID == "" {
-		if action != "choose-organization" {
+		if action != "choose-organization" && action != "password" {
 			http.Error(w, "Select an organization before continuing", http.StatusBadRequest)
 			return
 		}
@@ -94,8 +94,10 @@ func (service *Service) directLogin(w http.ResponseWriter, r *http.Request, orga
 		if selected == "" {
 			return
 		}
-		http.Redirect(w, r, "/login/"+selected, http.StatusSeeOther)
-		return
+		if action == "choose-organization" {
+			http.Redirect(w, r, "/login/"+selected, http.StatusSeeOther)
+			return
+		}
 	}
 	switch action {
 	case "continue":

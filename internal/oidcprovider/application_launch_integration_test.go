@@ -16,6 +16,10 @@ func TestOIDCOrganizationLaunch(t *testing.T) {
 	f := newFixture(t)
 	ctx, operator := t.Context(), identity.OperatorPrincipal()
 	a, b := f.member, f.otherMember
+	ownerPassword, err := f.store.SetMemberPassword(ctx, operator, a.OrganizationID, a.ID, "casey")
+	if err != nil {
+		t.Fatal(err)
+	}
 	app, err := f.store.CreateOIDCClient(ctx, operator, identity.OIDCClientRegistration{
 		OwnerOrganizationID: a.OrganizationID, DisplayName: "Shared workspace",
 		Client: identity.OIDCClient{SecretSHA256: config.SecretHash(f.secret), SubjectKind: "member", OrganizationID: a.OrganizationID, RedirectURIs: []string{callback}, AllowOrganizationScope: true},
@@ -57,6 +61,11 @@ func TestOIDCOrganizationLaunch(t *testing.T) {
 	if declined := f.selectOrganization(common, loginName); !strings.Contains(declined.body, "Enter a valid organization login name or ID.") {
 		t.Fatal("unsubscribed organization was selected by name")
 	}
+	qualified := f.submit(common.body, "password", url.Values{"username": {"casey@" + loginName}, "password": {"incorrect"}})
+	f.status(qualified, 200)
+	if !strings.Contains(qualified.body, "Enter a valid organization login name or ID.") {
+		t.Fatal("qualified password login admitted an unsubscribed organization")
+	}
 	enroll(true)
 	// The interactive selector accepts login names. Protocol hints require a permanent ID.
 	denied(app.ClientID, url.Values{"memberid_organization": {loginName}})
@@ -79,6 +88,12 @@ func TestOIDCOrganizationLaunch(t *testing.T) {
 		}
 		if !scoped {
 			page = f.selectOrganization(page, selection)
+		} else if strings.Contains(page.body, `id="phone"`) {
+			foreign := f.submit(page.body, "password", url.Values{"username": {"casey@" + a.OrganizationID}, "password": {ownerPassword}})
+			f.status(foreign, 200)
+			if !strings.Contains(foreign.body, "does not match this organization") {
+				t.Fatal("qualified username overrode the application launch organization")
+			}
 		}
 		if strings.Contains(page.body, `id="phone"`) {
 			page = f.verifyPhone(page)
@@ -135,6 +150,23 @@ func TestSAMLTenantDestinationAndMemberBinding(t *testing.T) {
 	}
 	f.status(f.call(f.browser, "GET", strings.Replace(scoped(), path, "/saml/sso", 1), nil, nil), 400)
 	f.status(f.call(f.browser, "GET", strings.Replace(samlURL(t, f, sp, nil), "/saml/sso", path, 1), nil, nil), 400)
+	password, err := f.store.SetMemberPassword(ctx, operator, b.OrganizationID, b.ID, "casey")
+	if err != nil {
+		t.Fatal(err)
+	}
+	commonStart := f.call(f.browser, "GET", samlURL(t, f, sp, nil), nil, nil)
+	f.status(commonStart, 303)
+	commonPage := f.call(f.browser, "GET", commonStart.header.Get("Location"), nil, nil)
+	fields := url.Values{"username": {"casey@" + b.OrganizationID}, "password": {"incorrect"}}
+	retry := f.submit(commonPage.body, "password", fields)
+	f.status(retry, 200)
+	if !strings.Contains(retry.body, `action="/login/`+b.OrganizationID+`"`) {
+		t.Fatal("SAML password retry lost its organization")
+	}
+	fields.Set("password", password)
+	consent := f.submit(retry.body, "password", fields)
+	verifySAMLResponse(t, f, sp, f.submit(consent.body, "continue", url.Values{"member": {b.ID}, "consent": {"yes"}}))
+	f.browser = browserClient()
 	start := f.call(f.browser, "GET", scoped(), nil, nil)
 	f.status(start, 303)
 	page := f.verifyPhone(f.call(f.browser, "GET", start.header.Get("Location"), nil, nil))
