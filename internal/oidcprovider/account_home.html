@@ -4,7 +4,16 @@
 <title>Account · MemberID</title>
 <style nonce="{{.Nonce}}">
 :root{font-family:system-ui,sans-serif;color:#172a34;background:#f3f6f7;color-scheme:light}*{box-sizing:border-box}body{margin:0;padding:2rem 1rem}main{max-width:30rem;margin:auto;background:white;border:1px solid #d8e2e6;border-radius:1rem;padding:1.5rem}h1{font-size:1.6rem;margin-top:0}p{overflow-wrap:anywhere}nav{display:grid;gap:1rem;margin:1.5rem 0}a{color:#17566b;border:1px solid #9aadb7;border-radius:.4rem;padding:.7rem}small{color:#4c626d}
+form{display:grid;gap:.6rem}input,button{font:inherit;padding:.55rem}button{justify-self:start}#name-feedback{min-height:2.5rem;margin:.25rem 0;color:#85351b}
 </style></head>
 <body><main><h1>Sign-in methods</h1><p>{{.Member.DisplayName}}</p><p><small>{{.Member.OrganizationID}} / {{.Member.ID}}</small></p>
+<section aria-labelledby="login-name"><h2 id="login-name">Login username</h2>
+{{if .Username}}<p>{{.Username}}</p>{{else}}
+<form method="post" action="/account">
+<input type="hidden" name="memberId" value="{{.Member.ID}}"><input type="hidden" name="csrf" value="{{.CSRF}}">
+<label for="username">Choose a username</label><input id="username" name="username" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="64" pattern="[A-Za-z0-9][A-Za-z0-9._\-]{0,63}" required aria-describedby="name-feedback">
+<button type="submit">Set login username</button>
+</form>{{end}}
+<p id="name-feedback" role="status">{{.Message}}</p></section>
 <nav aria-label="Link a sign-in method">{{range .Links}}<a href="{{.URL}}">{{.Label}}</a>{{else}}<p>No linking methods are available for this organization.</p>{{end}}</nav>
 </main></body></html>

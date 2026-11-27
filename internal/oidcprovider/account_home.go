@@ -1,7 +1,12 @@
 package oidcprovider
 
 import (
+	"crypto/hmac"
+	"crypto/sha256"
 	_ "embed"
+	"encoding/base64"
+	"errors"
+	"fmt"
 	"html/template"
 	"net/http"
 	"net/url"
@@ -15,12 +20,21 @@ var accountHomeHTML string
 var accountHomePage = template.Must(template.New("account-home").Parse(accountHomeHTML))
 
 func (service *Service) accountHome(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		w.Header().Set("Allow", "GET")
+	fields := []string{"memberId"}
+	switch r.Method {
+	case http.MethodGet:
+	case http.MethodPost:
+		fields = append(fields, "csrf", "username")
+		if r.URL.RawQuery != "" {
+			http.Error(w, "Invalid account request", 400)
+			return
+		}
+	default:
+		w.Header().Set("Allow", "GET, POST")
 		http.Error(w, "Method not allowed", 405)
 		return
 	}
-	if !accountFields(r, "memberId") || len(r.Form["memberId"]) != 1 || !identity.ValidID(r.Form.Get("memberId"), identity.MemberKind) {
+	if !accountFields(r, fields...) || !identity.ValidID(r.Form.Get("memberId"), identity.MemberKind) {
 		http.Error(w, "Invalid account request", 400)
 		return
 	}
@@ -29,7 +43,7 @@ func (service *Service) accountHome(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Sign in through a registered application, then reopen this account page.", 401)
 		return
 	}
-	member, _, err := service.accountMember(r, session, r.Form.Get("memberId"))
+	member, binding, err := service.accountMember(r, session, r.Form.Get("memberId"))
 	if err != nil {
 		http.Error(w, "This Member identity is not available to the current session.", 403)
 		return
@@ -38,6 +52,45 @@ func (service *Service) accountHome(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Fresh authentication is required. Reopen this page from the management console after signing in again.", 401)
 		return
 	}
+	principal := identity.AccountPrincipal(session.id, member.ID, session.verified.Factor.ID, binding)
+	// Bind the form to this browser, source session and selected organization identity.
+	mac := hmac.New(sha256.New, []byte(service.configuration.Secrets.ProtocolKey))
+	fmt.Fprintf(mac, "memberid/account-login-name\x00%s\x00%s\x00%s\x00%s\x00%s", service.configuration.Issuer, accountBrowser(r), session.id, member.ID, binding)
+	csrf := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+	status, message := http.StatusOK, ""
+	if r.Method == http.MethodPost {
+		if !validLoginSubmission(r, service.configuration.Issuer, csrf) {
+			http.Error(w, "Invalid account submission", 403)
+			return
+		}
+		err := service.store.SetFirstAccountLoginName(r.Context(), principal, member.OrganizationID, r.PostForm.Get("username"))
+		switch {
+		case err == nil:
+			http.Redirect(w, r, "/account?"+url.Values{"memberId": {member.ID}}.Encode(), http.StatusSeeOther)
+			return
+		case errors.Is(err, identity.ErrPasswordUsernameTaken):
+			status, message = 409, "This username is already in use in your organization. Choose another."
+		case errors.Is(err, identity.ErrConflict):
+			status, message = 409, "Your login username is already set. Contact your organization administrator to change it."
+		case errors.Is(err, identity.ErrInvalid):
+			status, message = 400, "Use 1–64 letters, digits, dots, underscores or hyphens, starting with a letter or digit."
+		case errors.Is(err, identity.ErrForbidden), errors.Is(err, identity.ErrIneligible):
+			http.Error(w, "This account change is unavailable. Sign in again or contact your administrator.", 403)
+			return
+		default:
+			http.Error(w, "Account management temporarily unavailable", 503)
+			return
+		}
+	}
+	username, err := service.store.AccountLoginName(r.Context(), principal, member.OrganizationID)
+	if err != nil {
+		http.Error(w, "Account management temporarily unavailable", 503)
+		return
+	}
+	service.renderAccountHome(w, r, member, username, csrf, message, status)
+}
+
+func (service *Service) renderAccountHome(w http.ResponseWriter, r *http.Request, member identity.Member, username, csrf, message string, status int) {
 	providers, err := service.store.Providers(r.Context(), member.OrganizationID)
 	if err != nil {
 		http.Error(w, "Account management temporarily unavailable", 503)
@@ -83,10 +136,10 @@ func (service *Service) accountHome(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	nonce := config.RandomSecret()
-	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'nonce-"+nonce+"'; base-uri 'none'; frame-ancestors 'none'")
-	writeHTMLPage(w, accountHomePage, struct {
-		Member identity.Member
-		Links  []link
-		Nonce  string
-	}{member, links, nonce})
+	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'nonce-"+nonce+"'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'")
+	writeHTMLPageStatus(w, accountHomePage, struct {
+		Member                         identity.Member
+		Links                          []link
+		Nonce, Username, CSRF, Message string
+	}{member, links, nonce, username, csrf, message}, status)
 }

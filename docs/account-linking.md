@@ -2,6 +2,12 @@
 
 MemberID hosts self-service pages for linking a freshly verified phone, DingTalk, or Feishu identity to an existing Member. It uses MemberID's own browser session and current binding eligibility. It needs no application-specific roles, management API credential, or special identity-evidence scope. This is account functionality, not an alternative login, token, or refresh protocol.
 
+## Choose a login username
+
+At `/account?memberId=<member-id>` a Member authenticated within the last five minutes can set their own first local username. The name is unique within the selected organization and is displayed in lowercase. The form is bound to the selected Member, source binding, browser and session. Concurrent first assignments share the same reservation as administrator provisioning.
+
+Choosing a name does not issue a password. A platform administrator or installation operator can [issue the first password](administration.md#organization-scoped-passwords) for that name. Once a username exists, the account page displays it. Ask an administrator of the organization to rename it. Administrators also use the management console for later changes to their own names.
+
 ## Open the page
 
 For phone linking, enable the optional [phone adapter](phone-authentication.md). It currently supports mainland China mobile numbers. For DingTalk linking, enable the DingTalk login adapter, configure the organization's application, and register `<issuer>/account/dingtalk/callback` as an exact DingTalk callback in addition to the ordinary login callback. The application needs the same corporation and directory permissions as [DingTalk login](dingtalk.md). For Feishu, enable its adapter, configure an enabled application for the organization, and register `<issuer>/account/feishu/callback` as an additional exact callback in the Feishu application security settings. It uses the same tenant and UserInfo permissions as [Feishu login](feishu.md). Feishu linking is limited to ordinary organizations.

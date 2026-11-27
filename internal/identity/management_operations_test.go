@@ -34,7 +34,7 @@ func TestManagementOperationMatrix(t *testing.T) {
 			{organizationSlugResource, []string{targetOrganization}, base + "/loginSlug", []string{"create", "update"}, []string{"create"}, nil},
 			{membersResource, []string{targetOrganization}, base + "/members", []string{"create", "list"}, []string{"create", "list"}, nil},
 			{memberResource, []string{targetOrganization, memberID}, base + "/members/" + memberID, []string{"get", "update", "status.update"}, []string{"get", "update", "status.update"}, []string{"get"}},
-			{memberLoginNameResource, []string{targetOrganization, memberID}, base + "/members/" + memberID + "/loginName", []string{"create", "update"}, []string{"create", "update"}, nil},
+			{memberLoginNameResource, []string{targetOrganization, memberID}, base + "/members/" + memberID + "/loginName", []string{"create", "update"}, []string{"create", "update"}, []string{"create"}},
 			{memberPasswordResource, []string{targetOrganization, memberID}, base + "/members/" + memberID + "/password", []string{"create", "update"}, nil, nil},
 			{memberEmailResource, []string{targetOrganization, memberID}, base + "/members/" + memberID + "/email", []string{"get", "update"}, []string{"get", "update"}, nil},
 			{memberGrantsResource, []string{targetOrganization, memberID}, base + "/members/" + memberID + "/grants", []string{"list"}, []string{"list"}, nil},

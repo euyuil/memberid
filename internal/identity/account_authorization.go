@@ -3,14 +3,19 @@ package identity
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/zhizhun-tech/memberid/internal/authorization"
 )
 
+// AccountFreshness is the maximum age of the source authentication for account changes.
+const AccountFreshness = 5 * time.Minute
+
 func accountPermissions(organizationID, memberID string) []authorization.Permission {
 	return []authorization.Permission{
 		permission(memberResource.pattern(organizationID, memberID), actionGet),
+		permission(memberLoginNameResource.pattern(organizationID, memberID), actionCreate),
 		permission(bindingsResource.pattern(organizationID, memberID), actionCreate),
 	}
 }
@@ -39,4 +44,49 @@ func (store *Store) AuthorizeAccountView(ctx context.Context, principal Principa
 		return ErrForbidden
 	}
 	return authorizeAll(ctx, store.pool, principal, memberResource.require(actionGet, organizationID, principal.memberID))
+}
+
+// AccountLoginName reads the name of the Member selected by the account session.
+func (store *Store) AccountLoginName(ctx context.Context, principal Principal, organizationID string) (string, error) {
+	if err := store.AuthorizeAccountView(ctx, principal, organizationID); err != nil {
+		return "", err
+	}
+	var username string
+	err := store.pool.QueryRow(ctx, "SELECT COALESCE((SELECT f.subject"+memberLoginBinding+"),'')", organizationID, principal.memberID).Scan(&username)
+	return username, err
+}
+
+// SetFirstAccountLoginName checks live source evidence under the same lock as administrative assignments.
+func (store *Store) SetFirstAccountLoginName(ctx context.Context, principal Principal, organizationID, username string) error {
+	if principal.kind != accountPrincipal {
+		return ErrForbidden
+	}
+	username = CanonicalLoginName(username)
+	if !passwordUsername.MatchString(username) {
+		return ErrInvalid
+	}
+	return pgx.BeginFunc(ctx, store.pool, func(tx pgx.Tx) error {
+		if err := managementLock(ctx, tx); err != nil {
+			return err
+		}
+		var authenticatedAt time.Time
+		err := tx.QueryRow(ctx, `SELECT (verification->>'authenticatedAt')::timestamptz FROM authentication_sessions
+   WHERE id=$1 FOR SHARE`, principal.sessionID).Scan(&authenticatedAt)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrForbidden
+		}
+		if err != nil {
+			return err
+		}
+		if now := time.Now(); authenticatedAt.After(now) || !authenticatedAt.Add(AccountFreshness).After(now) {
+			return ErrIneligible
+		}
+		if err := authorizeAll(ctx, tx, principal, memberLoginNameResource.require(actionCreate, organizationID, principal.memberID)); err != nil {
+			return err
+		}
+		if principal.memberID == store.rootMemberID || organizationID == store.systemOrganizationID && username == RootUsername {
+			return ErrForbidden
+		}
+		return assignMemberLoginName(ctx, tx, principal, organizationID, principal.memberID, username)
+	})
 }

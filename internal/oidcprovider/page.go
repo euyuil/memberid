@@ -18,12 +18,17 @@ var pageFiles embed.FS
 var loginPage = template.Must(template.ParseFS(pageFiles, "login.html"))
 
 func writeHTMLPage(w http.ResponseWriter, page *template.Template, data any) {
+	writeHTMLPageStatus(w, page, data, http.StatusOK)
+}
+
+func writeHTMLPageStatus(w http.ResponseWriter, page *template.Template, data any, status int) {
 	var body bytes.Buffer
 	if err := page.Execute(&body, data); err != nil {
 		http.Error(w, "Unable to display this page.", http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(status)
 	_, _ = w.Write(body.Bytes())
 }
 

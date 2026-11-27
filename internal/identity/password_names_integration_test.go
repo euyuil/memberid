@@ -113,3 +113,40 @@ func TestAdminMemberLoginNameLifecycle(t *testing.T) {
 		}
 	}
 }
+
+func TestAccountAndAdministratorFirstNameRace(t *testing.T) {
+	s := testStore(t)
+	ctx := t.Context()
+	org, _ := organizationAndMember(t, s)
+	member, factor := administratorMember(t, s, org.ID, 7)
+	actor := administratorActor(t, s, member, factor)
+	bindings, err := s.Bindings(ctx, org.ID, member.ID)
+	if err != nil || len(bindings) != 1 {
+		t.Fatal(err)
+	}
+	_, err = s.pool.Exec(ctx, `UPDATE authentication_sessions SET verification=jsonb_build_object(
+  'factor',jsonb_build_object('id',$2::text),'authenticatedAt',clock_timestamp()) WHERE id=$1`, member.ID, factor.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	account := AccountPrincipal(member.ID, member.ID, factor.ID, bindings[0].ID)
+	service := NewManagementService(s, nil, nil, 0)
+	results := make(chan error, 2)
+	go func() { results <- s.SetFirstAccountLoginName(ctx, account, org.ID, "self") }()
+	go func() {
+		results <- service.ChangeMemberLoginName(ctx, actor.Principal(), org.ID, member.ID, "", "administrative")
+	}()
+	a, b := <-results, <-results
+	if !(a == nil && errors.Is(b, ErrConflict) || b == nil && errors.Is(a, ErrConflict)) {
+		t.Fatal("self and administrator first assignment", a, b)
+	}
+	if err := s.SetFirstAccountLoginName(ctx, account, org.ID, "again"); !errors.Is(err, ErrConflict) {
+		t.Fatal("existing name replaced", err)
+	}
+	if _, err = s.pool.Exec(ctx, `UPDATE authentication_sessions SET verification=jsonb_set(verification,'{authenticatedAt}',to_jsonb(clock_timestamp()-interval '6 minutes')) WHERE id=$1`, member.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetFirstAccountLoginName(ctx, account, org.ID, "again"); !errors.Is(err, ErrIneligible) {
+		t.Fatal("stale authentication at transaction checkpoint", err)
+	}
+}

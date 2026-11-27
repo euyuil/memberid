@@ -20,7 +20,7 @@ import (
 	"golang.org/x/oauth2"
 )
 
-const accountLifetime = 5 * time.Minute
+const accountLifetime = identity.AccountFreshness
 const accountPath = "/account/link/dingtalk"
 const feishuAccountPath = "/account/link/feishu"
 const feishuAccountCallbackPath = "/account/feishu/callback"
