@@ -20,9 +20,11 @@ type GeneratedPassword = { username: string; password: string }
 
 export function MemberPassword({
   configured,
+  assignedUsername,
   generate,
   onComplete,
 }: {
+  assignedUsername?: string
   configured: boolean
   generate: (username?: string) => Promise<GeneratedPassword>
   onComplete: () => void
@@ -53,14 +55,19 @@ export function MemberPassword({
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (pending) return
-    if (!configured && !passwordUsernamePattern.test(username)) {
+    if (
+      !configured &&
+      !passwordUsernamePattern.test(assignedUsername ?? username)
+    ) {
       setError(passwordUsernameError)
       return
     }
     setError("")
     setPending(true)
     try {
-      setResult(await generate(configured ? undefined : username))
+      setResult(
+        await generate(configured ? undefined : (assignedUsername ?? username))
+      )
     } catch (error) {
       setError((error as Error).message)
     } finally {
@@ -155,7 +162,8 @@ export function MemberPassword({
                     autoComplete="off"
                     autoCapitalize="none"
                     spellCheck={false}
-                    value={username}
+                    value={assignedUsername ?? username}
+                    readOnly={!!assignedUsername}
                     disabled={pending}
                     aria-invalid={!!error}
                     onChange={(event) => setUsername(event.target.value)}

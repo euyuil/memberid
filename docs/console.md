@@ -33,7 +33,8 @@ The [Member role definitions](roles.md) and [management scopes and actions](mana
 | List/create/rename/block/unblock Members | Any organization | Own organization |
 | Grant/revoke administrator assignment | Any organization | Own organization |
 | Read bindings and management events | Any organization | Own organization |
-| Set or reset a Member password or change the password username | Any organization, including the system organization (the root username is permanent) | No |
+| Assign or rename a Member login username | Any organization except the protected root Member | Own organization, including self |
+| Issue or reset a Member password | Any organization, including the system organization | No |
 | List, configure and disable identity providers | Any organization | Own organization |
 | Create, inspect, update, disable and retire SAML applications | Any organization | Own organization |
 | List OIDC applications | All or selected owner | Own organization |

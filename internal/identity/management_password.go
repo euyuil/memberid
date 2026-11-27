@@ -3,16 +3,19 @@ package identity
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/jackc/pgx/v5"
 )
 
-var ErrPasswordUsernameTaken = errors.New("password username already in use")
+var ErrPasswordUsernameTaken = fmt.Errorf("%w: password username already in use", ErrConflict)
 
-const memberPasswordBinding = ` FROM member_auth_factor_bindings b
+const memberLoginBinding = ` FROM member_auth_factor_bindings b
 	JOIN authentication_factors f ON f.id=b.authentication_factor_id
-	JOIN password_credentials c ON c.authentication_factor_id=f.id
+	LEFT JOIN password_credentials c ON c.authentication_factor_id=f.id
 	WHERE b.organization_id=$1 AND b.member_id=$2 AND b.factor_type='password' AND f.namespace=$1`
+
+const memberPasswordBinding = memberLoginBinding + " AND c.authentication_factor_id IS NOT NULL"
 
 type GeneratedMemberPassword struct {
 	Username string `json:"username"`
@@ -20,8 +23,8 @@ type GeneratedMemberPassword struct {
 }
 
 // GenerateMemberPassword issues a credential under the current console actor.
-// A username creates a new binding. Reset resolves the existing username from
-// the target Member and rotates its credential without changing eligibility.
+// First issuance uses the Member's assigned name or creates its binding.
+// Reset resolves and rotates the existing credential.
 func (service *ManagementService) GenerateMemberPassword(ctx context.Context, principal Principal, organizationID, memberID string, username *string) (GeneratedMemberPassword, error) {
 	if principal.kind != memberPrincipal {
 		return GeneratedMemberPassword{}, ErrForbidden
@@ -78,47 +81,75 @@ func (service *ManagementService) GenerateMemberPassword(ctx context.Context, pr
 	return result, nil
 }
 
-// RenameMemberPassword updates the login name while keeping the credential,
-// binding, and Member identity. expectedUsername protects stale forms.
-func (service *ManagementService) RenameMemberPassword(ctx context.Context, principal Principal, organizationID, memberID, expectedUsername, username string) error {
+// ChangeMemberLoginName assigns a local username independently of password issuance.
+func (service *ManagementService) ChangeMemberLoginName(ctx context.Context, principal Principal, organizationID, memberID, expected, username string) error {
 	if principal.kind != memberPrincipal {
 		return ErrForbidden
 	}
-	expectedUsername = CanonicalLoginName(expectedUsername)
-	username = CanonicalLoginName(username)
-	if !ValidID(organizationID, OrganizationKind) || !ValidID(memberID, MemberKind) ||
-		!passwordUsername.MatchString(expectedUsername) || !passwordUsername.MatchString(username) {
+	expected, username = CanonicalLoginName(expected), CanonicalLoginName(username)
+	if !ValidID(organizationID, OrganizationKind) || !ValidID(memberID, MemberKind) || !passwordUsername.MatchString(username) || expected != "" && !passwordUsername.MatchString(expected) {
 		return ErrInvalid
+	}
+	action := actionCreate
+	if expected != "" {
+		action = actionUpdate
 	}
 	return pgx.BeginFunc(ctx, service.store.pool, func(tx pgx.Tx) error {
 		if err := managementLock(ctx, tx); err != nil {
 			return err
 		}
-		if err := authorizeAll(ctx, tx, principal, memberPasswordResource.require(actionUpdate, organizationID, memberID)); err != nil {
+		if err := authorizeAll(ctx, tx, principal, memberLoginNameResource.require(action, organizationID, memberID)); err != nil {
 			return err
 		}
-		var factorID, currentUsername string
-		// Serialize the name change with final password verification.
-		err := tx.QueryRow(ctx, "SELECT f.id,f.subject"+memberPasswordBinding+" FOR UPDATE OF c", organizationID, memberID).
-			Scan(&factorID, &currentUsername)
+		if memberID == service.store.rootMemberID || organizationID == service.store.systemOrganizationID && username == RootUsername {
+			return ErrForbidden
+		}
+		if expected == "" {
+			return assignMemberLoginName(ctx, tx, principal, organizationID, memberID, username)
+		}
+		var factorID, current string
+		err := tx.QueryRow(ctx, "SELECT f.id,f.subject"+memberLoginBinding, organizationID, memberID).Scan(&factorID, &current)
 		if err != nil {
 			return storageError(err)
 		}
-		if currentUsername == username {
-			return nil
-		}
-		if organizationID == service.store.systemOrganizationID && (memberID == service.store.rootMemberID || username == RootUsername) {
-			return ErrForbidden
-		}
-		if currentUsername != expectedUsername {
+		if current != expected {
 			return ErrConflict
 		}
+		if current == username {
+			return nil
+		}
+		// Password verification takes a shared lock on the verifier before checking its current name.
+		if _, err := tx.Exec(ctx, "SELECT 1 FROM password_credentials WHERE authentication_factor_id=$1 FOR UPDATE", factorID); err != nil {
+			return err
+		}
 		if _, err := tx.Exec(ctx, "UPDATE authentication_factors SET subject=$2,updated_at=clock_timestamp() WHERE id=$1", factorID, username); err != nil {
-			if errors.Is(storageError(err), ErrConflict) {
-				return ErrPasswordUsernameTaken
-			}
-			return storageError(err)
+			return loginNameError(err)
 		}
 		return managementEvent(ctx, tx, principal, organizationID, memberID, "password.username.update", struct{}{}, nil)
 	})
+}
+
+// Call under managementLock after checking the actor and validating the canonical username.
+func assignMemberLoginName(ctx context.Context, tx pgx.Tx, principal Principal, organizationID, memberID, username string) error {
+	if _, err := readMember(tx.QueryRow(ctx, "SELECT "+memberColumns+" FROM members WHERE id=$1 AND organization_id=$2", memberID, organizationID)); err != nil {
+		return err
+	}
+	var assigned bool
+	if err := tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1"+memberLoginBinding+")", organizationID, memberID).Scan(&assigned); err != nil {
+		return err
+	}
+	if assigned {
+		return ErrConflict
+	}
+	if _, err := insertLoginBinding(ctx, tx, organizationID, memberID, username); err != nil {
+		return err
+	}
+	return managementEvent(ctx, tx, principal, organizationID, memberID, "member.username.create", struct{}{}, nil)
+}
+
+func loginNameError(err error) error {
+	if errors.Is(storageError(err), ErrConflict) {
+		return ErrPasswordUsernameTaken
+	}
+	return storageError(err)
 }

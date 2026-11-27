@@ -155,6 +155,7 @@ type Detail = {
   member: Member
   bindings: Binding[]
   administratorIds: string[]
+  loginUsername?: string
   passwordUsername?: string
   email: ManagedEmail
 }
@@ -1597,37 +1598,43 @@ export default function App() {
                         />
                       )}
                     </CardContent>
-                    {actor.platform && (
-                      <CardFooter className="flex flex-wrap gap-2">
-                        {data.detail.passwordUsername &&
-                          !(
-                            org === systemOrganizationId &&
-                            data.detail.passwordUsername === "root"
-                          ) && (
-                            <Button
-                              variant="outline"
-                              onClick={() =>
-                                setAction({
-                                  title: "修改登录用户名",
-                                  path: `${base}/members/${member}/password`,
-                                  method: "PATCH",
-                                  field: "username",
-                                  value: data.detail?.passwordUsername,
-                                  body: {
-                                    expectedUsername:
-                                      data.detail?.passwordUsername,
-                                  },
-                                })
-                              }
-                            >
-                              修改登录用户名
-                            </Button>
-                          )}
+                    <CardFooter className="flex flex-wrap items-center gap-2">
+                      <span>
+                        登录用户名：{data.detail.loginUsername || "未设置"}
+                      </span>
+                      {!(
+                        org === systemOrganizationId &&
+                        data.detail.loginUsername === "root"
+                      ) && (
+                        <Button
+                          variant="outline"
+                          onClick={() => {
+                            const previous = data.detail?.loginUsername ?? ""
+                            setAction({
+                              title: previous
+                                ? "修改登录用户名"
+                                : "设置登录用户名",
+                              description: previous
+                                ? "旧用户名会立即释放，其他成员可以使用。请提醒该成员更新密码管理器中的用户名。"
+                                : undefined,
+                              path: base + "/members/" + member + "/login-name",
+                              method: "PUT",
+                              field: "username",
+                              value: previous,
+                              body: { expectedUsername: previous },
+                            })
+                          }}
+                        >
+                          {data.detail.loginUsername
+                            ? "修改登录用户名"
+                            : "设置登录用户名"}
+                        </Button>
+                      )}
+                      {actor.platform && (
                         <MemberPassword
                           key={member}
-                          configured={data.detail.bindings.some(
-                            (binding) => binding.factorType === "password"
-                          )}
+                          assignedUsername={data.detail.loginUsername}
+                          configured={!!data.detail.passwordUsername}
                           generate={(username) =>
                             request(
                               `${base}/members/${member}/password${username === undefined ? "/reset" : ""}`,
@@ -1645,8 +1652,8 @@ export default function App() {
                           }
                           onComplete={refresh}
                         />
-                      </CardFooter>
-                    )}
+                      )}
+                    </CardFooter>
                   </Card>
                 </div>
               </section>

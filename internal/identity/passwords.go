@@ -71,12 +71,11 @@ func (store *Store) SetMemberPassword(ctx context.Context, principal Principal, 
 		if _, err := readMember(tx.QueryRow(ctx, "SELECT "+memberColumns+" FROM members WHERE id=$1 AND organization_id=$2", memberID, organizationID)); err != nil {
 			return err
 		}
-		var exists bool
-		err := tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM member_auth_factor_bindings WHERE member_id=$1 AND factor_type='password')", memberID).Scan(&exists)
-		if err != nil {
+		var configured bool
+		if err := tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1"+memberPasswordBinding+")", organizationID, memberID).Scan(&configured); err != nil {
 			return err
 		}
-		if !exists {
+		if !configured {
 			if organizationID == store.systemOrganizationID && username == RootUsername {
 				return ErrForbidden
 			}
@@ -91,20 +90,38 @@ func (store *Store) SetMemberPassword(ctx context.Context, principal Principal, 
 }
 
 func insertMemberPassword(ctx context.Context, tx pgx.Tx, principal Principal, organizationID, memberID, username string, hash passwordHash) error {
-	factorID, err := NewID(FactorKind)
-	if err != nil {
+	var factorID, assigned string
+	var configured bool
+	err := tx.QueryRow(ctx, "SELECT f.id,f.subject,c.authentication_factor_id IS NOT NULL"+memberLoginBinding, organizationID, memberID).Scan(&factorID, &assigned, &configured)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		factorID, err = insertLoginBinding(ctx, tx, organizationID, memberID, username)
+		if err != nil {
+			return err
+		}
+	case err != nil:
 		return err
+	case configured || assigned != username:
+		return ErrConflict
 	}
-	if _, err = tx.Exec(ctx, "INSERT INTO authentication_factors(id,type,namespace,subject) VALUES($1,'password',$2,$3)", factorID, organizationID, username); err != nil {
-		return storageError(err)
-	}
-	if _, err = tx.Exec(ctx, "INSERT INTO password_credentials(authentication_factor_id,salt,digest,iterations) VALUES($1,$2,$3,$4)", factorID, hash.salt, hash.digest, hash.iterations); err != nil {
-		return err
-	}
-	if _, err = tx.Exec(ctx, "INSERT INTO member_auth_factor_bindings(organization_id,member_id,authentication_factor_id,factor_type) VALUES($1,$2,$3,'password')", organizationID, memberID, factorID); err != nil {
+	if _, err := tx.Exec(ctx, "INSERT INTO password_credentials(authentication_factor_id,salt,digest,iterations) VALUES($1,$2,$3,$4)", factorID, hash.salt, hash.digest, hash.iterations); err != nil {
 		return storageError(err)
 	}
 	return managementEvent(ctx, tx, principal, organizationID, memberID, "password.create", struct{}{}, nil)
+}
+
+func insertLoginBinding(ctx context.Context, tx pgx.Tx, organizationID, memberID, username string) (string, error) {
+	factorID, err := NewID(FactorKind)
+	if err != nil {
+		return "", err
+	}
+	if _, err = tx.Exec(ctx, "INSERT INTO authentication_factors(id,type,namespace,subject) VALUES($1,'password',$2,$3)", factorID, organizationID, username); err != nil {
+		return "", loginNameError(err)
+	}
+	if _, err = tx.Exec(ctx, "INSERT INTO member_auth_factor_bindings(organization_id,member_id,authentication_factor_id,factor_type) VALUES($1,$2,$3,'password')", organizationID, memberID, factorID); err != nil {
+		return "", storageError(err)
+	}
+	return factorID, nil
 }
 
 func rotateMemberPassword(ctx context.Context, tx pgx.Tx, organizationID, memberID, username string, hash passwordHash) error {
