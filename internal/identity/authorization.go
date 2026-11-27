@@ -32,7 +32,8 @@ func managementPermissions(actor ManagementActor) []authorization.Permission {
 		permission(providersResource.pattern(organizationID), actionList),
 		permission(providerTypeResource.pattern(organizationID, "?"), actionCreate),
 		permission(providerResource.pattern(organizationID, "?", "?"), actionUpdate, actionStatusUpdate, "credential.check"),
-		permission(organizationOIDCClientsResource.pattern(organizationID), actionList),
+		permission(organizationOIDCClientsResource.pattern(organizationID), actionList, actionCreate),
+		permission(organizationOIDCClientResource.pattern(organizationID, "?"), actionUpdate, actionStatusUpdate, "credential.rotate"),
 		permission(samlServiceProvidersResource.pattern(organizationID), actionList, actionCreate),
 		permission(samlServiceProviderResource.pattern(organizationID, "?"), actionGet, actionUpdate, actionStatusUpdate, actionDelete),
 	}

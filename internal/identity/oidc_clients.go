@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/zhizhun-tech/memberid/internal/authorization"
 )
 
 type OIDCClientRegistration struct {
@@ -132,10 +134,23 @@ func (service *ManagementService) OIDCApplications(ctx context.Context, principa
 	}
 }
 
-func (service *ManagementService) CreateOIDCApplication(ctx context.Context, principal Principal, application OIDCApplication, secretHash string, loopback bool) (OIDCApplication, error) {
+func (service *ManagementService) CreateOIDCApplication(ctx context.Context, principal Principal, ownerID string, application OIDCApplication, secretHash string, loopback bool) (OIDCApplication, error) {
+	requirements := []authorization.Requirement{oidcClientsResource.require(actionCreate)}
+	if ownerID == "" {
+		ownerID = SystemOrganizationID
+	} else {
+		requirements[0] = organizationOIDCClientsResource.require(actionCreate, ownerID)
+		if application.OrganizationID != "" && application.OrganizationID != ownerID {
+			return OIDCApplication{}, ErrForbidden
+		}
+		if application.EvidenceScope != "" || application.EvidenceAudience != "" || application.Preauthorized {
+			requirements = append(requirements, oidcClientsResource.require(actionCreate))
+		}
+		application.OrganizationID = ownerID
+	}
 	registration := OIDCClientRegistration{
 		DisplayName:         application.DisplayName,
-		OwnerOrganizationID: SystemOrganizationID,
+		OwnerOrganizationID: ownerID,
 		Client: OIDCClient{
 			ID: application.ClientID, SecretSHA256: secretHash, SubjectKind: "member",
 			OrganizationID: application.OrganizationID, RedirectURIs: application.RedirectURIs,
@@ -144,10 +159,14 @@ func (service *ManagementService) CreateOIDCApplication(ctx context.Context, pri
 			EvidenceScope: application.EvidenceScope, EvidenceAudience: application.EvidenceAudience,
 		},
 	}
-	return service.store.CreateOIDCClient(ctx, principal, registration, loopback)
+	return service.store.createOIDCClient(ctx, principal, registration, loopback, requirements...)
 }
 
 func (store *Store) CreateOIDCClient(ctx context.Context, principal Principal, registration OIDCClientRegistration, loopback bool) (OIDCApplication, error) {
+	return store.createOIDCClient(ctx, principal, registration, loopback, oidcClientsResource.require(actionCreate))
+}
+
+func (store *Store) createOIDCClient(ctx context.Context, principal Principal, registration OIDCClientRegistration, loopback bool, requirements ...authorization.Requirement) (OIDCApplication, error) {
 	if registration.Client.ID != "" {
 		return OIDCApplication{}, ErrInvalid
 	}
@@ -171,7 +190,7 @@ func (store *Store) CreateOIDCClient(ctx context.Context, principal Principal, r
 		if err := managementLock(ctx, tx); err != nil {
 			return err
 		}
-		if err := authorizeAll(ctx, tx, principal, oidcClientsResource.require(actionCreate)); err != nil {
+		if err := authorizeAll(ctx, tx, principal, requirements...); err != nil {
 			return err
 		}
 		if err := requireOIDCOrganization(ctx, tx, registration.Client.OrganizationID); err != nil {
@@ -202,7 +221,7 @@ type OIDCApplicationChange struct {
 	Enabled                *bool     `json:"enabled"`
 }
 
-func (service *ManagementService) UpdateOIDCApplication(ctx context.Context, principal Principal, id string, change OIDCApplicationChange, loopback bool) (OIDCApplication, error) {
+func (service *ManagementService) UpdateOIDCApplication(ctx context.Context, principal Principal, ownerID, id string, change OIDCApplicationChange, loopback bool) (OIDCApplication, error) {
 	action := actionUpdate
 	if change.Enabled != nil {
 		if change.DisplayName != "" || change.OrganizationID != "" || change.RedirectURIs != nil || change.PostLogoutRedirectURIs != nil || change.AccountReturnURIs != nil || change.Preauthorized != nil || change.EvidenceScope != nil || change.EvidenceAudience != nil || change.Refresh {
@@ -213,13 +232,19 @@ func (service *ManagementService) UpdateOIDCApplication(ctx context.Context, pri
 	if change.ExpectedRevision < 1 || (change.EvidenceScope == nil) != (change.EvidenceAudience == nil) {
 		return OIDCApplication{}, ErrInvalid
 	}
-	return service.store.changeOIDCClient(ctx, principal, id, change.ExpectedRevision, action, func(registration *OIDCClientRegistration) (bool, error) {
+	return service.store.changeOIDCClient(ctx, principal, ownerID, id, change.ExpectedRevision, action, func(registration *OIDCClientRegistration) (bool, error) {
 		if change.Enabled != nil {
 			registration.Enabled = *change.Enabled
 			return !registration.Enabled, nil
 		}
 		if !validText(change.DisplayName, 128) {
 			return false, ErrInvalid
+		}
+		if ownerID != "" {
+			if change.OrganizationID != "" && change.OrganizationID != ownerID || change.EvidenceScope != nil || change.Preauthorized != nil {
+				return false, ErrForbidden
+			}
+			change.OrganizationID = ownerID
 		}
 		client := &registration.Client
 		if change.EvidenceScope != nil {
@@ -245,24 +270,24 @@ func (service *ManagementService) UpdateOIDCApplication(ctx context.Context, pri
 	})
 }
 
-func (service *ManagementService) RotateOIDCApplicationSecret(ctx context.Context, principal Principal, id string, revision int64, secretHash string) (OIDCApplication, error) {
+func (service *ManagementService) RotateOIDCApplicationSecret(ctx context.Context, principal Principal, ownerID, id string, revision int64, secretHash string) (OIDCApplication, error) {
 	if revision < 1 {
 		return OIDCApplication{}, ErrInvalid
 	}
-	return service.store.RotateOIDCClientSecret(ctx, principal, id, revision, secretHash)
+	return service.store.RotateOIDCClientSecret(ctx, principal, ownerID, id, revision, secretHash)
 }
 
-func (store *Store) RotateOIDCClientSecret(ctx context.Context, principal Principal, id string, revision int64, secretHash string) (OIDCApplication, error) {
+func (store *Store) RotateOIDCClientSecret(ctx context.Context, principal Principal, ownerID, id string, revision int64, secretHash string) (OIDCApplication, error) {
 	if !validOIDCSecretHash(secretHash) {
 		return OIDCApplication{}, ErrInvalid
 	}
-	return store.changeOIDCClient(ctx, principal, id, revision, "credential.rotate", func(registration *OIDCClientRegistration) (bool, error) {
+	return store.changeOIDCClient(ctx, principal, ownerID, id, revision, "credential.rotate", func(registration *OIDCClientRegistration) (bool, error) {
 		registration.Client.SecretSHA256 = secretHash
 		return false, nil
 	})
 }
 
-func (store *Store) changeOIDCClient(ctx context.Context, principal Principal, id string, revision int64, action string, change func(*OIDCClientRegistration) (bool, error)) (OIDCApplication, error) {
+func (store *Store) changeOIDCClient(ctx context.Context, principal Principal, ownerID, id string, revision int64, action string, change func(*OIDCClientRegistration) (bool, error)) (OIDCApplication, error) {
 	if !validOIDCClientID(id) || revision < 1 && principal.kind != operatorPrincipal {
 		return OIDCApplication{}, ErrInvalid
 	}
@@ -271,12 +296,24 @@ func (store *Store) changeOIDCClient(ctx context.Context, principal Principal, i
 		if err := managementLock(ctx, tx); err != nil {
 			return err
 		}
-		if err := authorizeAll(ctx, tx, principal, oidcClientResource.require(action, id)); err != nil {
+		requirement := oidcClientResource.require(action, id)
+		if ownerID != "" {
+			requirement = organizationOIDCClientResource.require(action, ownerID, id)
+		}
+		if err := authorizeAll(ctx, tx, principal, requirement); err != nil {
 			return err
 		}
 		registration, err := scanOIDCClient(tx.QueryRow(ctx, "SELECT "+oidcClientColumns+" FROM oidc_clients WHERE client_id=$1 FOR UPDATE", id))
 		if err != nil {
 			return err
+		}
+		if ownerID != "" {
+			if registration.OwnerOrganizationID != ownerID {
+				return ErrNotFound
+			}
+			if registration.Client.SubjectKind != "member" || registration.Client.OrganizationID != ownerID {
+				return ErrForbidden
+			}
 		}
 		if registration.System && !(principal.kind == operatorPrincipal && action == "credential.rotate") {
 			return ErrForbidden

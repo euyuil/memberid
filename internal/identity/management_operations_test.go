@@ -24,7 +24,8 @@ func TestManagementOperationMatrix(t *testing.T) {
 			target                 string
 			supported, admin, self []string
 		}{
-			{organizationOIDCClientsResource, []string{targetOrganization}, base + "/oidcApplications", []string{"list"}, []string{"list"}, nil},
+			{organizationOIDCClientsResource, []string{targetOrganization}, base + "/oidcApplications", []string{"list", "create"}, []string{"list", "create"}, nil},
+			{organizationOIDCClientResource, []string{targetOrganization, "example-client"}, base + "/oidcApplications/example-client", []string{"update", "status.update", "credential.rotate"}, []string{"update", "status.update", "credential.rotate"}, nil},
 			{oidcClientsResource, nil, "oidcApplications", []string{"create", "list"}, nil, nil},
 			{oidcClientResource, []string{"example-client"}, "oidcApplications/example-client", []string{"update", "status.update", "credential.rotate"}, nil, nil},
 			{organizationsResource, nil, "organizations", []string{"create", "list"}, nil, nil},
