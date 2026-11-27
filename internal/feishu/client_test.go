@@ -21,7 +21,7 @@ func response(status int, payload string) *http.Response {
 }
 
 func TestFeishuExchangeAndUserInfo(t *testing.T) {
-	callback := "https://memberid.example.invalid/login/feishu/callback"
+	callback := "https://memberid.example.invalid/auth/feishu/callback"
 	verifier := oauth2.GenerateVerifier()
 	location, err := url.Parse(AuthorizationURL("cli_example", callback, "example-state", verifier))
 	if err != nil || location.Query().Get("code_challenge") != oauth2.S256ChallengeFromVerifier(verifier) {

@@ -285,7 +285,7 @@ func (service *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case feishuCallbackPath:
 		service.feishuCallback(w, r)
 		return
-	case "/login/dingtalk/callback":
+	case "/auth/dingtalk/callback":
 		service.dingTalkCallback(w, r)
 		return
 	case "/login":

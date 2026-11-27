@@ -576,7 +576,7 @@ func TestSAMLPolicyChangeDuringProviderIO(t *testing.T) {
 			t.Error(err)
 		}
 	}
-	result := f.call(f.browser, "GET", "/login/dingtalk/callback?"+url.Values{"state": {location.Query().Get("state")}, "code": {"synthetic-code"}}.Encode(), nil, nil)
+	result := f.call(f.browser, "GET", "/auth/dingtalk/callback?"+url.Values{"state": {location.Query().Get("state")}, "code": {"synthetic-code"}}.Encode(), nil, nil)
 	if strings.Contains(result.body, "SAMLResponse") {
 		t.Fatal("issued after SP disable during provider I/O")
 	}

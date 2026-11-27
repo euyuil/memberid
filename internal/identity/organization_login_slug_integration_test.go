@@ -17,7 +17,7 @@ func TestOrganizationSlugReservations(t *testing.T) {
 	if err := store.AssignOrganizationSlug(ctx, Principal{}, first.ID, "example"); !errors.Is(err, ErrForbidden) {
 		t.Fatalf("assignment without operator authority: %v", err)
 	}
-	for _, slug := range []string{"", "Example", " example", "a--b", "a-", "-a", "a/b", "a_b", "团队", "system", "callback", "dingtalk", "feishu", strings.Repeat("a", 64)} {
+	for _, slug := range []string{"", "Example", " example", "a--b", "a-", "-a", "a/b", "a_b", "团队", "system", strings.Repeat("a", 64)} {
 		if err := assign(first.ID, slug); !errors.Is(err, ErrInvalid) {
 			t.Fatalf("assigned invalid slug %q: %v", slug, err)
 		}

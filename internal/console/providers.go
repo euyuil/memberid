@@ -14,8 +14,8 @@ func (s *Service) registerProviderRoutes(installation *config.Loaded) {
 		items, err := s.management.Providers(r.Context(), r.Context().Value(sessionKey{}).(session).principal(), r.PathValue("organizationId"))
 		respond(w, map[string]any{
 			"items":                items,
-			"feishuCallback":       installation.Issuer + "/login/feishu/callback",
-			"dingTalkCallback":     installation.Issuer + "/login/dingtalk/callback",
+			"feishuCallback":       installation.Issuer + "/auth/feishu/callback",
+			"dingTalkCallback":     installation.Issuer + "/auth/dingtalk/callback",
 			"feishuLinkCallback":   installation.Issuer + "/account/feishu/callback",
 			"dingTalkLinkCallback": installation.Issuer + "/account/dingtalk/callback",
 		}, err)
