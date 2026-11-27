@@ -15,8 +15,8 @@ import (
 	"github.com/zhizhun-tech/memberid/internal/samlprovider"
 )
 
-func (service *Service) samlSSO(w http.ResponseWriter, r *http.Request) {
-	if service.saml == nil {
+func (service *Service) samlSSO(w http.ResponseWriter, r *http.Request, provider *samlprovider.Provider, organizationID string) {
+	if provider == nil {
 		http.NotFound(w, r)
 		return
 	}
@@ -39,7 +39,7 @@ func (service *Service) samlSSO(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "SAML service provider unavailable", 503)
 		return
 	}
-	txn, status, err := service.saml.Parse(r, sp, service.now())
+	txn, status, err := provider.Parse(r, sp, service.now())
 	if err != nil {
 		service.samlEvent(r, nil, "saml.request", "rejected", "invalidRequest")
 		http.Error(w, "Invalid SAML request", 400)
@@ -51,6 +51,12 @@ func (service *Service) samlSSO(w http.ResponseWriter, r *http.Request) {
 		browser = config.RandomSecret()
 	}
 	request := &authorizationRequest{grant: grant{ID: newID(), InteractionID: newID(), ClientID: sp.ID}, Interaction: browserauth.Interaction{Revision: 1, BrowserHash: config.SecretHash(browser), CSRF: config.RandomSecret(), ProviderOrganizationID: sp.LoginOrganizationID()}, SAML: txn}
+	if organizationID != "" {
+		if err := service.bindLaunchOrganization(r.Context(), request, organizationID); err != nil {
+			writeLoginOrganizationError(w, err)
+			return
+		}
+	}
 	request.entryToken, err = service.sealSAMLLogin(request, request.Revision)
 	if err != nil {
 		http.Error(w, "SAML unavailable", http.StatusServiceUnavailable)

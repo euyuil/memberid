@@ -525,6 +525,7 @@ test(
       credential = password,
       memberId = member.id,
       beforeConsent,
+      scoped = false,
     } = {}) {
       const start = await agent(`${spOrigin}/login`);
       assert.equal(start.status, 302);
@@ -539,7 +540,19 @@ test(
           action,
           ...extra,
         });
-      if (loginOrganization && page.body.includes('name="organization"')) {
+      if (scoped) {
+        assert.equal(
+          new URL(request.headers.location, issuer).pathname,
+          "/login/" + loginOrganization,
+        );
+        assert.ok(
+          !page.body.includes('value="choose-organization"'),
+          "scoped request requires no selection",
+        );
+      } else if (
+        loginOrganization &&
+        page.body.includes('value="choose-organization"')
+      ) {
         const chosen = await submit("choose-organization", {
           organization: loginOrganization,
         });
@@ -1318,11 +1331,12 @@ test(
               "--organization",
               org.id,
             );
-          async function signIn(beforeConsent) {
+          async function signIn(beforeConsent, scoped = false) {
             const agent = client(tls.cert);
             const form = await responseForm({
               agent,
               loginOrganization: org.id,
+              scoped,
               memberId: actor.id,
               username: "shared-member",
               credential,
@@ -1335,7 +1349,7 @@ test(
             assert.equal(profile.organizationId, org.id);
             return profile.nameID;
           }
-          return { use, signIn };
+          return { id: org.id, use, signIn };
         }
         const b = organizationLogin("Subscriber B"),
           c = organizationLogin("Subscriber C");
@@ -1346,6 +1360,39 @@ test(
           subjectC = await c.signIn();
         assert.notEqual(subjectB, subjectC);
         assert.equal(await b.signIn(), subjectB);
+        const metadataURL = `${issuer}/saml/organizations/${b.id}/metadata`;
+        const metadata = await browser(metadataURL);
+        assert.equal(metadata.status, 200);
+        const descriptor = parse(metadata.body).documentElement;
+        assert.equal(
+          descriptor.getAttribute("entityID"),
+          consumerOptions.idpIssuer,
+        );
+        const destination = descriptor
+          .getElementsByTagNameNS(
+            "urn:oasis:names:tc:SAML:2.0:metadata",
+            "SingleSignOnService",
+          )[0]
+          .getAttribute("Location");
+        assert.equal(destination, `${issuer}/saml/organizations/${b.id}/sso`);
+        consumer = createConsumer({
+          ...consumerOptions,
+          entryPoint: destination,
+        });
+        try {
+          assert.equal(await b.signIn(undefined, true), subjectB);
+          await assert.rejects(
+            b.signIn(() => b.use(false), true),
+            /SAML issuance/,
+          );
+          await assert.rejects(
+            b.signIn(undefined, true),
+            /signed Node-SAML request admission/,
+          );
+          b.use(true);
+        } finally {
+          consumer = createConsumer(consumerOptions);
+        }
         await assert.rejects(
           b.signIn(() => {
             b.use(false);

@@ -64,6 +64,14 @@ func (s *storage) CreateAuthRequest(ctx context.Context, input *oidc.AuthRequest
 	request := &authorizationRequest{ClientRevision: registered.revision, grant: grant{InteractionID: newID(), ID: newID(), ClientID: input.ClientID, ClientName: registered.displayName, Scopes: input.Scopes, Audience: []string{audience}}, Input: *input, HintSubject: hintSubject, Interaction: browserauth.Interaction{BrowserHash: config.SecretHash(browser), CSRF: config.RandomSecret()}}
 	request.Input.IDTokenHint = "" // The OP already validated the hint and supplied its subject.
 	request.ProviderOrganizationID = registered.registration.OrganizationID
+	if organizationID, present := ctx.Value(launchOrganizationKey{}).(string); present {
+		if err := s.service.bindLaunchOrganization(ctx, request, organizationID); err != nil {
+			if errors.Is(err, identity.ErrIneligible) || errors.Is(err, identity.ErrInvalid) || errors.Is(err, identity.ErrNotFound) {
+				return nil, oidc.ErrInvalidRequest().WithDescription("Organization login is unavailable")
+			}
+			return nil, oidc.ErrServerError()
+		}
+	}
 	request.entry = &oidcLoginEntry{Issuer: s.service.configuration.Issuer, ExpiresAt: s.service.now().Add(oidcLoginLifetime), Request: *request}
 	return request, s.service.sealLoginEntry(request)
 }

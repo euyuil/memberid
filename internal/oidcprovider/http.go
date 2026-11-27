@@ -94,6 +94,9 @@ func (service *Service) cookieValue(r *http.Request, kind string) string {
 	return cookies[0].Value
 }
 
+// launchOrganizationKey carries the optional OIDC extension into validated request creation.
+type launchOrganizationKey struct{}
+
 type userinfoWriter struct{ http.ResponseWriter }
 
 func (w userinfoWriter) WriteHeader(status int) {
@@ -199,7 +202,27 @@ func (service *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path == "/oauth/token" {
 		ctx = context.WithValue(ctx, authenticatedClientKey{}, &authenticatedClient{})
 	}
+	if r.URL.Path == "/oauth/authorize" && r.Form.Has("memberid_organization") {
+		ctx = context.WithValue(ctx, launchOrganizationKey{}, r.Form.Get("memberid_organization"))
+	}
 	r = r.WithContext(ctx)
+	if scoped, ok := strings.CutPrefix(r.URL.Path, "/saml/organizations/"); ok {
+		id, endpoint, found := strings.Cut(scoped, "/")
+		if service.saml == nil || r.URL.RawPath != "" || !found || !identity.ValidID(id, identity.OrganizationKind) {
+			http.NotFound(w, r)
+			return
+		}
+		provider := service.saml.ForOrganization(id)
+		switch endpoint {
+		case "metadata":
+			provider.Metadata(w, r)
+		case "sso":
+			service.samlSSO(w, r, provider, id)
+		default:
+			http.NotFound(w, r)
+		}
+		return
+	}
 	switch r.URL.Path {
 	case samlprovider.MetadataPath:
 		if service.saml == nil {
@@ -209,7 +232,7 @@ func (service *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	case samlprovider.SSOPath:
-		service.samlSSO(w, r)
+		service.samlSSO(w, r, service.saml, "")
 		return
 	case "/.well-known/openid-configuration":
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {

@@ -79,6 +79,14 @@ func New(issuer string, signing *config.SAMLSigning) (*Provider, error) {
 	return &Provider{signing: signing, idp: saml.IdentityProvider{Key: signing.Key, Certificate: signing.Certificate, MetadataURL: *metadataURL, SSOURL: *ssoURL, SignatureMethod: dsig.RSASHA256SignatureMethod, RejectSHA1Signatures: true, StrictACSBinding: true, NameIDFormats: []saml.NameIDFormat{saml.PersistentNameIDFormat, saml.UnspecifiedNameIDFormat}, Logger: log.New(io.Discard, "", 0)}}, nil
 }
 
+// ForOrganization keeps the issuer and signing identity and changes only the
+// SSO destination used to publish metadata and validate a tenant's request.
+func (provider *Provider) ForOrganization(organizationID string) *Provider {
+	scoped := *provider
+	scoped.idp.SSOURL.Path = strings.TrimSuffix(scoped.idp.SSOURL.Path, SSOPath) + "/saml/organizations/" + organizationID + "/sso"
+	return &scoped
+}
+
 func (provider *Provider) Metadata(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		w.Header().Set("Allow", "GET, HEAD")
