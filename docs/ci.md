@@ -23,4 +23,4 @@ To run the nightly path immediately, choose **Actions → Full CI → Run workfl
 
 A release preview reports whether matching full evidence exists. Confirming publication dispatches missing verification and waits. A failed run blocks the selected publication. Find the recorded attempt in the release's `fullValidation` field and compare its successful final job with the release commit and digest. New commits and republished images with different digests need their own evidence.
 
-CI uses disposable test systems. China selects stable releases at its agreed maintenance window. Global rollout remains an independent operator decision. See [versioned releases](releases.md) for publication and rollout policy.
+CI uses disposable test systems. See [versioned releases](releases.md) for the artifact publication procedure.

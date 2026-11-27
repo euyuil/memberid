@@ -46,7 +46,7 @@ Select focused checks for the affected behavior and preserve the required PR CI 
 
 After the checks, run `sh scripts/package.sh VERSION NEW_OUTPUT_DIRECTORY` from the repository root. The output parent must exist. Packaging supports Linux and Windows amd64, includes notices and file checksums, and refuses existing destinations. The Linux package includes a container recipe that uses the same executable. See [distribution and deployment](docs/distribution.md) for cross-building, trust-store mounts, runtime configuration, and verification. These commands create local artifacts only.
 
-Push CI publishes a smoke-tested Linux SHA image. Full CI verifies Linux and Windows packages and compares the executable in that pinned registry image with the package under test. Production credentials, databases, and regional deployment remain outside both workflows. See [published images](docs/distribution.md#automatically-published-images) for tags, digests, package visibility, and manual rollout.
+Push CI publishes a smoke-tested Linux SHA image. Full CI verifies Linux and Windows packages and compares the executable in that pinned registry image with the package under test. See [published images](docs/distribution.md#automatically-published-images) for tags, digests, and package visibility.
 
 ## Pull requests
 

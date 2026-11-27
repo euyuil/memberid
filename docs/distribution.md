@@ -44,9 +44,8 @@ outside the repository and workflow. Do not supply them through CI secrets,
 variables, build arguments, artifacts, or logs. CI has no deployment step or
 cluster access; a publication never updates a running installation.
 
-Select a fully validated stable release for a production rollout and use its
-`ghcr.io/zhizhun-tech/memberid@sha256:...` reference, including in a Kubernetes or k3s
-Pod's `image` field. SHA tags identify the source
+Pin a published image by its `ghcr.io/zhizhun-tech/memberid@sha256:...` reference.
+SHA tags identify the source
 revision, but are not registry-enforced immutable references; a rerun may replace
 the tag. The digest pins the exact published image. Only Linux amd64 is currently
 published; there is no `latest` tag or multi-architecture image.
