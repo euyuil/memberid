@@ -140,7 +140,7 @@ Member. All administrative entries require current identity/session eligibility.
 | Rename Member | `update` on any `M` | `update` on own organization's `M` | No self-service rename interface |
 | Manually block/unblock Member | `status.update` on any `M` | `status.update` on own organization's `M` | No |
 | Read bindings and assignment lists | Any organization | Own organization | No administrative list; only the account flow's necessary source context |
-| Assign or rename a Member login name | Any ordinary Member | Own organization, including self | No |
+| Assign or rename a Member login name | Any ordinary Member | Own organization, including self | First assignment to self in a fresh account session (`create` only) |
 | Set or reset a Member password | `create` / `update` on any `M/password`, including the system organization | No | No |
 | Grant/revoke administrator | `create` / `delete` for assignments in any organization | `create` / `delete` for assignments in own ordinary organization | No |
 | List/create/configure providers | Any supported organization: `list`, `create`, `update`, `status.update` on the relevant targets | Same operations within own organization | No |
@@ -260,6 +260,7 @@ permits forging upstream `authorizationStatus` or directory departure evidence.
 | S2 | Phone page POST that successfully verifies and links | `M/bindings`, `create` | Self; fresh source authentication and fresh SMS proof, original source binding, valid browser/form/client context, no occupied or revoked slot replacement. | Account commit; consume proof, create/check factor, create binding and complete request atomically. |
 | S3 | DingTalk verification completed at `GET /account/dingtalk/callback` | `M/bindings`, `create` | Self; same source/context requirements and fresh verified provider identity in the selected organization's namespace. | Account commit after provider I/O; no partial factor or binding on failure. |
 | S4 | Phone send/cancel and DingTalk start/cancel form submissions | Verification workflow state; no additional management action | Same bound account request, CSRF and documented freshness rules. Sending a challenge, consuming callback state, or canceling does not grant binding authority. | Validate each step; eventual creation still requires S2/S3. |
+| S5 | `POST /account` with a login username | `M/loginName`, `create` | Self only, while no username exists. No password issuance or rename authority. | Check the browser form and five-minute source authentication, then serialize first assignment with administrator writes and recheck the live session and selected binding. |
 
 The source authentication must still be within the existing five-minute limit
 when committing. Current session or binding revocation, Member ineligibility,

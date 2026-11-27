@@ -66,6 +66,10 @@ func (principal Principal) auditID() (string, error) {
 		if ValidID(principal.memberID, MemberKind) && principal.grantID != "" {
 			return principal.memberID, nil
 		}
+	case accountPrincipal:
+		if ValidID(principal.memberID, MemberKind) && principal.sessionID != "" {
+			return principal.memberID, nil
+		}
 	case installationManagerPrincipal:
 		return "installation-manager", nil
 	case operatorPrincipal:
