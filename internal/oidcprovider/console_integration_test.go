@@ -121,8 +121,8 @@ func TestConsoleLoginReturnTargetValidationAndFailure(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if age := authorization.Query().Get("max_age"); age != "86400" {
-		t.Fatalf("authorization max_age = %q, want 86400", age)
+	if age := authorization.Query().Get("max_age"); age != "14400" {
+		t.Fatalf("authorization max_age = %q, want 14400", age)
 	}
 	callback := server.URL + "/auth/callback?" + url.Values{
 		"state": {authorization.Query().Get("state")}, "error": {"access_denied"}, "returnTo": {"//example.invalid"},

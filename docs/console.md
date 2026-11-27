@@ -58,8 +58,8 @@ and `nextAfter` Member cursors. `POST /api/identity-switch` accepts `memberId` a
 local `returnTo` page, and requires the current console cookie, exact Origin and
 CSRF value. It returns an authorization URL, not an authentication credential.
 The browser navigates to the normal OIDC Authorization Code flow with PKCE S256,
-`login_hint` identifying the selected Member, `prompt=none`, and the existing
-eight-hour authentication-age limit. The console client must be preauthorized
+`login_hint` identifying the selected Member, `prompt=none`, and the console's
+four-hour authentication-age limit. The console client must be preauthorized
 for this silent flow, as in the documented setup. Missing SSO, required consent,
 or expired authentication fails the switch without silently authenticating again.
 
@@ -250,7 +250,9 @@ Platform administrators can use [Member password management](administration.md#o
 
 Login state and nonce are browser-bound and single-use, with a five-minute callback lifetime. ID Token issuer, audience, signature, expiry, nonce, and access-token hash are checked using the maintained OIDC relying-party implementation. The verified response is tied to its exact stored grant. The browser receives an opaque HttpOnly SameSite=Lax cookie, Secure with a `__Host-` name on HTTPS; it never receives OIDC bearer credentials or the client secret.
 
-Console sessions expire four hours after the last console API request or 24 hours after the original authentication, whichever comes first. Signing in with an existing SSO session or switching Member identities preserves the original authentication time. The console requests an OIDC `max_age` of 86400 seconds. Sessions created before this change retain their stored absolute deadline and must still be valid on their next request to renew.
+The console sends `max_age=14400` on OIDC authorization requests. At sign-in, it can reuse an eligible MemberID authentication from the same browser within the past four hours. An older authentication requires fresh verification.
+
+Once established, a console session expires four hours after the last console API request or 24 hours after the original authentication, whichever comes first. Active use can continue past the four-hour sign-in freshness window. Reusing SSO or switching Member identities preserves the original authentication time. Sessions created under an earlier lifetime policy retain their stored absolute deadline and must still be valid on their next request to renew.
 
 The API entry point resolves and renews the opaque console session and passes only its Member and grant references to the operation service. The service checks current administrator assignment, Member/organization/factor/binding eligibility, and grant/SSO revocation and expiry once at its authorization boundary. Reads check before response queries; mutations check inside their transaction. Provider configuration also checks before upstream verification to reject unauthorized external calls, then checks again in the save transaction. The session view and logout resolve their current administrator directly.
 
