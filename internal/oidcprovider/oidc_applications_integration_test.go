@@ -64,6 +64,20 @@ func TestManageOIDCApplicationWithoutRestart(t *testing.T) {
 	if !foundOwner {
 		t.Fatal("organization-owned registration missing from directory or has the wrong owner")
 	}
+	ownerDirectory := "/api/organizations/" + f.member.OrganizationID + "/oidc-applications"
+	foreignDirectory := "/api/organizations/" + f.otherMember.OrganizationID + "/oidc-applications"
+	checkDirectory := func(path string, expected string) {
+		t.Helper()
+		items := consoleJSON(t, f, server, "GET", path, "", "", 200)["items"].([]any)
+		if expected == "" && len(items) == 0 {
+			return
+		}
+		if len(items) != 1 || items[0].(map[string]any)["clientId"] != expected {
+			t.Fatal("unexpected owner-scoped directory", path, items)
+		}
+	}
+	checkDirectory(ownerDirectory, owned.ClientID)
+	checkDirectory(foreignDirectory, "")
 	changed := consoleJSON(t, f, server, "PATCH", base+"/"+owned.ClientID, csrf,
 		fmt.Sprintf(`{"expectedRevision":1,"displayName":"Organization-owned application","redirectUris":[%q]}`, callback), 200)["application"].(map[string]any)
 	if changed["ownerOrganizationId"] != f.member.OrganizationID || changed["organizationId"] != nil {
@@ -121,6 +135,31 @@ func TestManageOIDCApplicationWithoutRestart(t *testing.T) {
 	}
 	consoleLogin(t, f, server, f.member.ID)
 	csrf = consoleJSON(t, f, server, "GET", "/api/session", "", "", 200)["csrf"].(string)
+	checkDirectory(ownerDirectory, owned.ClientID)
+	consoleJSON(t, f, server, "GET", foreignDirectory, "", "", 403)
+	consoleJSON(t, f, server, "GET", base, "", "", 403)
+	options := consoleJSON(t, f, server, "GET", ownerDirectory, "", "", 200)["organizations"].([]any)
+	if len(options) != 1 || options[0].(map[string]any)["id"] != f.member.OrganizationID {
+		t.Fatal("organization picker exposed another organization")
+	}
+	history := consoleJSON(t, f, server, "GET", "/api/events?organizationId="+f.member.OrganizationID, "", "", 200)
+	foundUpdate := false
+	for _, raw := range history["items"].([]any) {
+		event := raw.(map[string]any)
+		if !strings.HasPrefix(event["action"].(string), "oidc.application.") {
+			continue
+		}
+		if event["changes"].(map[string]any)["clientId"] != owned.ClientID {
+			t.Fatal("foreign registration in organization history")
+		}
+		if event["action"] == "oidc.application.update" && event["actor"] == admin.ID {
+			foundUpdate = true
+		}
+	}
+	if !foundUpdate {
+		t.Fatal("owner history lost the acting platform administrator")
+	}
+	consoleJSON(t, f, server, "GET", "/api/events?organizationId="+f.otherMember.OrganizationID, "", "", 403)
 	consoleJSON(t, f, server, "PATCH", base+"/"+owned.ClientID, csrf, `{"expectedRevision":2,"enabled":false}`, 403)
 }
 

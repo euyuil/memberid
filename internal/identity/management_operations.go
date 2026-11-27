@@ -45,6 +45,7 @@ const (
 	authenticationEventResource              managementResource = authenticationEventsResource + "/{eventId}"
 	organizationAuthenticationEventsResource managementResource = organizationResource + "/authenticationEvents"
 	organizationAuthenticationEventResource  managementResource = organizationAuthenticationEventsResource + "/{eventId}"
+	organizationOIDCClientsResource          managementResource = organizationResource + "/oidcApplications"
 	oidcClientsResource                      managementResource = "oidcApplications"
 	oidcClientResource                       managementResource = oidcClientsResource + "/{clientId}"
 )
@@ -76,6 +77,7 @@ var managementOperations = map[managementResource][]string{
 	authenticationEventResource:              {actionGet},
 	organizationAuthenticationEventsResource: {actionList},
 	organizationAuthenticationEventResource:  {actionGet},
+	organizationOIDCClientsResource:          {actionList},
 	oidcClientsResource:                      {actionCreate, actionList},
 	oidcClientResource:                       {actionUpdate, actionStatusUpdate, "credential.rotate"},
 }

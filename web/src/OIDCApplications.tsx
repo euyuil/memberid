@@ -95,11 +95,15 @@ function ApplicationStatus({ application }: { application: OIDCApplication }) {
 
 export function OIDCApplications({
   directory,
+  canCreate,
+  canEdit,
   csrf,
   request,
   onComplete,
 }: {
   directory: OIDCApplicationDirectory
+  canCreate: boolean
+  canEdit: boolean
   csrf: string
   request: Request
   onComplete: (application: OIDCApplication) => void
@@ -162,12 +166,14 @@ export function OIDCApplications({
 
   return (
     <section aria-label="OIDC 应用列表">
-      <div className="flex justify-end pb-4">
-        <Button onClick={() => open({ kind: "create" })}>
-          <Plus data-icon="inline-start" />
-          添加 OIDC 应用
-        </Button>
-      </div>
+      {canCreate && (
+        <div className="flex justify-end pb-4">
+          <Button onClick={() => open({ kind: "create" })}>
+            <Plus data-icon="inline-start" />
+            添加 OIDC 应用
+          </Button>
+        </div>
+      )}
       <div className="overflow-hidden rounded-md border">
         <DirectoryResults
           count={directory.items.length}
@@ -268,7 +274,9 @@ export function OIDCApplications({
               <div className="grid grid-cols-2 gap-4">
                 <ReadField
                   label="归属组织"
-                  value={organizationName(panel.application.ownerOrganizationId)}
+                  value={organizationName(
+                    panel.application.ownerOrganizationId
+                  )}
                 />
                 <ReadField
                   label="允许登录的组织"
@@ -318,7 +326,7 @@ export function OIDCApplications({
                 values={panel.application.postLogoutRedirectUris ?? []}
               />
             </FieldGroup>
-            {!panel.application.system && (
+            {canEdit && !panel.application.system && (
               <DialogFooter className="sm:justify-between">
                 <Button
                   variant={

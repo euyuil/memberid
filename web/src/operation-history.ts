@@ -224,7 +224,7 @@ export function describeEvent(event: ManagementEvent) {
     organizationName: snapshot.organizationName || "组织名称未记录",
     targetName: snapshot.targetName || recordedName || "名称未记录",
     targetURL: oidc
-      ? routeURL({ view: "oidc-applications" })
+      ? routeURL({ view: "oidc-applications", org: event.organizationId })
       : saml
         ? routeURL({
             org: event.organizationId,

@@ -16,14 +16,17 @@ type oidcApplicationResult struct {
 func (s *Service) registerOIDCApplicationRoutes(installation *config.Loaded) {
 	const collection = "/api/oidc-applications"
 	const item = collection + "/{clientId}"
-	s.routes.HandleFunc("GET "+collection, func(w http.ResponseWriter, r *http.Request) {
-		value, err := s.management.OIDCApplications(r.Context(), r.Context().Value(sessionKey{}).(session).principal())
+	const scopedCollection = "/api/organizations/{organizationId}/oidc-applications"
+	list := func(w http.ResponseWriter, r *http.Request) {
+		value, err := s.management.OIDCApplications(r.Context(), r.Context().Value(sessionKey{}).(session).principal(), r.PathValue("organizationId"))
 		respond(w, struct {
 			identity.OIDCApplicationDirectory
 			Issuer            string `json:"issuer"`
 			AllowLoopbackHTTP bool   `json:"allowLoopbackHttp"`
 		}{value, installation.Issuer, installation.AllowLoopbackHTTP}, err)
-	})
+	}
+	s.routes.HandleFunc("GET "+collection, list)
+	s.routes.HandleFunc("GET "+scopedCollection, list)
 	s.routes.HandleFunc("POST "+collection, func(w http.ResponseWriter, r *http.Request) {
 		var input struct {
 			DisplayName            string   `json:"displayName"`
