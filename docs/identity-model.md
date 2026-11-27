@@ -19,7 +19,7 @@ The ordinary suffix encodes a UUIDv7 using the alphabet `0123456789bcdfghjkmnpqr
 - Database initialization creates `org_system`, the enabled system organization. It cannot be disabled. Customers and unaffiliated people are never assigned to it by default. Membership alone grants no management access. See [Member roles](roles.md).
 - Password-based installation bootstrap creates `mbr_root` in `org_system`. Schema-only initialization leaves that Member absent. Its ID stays fixed when the initial username `root` or its password changes. See [first-time setup](administration.md#first-time-setup).
 
-The agreed allocation policy gives MemberID sole responsibility for issuing organization and Member IDs. The current private management API still accepts caller-selected IDs for standalone creation and requires them for atomic enrollment. See [management creation and enrollment](management-api.md#organization-and-member-id-allocation).
+MemberID allocates organization and Member IDs for both standalone create endpoints. Atomic enrollment currently requires caller-selected organization and Member IDs. See [management creation and enrollment](management-api.md#organization-and-member-id-allocation).
 
 ## Factors and explicit relationships
 

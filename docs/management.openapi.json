@@ -1376,10 +1376,6 @@
         "type": "object",
         "additionalProperties": false,
         "properties": {
-          "id": {
-            "type": "string",
-            "pattern": "^org_[0-9bcdfghjkmnpqrstvwxz]{27}$"
-          },
           "name": {
             "type": "string",
             "minLength": 1,
@@ -1414,10 +1410,6 @@
         "type": "object",
         "additionalProperties": false,
         "properties": {
-          "id": {
-            "$ref": "#/components/schemas/MemberID",
-            "not": { "const": "mbr_root" }
-          },
           "displayName": {
             "type": "string",
             "minLength": 1,

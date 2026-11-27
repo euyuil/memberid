@@ -26,22 +26,21 @@ Authenticated non-GET operations emit the fixed management principal, HTTP metho
 
 ### Organization and Member ID allocation
 
-MemberID will allocate all new organization and Member IDs, including those created through the private management API. Existing IDs, including `org_system` and `mbr_root`, remain valid references. See the [ID formats and reserved values](identity-model.md#identifiers).
+MemberID allocates the ID for each standalone create. Send `name` for an organization or `displayName` for a Member. The Member creation path identifies the existing parent organization. An explicit `id`, including an empty or null value, returns 400 `invalid_request`. This change preserves stored IDs, references and OIDC subjects. See the [ID formats](identity-model.md#identifiers).
 
-| Operation | Current API | Agreed change (pending implementation) |
-| --- | --- | --- |
-| Create an organization or a Member | Omit `id` to have MemberID allocate it. The response contains the new ID. The request also accepts an unused ordinary ID. | MemberID will reject a request that supplies `id` for the new record. The existing parent organization ID still belongs in the Member creation path. [Issue #195](https://github.com/zhizhun-tech/memberid/issues/195) |
-| Enroll an organization and its first Member | Supply both new IDs. The organization ID identifies the enrollment for retries. | Supply a separate enrollment idempotency key. MemberID will allocate both IDs and return them in the receipt. Retrying the same key and inputs will return the original receipt. Reusing an accepted key with different inputs will return 409. [Issue #196](https://github.com/zhizhun-tech/memberid/issues/196) |
+Callers that previously preallocated IDs must omit that field and persist the ID returned in the 201 response before creating dependent records. If the response is lost, reconcile the outcome with the operator before retrying. A repeated standalone POST can create a second identity. Display names are nonunique.
+
+Atomic enrollment currently requires caller-supplied IDs and has its own [retry contract](#atomic-organization-enrollment).
 
 ### Current endpoints
 
 | Method and path | Input or result |
 | --- | --- |
-| `POST /v1/organizations` | Required `name`; optional `id`. Returns the created Organization with status 201. |
+| `POST /v1/organizations` | Required `name`. Returns the Organization and allocated `id` with status 201. |
 | `GET /v1/organizations` | Paged organization identities. |
 | `GET /v1/organizations/{organizationId}` | One Organization. |
 | `PATCH /v1/organizations/{organizationId}` | At least one of `name` or `status` (`enabled` or `disabled`). |
-| `POST /v1/organizations/{organizationId}/members` | Required `displayName`; optional `id`. Returns the created Member with status 201. |
+| `POST /v1/organizations/{organizationId}/members` | Required `displayName`. Returns the Member and allocated `id` with status 201. |
 | `GET /v1/organizations/{organizationId}/members` | Paged Members in exactly that organization, including blocked Members. |
 | `GET /v1/organizations/{organizationId}/members/{memberId}` | One Member in the specified organization. |
 | `PATCH /v1/organizations/{organizationId}/members/{memberId}` | At least one of `displayName` or boolean `manualBlocked`. |
@@ -54,7 +53,7 @@ MemberID will allocate all new organization and Member IDs, including those crea
 | `POST /v1/eligibility` | Checks an explicit organization, Member, factor, and factor type. |
 | `POST /v1/organizations/{organizationId}/member-eligibility` | Returns requested Members with at least one currently eligible binding. |
 
-Creation generates an identifier when `id` is omitted. An explicitly supplied identifier must use the [identity model](identity-model.md) format and must be unused. Duplicate creation returns 409; it does not update, merge, or reassign an identity. Display names are nonblank text of at most 128 Unicode code points without control characters. Changing a name preserves the stable Member subject.
+Display names are nonblank text of at most 128 Unicode code points without control characters. Changing a name preserves the stable Member subject.
 
 Fresh initialization includes the reserved organization `org_system`. It is returned by organization queries and accepted as an existing organization ID, but rejected for creation or enrollment and cannot be disabled (403). Member blocking and binding revocation preserve the last currently available administrator (409); the same guard applies to immutable Member updates. This credential does not impersonate a platform Member.
 
@@ -131,7 +130,7 @@ A Member qualifies when at least one of its explicit bindings passes the same st
 
 The candidates and eligibility gates are evaluated in one SQL statement and therefore share one database snapshot. Separate requests or batches do not share a snapshot or reserve future eligibility. This query performs no fresh upstream provider verification and does not establish an authentication time, authenticate a token's specific factor, or grant application permissions. Resource servers must still verify the presented token and check its explicit binding through `POST /v1/eligibility`. Applications retain their own permission rules and coordination for subsequent changes.
 
-Domain failures return a JSON `error` code with 400 (`invalid_request`), 401 (`unauthorized`), 403 (`ineligible` or `browser_access_denied`), 404 (`not_found`), 409 (`conflict`), 415 (`json_required`), 422 (`member_id_conflict`), 500 (`internal_error`), or 503 (`provider_unavailable`). Internal database details are not returned. Unknown routes and unsupported methods may use ordinary HTTP errors. Repeating a standalone create after losing the response can create a second record when MemberID allocated the ID. Reconcile the outcome before retrying. For enrollment, follow the receipt and retry rules below.
+Domain failures return a JSON `error` code with 400 (`invalid_request`), 401 (`unauthorized`), 403 (`ineligible` or `browser_access_denied`), 404 (`not_found`), 409 (`conflict`), 415 (`json_required`), 422 (`member_id_conflict`), 500 (`internal_error`), or 503 (`provider_unavailable`). Internal database details are not returned. Unknown routes and unsupported methods may use ordinary HTTP errors. For enrollment, follow the receipt and retry rules below.
 
 ## Validation and current limits
 

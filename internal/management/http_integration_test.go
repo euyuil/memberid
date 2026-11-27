@@ -77,6 +77,44 @@ func (f *fixture) provision(t *testing.T) (identity.Organization, identity.Membe
 	return organization, member
 }
 
+func TestStandaloneCreatesAllocateIdentityIDs(t *testing.T) {
+	f := newFixture(t)
+	organization, member := f.provision(t)
+	if !identity.ValidID(organization.ID, identity.OrganizationKind) || !identity.ValidID(member.ID, identity.MemberKind) || member.OrganizationID != organization.ID {
+		t.Fatal("creation did not return a valid organization and Member")
+	}
+	for _, endpoint := range []struct {
+		path, field, reserved string
+		kind                  identity.Kind
+	}{
+		{"/v1/organizations", "name", "org_system", identity.OrganizationKind},
+		{"/v1/organizations/" + organization.ID + "/members", "displayName", "mbr_root", identity.MemberKind},
+	} {
+		id, err := identity.NewID(endpoint.kind)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, explicit := range []any{id, "", endpoint.reserved, nil} {
+			body, err := json.Marshal(map[string]any{endpoint.field: "Rejected", "id": explicit})
+			if err != nil {
+				t.Fatal(err)
+			}
+			var failure map[string]string
+			f.call(t, "POST", endpoint.path, string(body), 400, &failure)
+			if failure["error"] != "invalid_request" {
+				t.Fatal(failure)
+			}
+		}
+	}
+	var orgs identity.Page[identity.Organization]
+	var members identity.Page[identity.Member]
+	f.call(t, "GET", "/v1/organizations", "", 200, &orgs)
+	f.call(t, "GET", "/v1/organizations/"+organization.ID+"/members", "", 200, &members)
+	if len(orgs.Items) != 2 || len(members.Items) != 1 || members.Items[0].ID != member.ID {
+		t.Fatal("rejected request modified the identity directory")
+	}
+}
+
 func TestManagementAuthenticationAndListenerSeparation(t *testing.T) {
 	f := newFixture(t)
 	for _, headers := range []map[string]string{
@@ -199,7 +237,7 @@ func TestManagementPaginationAndConflicts(t *testing.T) {
 	var member identity.Member
 	path := "/v1/organizations/" + organization.ID + "/members"
 	f.call(t, "POST", path, `{"displayName":"Second member"}`, 201, &member)
-	f.call(t, "POST", path, `{"id":"`+member.ID+`","displayName":"Duplicate member"}`, 409, nil)
+	f.call(t, "POST", path, `{"id":"`+member.ID+`","displayName":"Duplicate member"}`, 400, nil)
 	after := ""
 	seen := map[string]bool{}
 	for {
