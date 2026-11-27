@@ -69,9 +69,7 @@ func TestOrganizationLoginLookupErrors(t *testing.T) {
 		t.Fatal(err)
 	}
 	disabled := "disabled"
-	if err := f.store.AssignOrganizationSlug(t.Context(), identity.OperatorPrincipal(), f.otherMember.OrganizationID, "disabled-team"); err != nil {
-		t.Fatal(err)
-	}
+	f.seedOrganizationSlug(f.otherMember.OrganizationID, "disabled-team")
 	if _, err := f.store.UpdateOrganization(t.Context(), identity.OperatorPrincipal(), f.otherMember.OrganizationID, identity.OrganizationChange{Status: &disabled}); err != nil {
 		t.Fatal(err)
 	}
@@ -119,9 +117,7 @@ func TestDirectOrganizationPasswordLoginOpensMemberAccount(t *testing.T) {
 		t.Fatal(err)
 	}
 	const loginName = "dingtalk"
-	if err := f.store.AssignOrganizationSlug(t.Context(), identity.OperatorPrincipal(), f.member.OrganizationID, loginName); err != nil {
-		t.Fatal(err)
-	}
+	f.seedOrganizationSlug(f.member.OrganizationID, loginName)
 	for previous, value := range []string{f.member.OrganizationID, strings.ToUpper(loginName)} {
 		f.browser = browserClient()
 		page := f.openDirectLogin("/login")

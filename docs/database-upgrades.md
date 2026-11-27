@@ -22,7 +22,7 @@ The schema 26 baseline executable is the ordinary distribution built from commit
 
 Schema 29 imports the legacy OIDC client file from the installation copy in the verified recovery set. It keeps every client ID, credential verifier, registered URI, and protocol policy. When the installation has a `console.json`, its matched console client becomes protected and the upgrader verifies its configured callback and secret. The original installation files remain available to the source executable through the matching recovery set. The new executable uses the database registry for registration and authentication. Existing organization, Member, session, grant, and SAML records are preserved.
 
-Schema 30 adds an empty organization login slug table. Existing organizations retain their permanent IDs. Operators can assign a slug after the upgrade.
+Schema 30 adds an empty organization login slug table. Existing organizations retain their permanent IDs. Organizations can remain without a slug after the upgrade. See the [current assignment and rename policy](operations.md#provision-identities).
 
 Schema 31 records a management owner for each OIDC registration. All existing and legacy-file registrations belong to `org_system`, including clients restricted to another organization for sign-in. The migration preserves the protocol registration, credentials, revision, and grants. The protected console client must always belong to the system organization.
 

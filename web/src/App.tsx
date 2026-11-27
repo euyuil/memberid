@@ -1253,8 +1253,30 @@ export default function App() {
             )}
             {showOrganizationDetails && data.organization && (
               <OrganizationDetails
-                key={data.organization.id}
+                key={JSON.stringify([
+                  data.organization.id,
+                  data.organization.slug,
+                ])}
                 organization={data.organization}
+                canChangeSlug={
+                  org !== systemOrganizationId &&
+                  (data.organization.slug
+                    ? actor.platform
+                    : actor.organizationId === org)
+                }
+                onChangeSlug={(slug) => {
+                  const previous = data.organization?.slug ?? ""
+                  setAction({
+                    title: previous ? "修改组织登录名" : "设置组织登录名",
+                    description: previous
+                      ? `将“${previous}”改为“${slug}”后，旧登录链接将无法访问本组织。成员须更新密码管理器中以 @${previous} 结尾的用户名。其他组织可以立即使用旧登录名。`
+                      : `将本组织的登录名设为“${slug}”。设置后，仅平台管理员可以修改。`,
+                    path: base + "/login-slug",
+                    method: "PUT",
+                    body: { expectedSlug: previous, slug },
+                    destructive: !!previous,
+                  })
+                }}
                 canChangeStatus={actor.platform && org !== systemOrganizationId}
                 save={(name) =>
                   request<Organization>(base, {
@@ -1269,7 +1291,13 @@ export default function App() {
                 onSaved={(organization) =>
                   setData((current) =>
                     current.organization?.id === organization.id
-                      ? { ...current, organization }
+                      ? {
+                          ...current,
+                          organization: {
+                            ...current.organization,
+                            ...organization,
+                          },
+                        }
                       : current
                   )
                 }

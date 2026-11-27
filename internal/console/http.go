@@ -336,6 +336,22 @@ func (s *Service) mutate(w http.ResponseWriter, r *http.Request) {
 	v, e := s.management.Manage(r.Context(), r.Context().Value(sessionKey{}).(session).principal(), action, org, id, change)
 	respond(w, v, e)
 }
+func (s *Service) changeOrganizationSlug(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		Expected *string `json:"expectedSlug"`
+		Slug     string  `json:"slug"`
+	}
+	if !management.DecodeRequest(w, r, &input) {
+		return
+	}
+	if input.Expected == nil {
+		problem(w, 400, "invalid_request")
+		return
+	}
+	err := s.management.ChangeOrganizationSlug(r.Context(), r.Context().Value(sessionKey{}).(session).principal(), r.PathValue("organizationId"), *input.Expected, input.Slug)
+	respond(w, map[string]string{"slug": identity.CanonicalLoginName(input.Slug)}, err)
+}
+
 func (s *Service) administrator(w http.ResponseWriter, r *http.Request) {
 	var v struct {
 		Enabled *bool `json:"enabled"`

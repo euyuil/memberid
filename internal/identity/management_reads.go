@@ -48,12 +48,19 @@ func (service *ManagementService) Organizations(ctx context.Context, principal P
 	return Page[Organization]{Items: []Organization{organization}}, nil
 }
 
-func (service *ManagementService) Organization(ctx context.Context, principal Principal, organizationID string) (Organization, error) {
+type ManagementOrganization struct {
+	Organization
+	Slug string `json:"slug"`
+}
+
+func (service *ManagementService) Organization(ctx context.Context, principal Principal, organizationID string) (ManagementOrganization, error) {
 	store := service.store
 	if err := store.authorizeManagementRead(ctx, principal, organizationResource.require(actionGet, organizationID)); err != nil {
-		return Organization{}, err
+		return ManagementOrganization{}, err
 	}
-	return store.Organization(ctx, organizationID)
+	var slug string
+	org, err := readOrganization(store.pool.QueryRow(ctx, "SELECT "+organizationColumns+",COALESCE((SELECT slug FROM organization_login_slugs WHERE organization_id=organizations.id),'') FROM organizations WHERE id=$1", organizationID), &slug)
+	return ManagementOrganization{Organization: org, Slug: slug}, err
 }
 
 type ManagementMemberPage struct {

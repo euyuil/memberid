@@ -82,9 +82,7 @@ func TestCommonQualifiedPasswordLogin(t *testing.T) {
 		suffix := member.OrganizationID
 		if member.ID == f.member.ID {
 			suffix = "north"
-			if err := f.store.AssignOrganizationSlug(ctx, op, member.OrganizationID, suffix); err != nil {
-				t.Fatal(err)
-			}
+			f.seedOrganizationSlug(member.OrganizationID, suffix)
 		}
 		fields := url.Values{"username": {"Casey@" + suffix}, "password": {password}}
 		f.browser = browserClient()
@@ -119,9 +117,7 @@ func TestCommonAndScopedPasswordAttemptLimit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := f.store.AssignOrganizationSlug(ctx, op, member.OrganizationID, "north"); err != nil {
-		t.Fatal(err)
-	}
+	f.seedOrganizationSlug(member.OrganizationID, "north")
 	path := "/login/" + member.OrganizationID
 	common := f.openDirectLogin("/login")
 	fields := url.Values{"username": {"CASEY@NORTH"}, "password": {"incorrect"}}
@@ -172,9 +168,7 @@ func TestScopedQualifiedPasswordUsername(t *testing.T) {
 		}
 		signIn("Casey@"+member.OrganizationID, member.OrganizationID, true)
 		if member.ID == f.member.ID {
-			if err := f.store.AssignOrganizationSlug(ctx, op, member.OrganizationID, "north"); err != nil {
-				t.Fatal(err)
-			}
+			f.seedOrganizationSlug(member.OrganizationID, "north")
 			signIn("CASEY@NORTH", "north", true)
 			signIn("Casey@"+member.OrganizationID, "north", true)
 			signIn("casey@"+f.otherMember.OrganizationID, "north", false)
@@ -183,6 +177,55 @@ func TestScopedQualifiedPasswordUsername(t *testing.T) {
 			signIn("casey@unknown", member.OrganizationID, false)
 			signIn("casey@@north", member.OrganizationID, false)
 			signIn("casey@", member.OrganizationID, false)
+		}
+	}
+}
+
+func TestReassignedSlugPasswordLogin(t *testing.T) {
+	f := newFixture(t)
+	a, b := f.member, f.otherMember
+	original, err := f.store.SetMemberPassword(t.Context(), identity.OperatorPrincipal(), a.OrganizationID, a.ID, "casey")
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, err := f.store.SetMemberPassword(t.Context(), identity.OperatorPrincipal(), b.OrganizationID, b.ID, "casey")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.seedOrganizationSlug(a.OrganizationID, "old-team")
+	path := "/login/" + a.OrganizationID
+	page := f.openDirectLogin(path)
+	bound := f.submitDirect(page, path, "password", url.Values{"username": {"casey"}, "password": {"wrong"}})
+	f.status(bound, http.StatusOK)
+	if _, err := f.store.Database().Exec(t.Context(), "UPDATE organization_login_slugs SET slug='new-team' WHERE organization_id=$1", a.OrganizationID); err != nil {
+		t.Fatal(err)
+	}
+	f.status(f.call(f.browser, "GET", "/login/old-team", nil, nil), http.StatusNotFound)
+	f.seedOrganizationSlug(b.OrganizationID, "old-team")
+	for slug, id := range map[string]string{"new-team": a.OrganizationID, "old-team": b.OrganizationID} {
+		r := f.call(f.browser, "GET", "/login/"+slug, nil, nil)
+		f.status(r, http.StatusSeeOther)
+		if r.header.Get("Location") != "/login/"+id {
+			t.Fatal("wrong bookmark", slug)
+		}
+	}
+	rejected := f.submitDirect(bound, path, "password", url.Values{"username": {"casey@old-team"}, "password": {other}})
+	f.status(rejected, http.StatusOK)
+	if !strings.Contains(rejected.body, "does not match this organization") {
+		t.Fatal("reassigned suffix changed the bound organization")
+	}
+	finish := f.submitDirect(rejected, path, "password", url.Values{"username": {"casey@" + a.OrganizationID}, "password": {original}})
+	f.status(finish, http.StatusSeeOther)
+	if finish.header.Get("Location") != "/account?memberId="+a.ID {
+		t.Fatal("permanent ID selected wrong Member")
+	}
+	for _, tc := range []struct{ suffix, password, id string }{{"old-team", other, b.ID}, {"new-team", original, a.ID}} {
+		f.browser = browserClient()
+		start := f.openDirectLogin("/login")
+		r := f.submitDirect(start, "/login", "password", url.Values{"username": {"casey@" + tc.suffix}, "password": {tc.password}})
+		f.status(r, http.StatusSeeOther)
+		if r.header.Get("Location") != "/account?memberId="+tc.id {
+			t.Fatal("wrong qualified login", tc.suffix)
 		}
 	}
 }
@@ -196,9 +239,7 @@ func TestProviderLoginNames(t *testing.T) {
 		t.Fatal(err)
 	}
 	for name, id := range map[string]string{"dingtalk": f.member.OrganizationID, "feishu": f.otherMember.OrganizationID, "callback": third.ID} {
-		if err := f.store.AssignOrganizationSlug(ctx, operator, id, name); err != nil {
-			t.Fatal(err)
-		}
+		f.seedOrganizationSlug(id, name)
 		bookmark := f.call(f.browser, "GET", "/login/"+name, nil, nil)
 		f.status(bookmark, http.StatusSeeOther)
 		if bookmark.header.Get("Location") != "/login/"+id {
@@ -228,15 +269,20 @@ func TestProviderLoginNames(t *testing.T) {
 	}
 }
 
+func (f *fixture) seedOrganizationSlug(id, slug string) {
+	f.t.Helper()
+	if _, err := f.store.Database().Exec(f.t.Context(), "INSERT INTO organization_login_slugs(organization_id,slug) VALUES($1,$2)", id, slug); err != nil {
+		f.t.Fatal(err)
+	}
+}
+
 func TestOrganizationSlugLogin(t *testing.T) {
 	f := newFixture(t)
 	_, apps := enableDingTalk(t, f, true)
 	id := f.member.OrganizationID
 	path := "/login/" + id
 	for slug, org := range map[string]string{"team-one": id, "team-two": f.otherMember.OrganizationID} {
-		if err := f.store.AssignOrganizationSlug(t.Context(), identity.OperatorPrincipal(), org, slug); err != nil {
-			t.Fatal(err)
-		}
+		f.seedOrganizationSlug(org, slug)
 	}
 	alias := func(slug, query, want string) string {
 		t.Helper()

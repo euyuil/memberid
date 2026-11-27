@@ -381,6 +381,23 @@ test(
       ...process.env,
       MEMBERID_DATABASE_URL: `postgres://postgres@127.0.0.1:${databasePort}/postgres?sslmode=disable`,
     };
+    const pg = (sql) =>
+      command("docker", [
+        "exec",
+        database,
+        "psql",
+        "--username",
+        "postgres",
+        "--dbname",
+        "postgres",
+        "--no-psqlrc",
+        "--tuples-only",
+        "--no-align",
+        "--set",
+        "ON_ERROR_STOP=1",
+        "--command",
+        sql,
+      ]);
     const cli = (...args) => command(executable, args, env);
     let installation = path.join(directory, "installation");
     cli("config", "init", "--directory", installation, "--issuer", issuer);
@@ -929,23 +946,6 @@ test(
       { skip: !upgradeBaseline },
       async () => {
         const oldExecutable = executable;
-        const pg = (sql) =>
-          command("docker", [
-            "exec",
-            database,
-            "psql",
-            "--username",
-            "postgres",
-            "--dbname",
-            "postgres",
-            "--no-psqlrc",
-            "--tuples-only",
-            "--no-align",
-            "--set",
-            "ON_ERROR_STOP=1",
-            "--command",
-            sql,
-          ]);
         // Each request uses a fresh management process against the selected installation.
         async function management(route, body) {
           const probe = net.createServer();
@@ -1220,14 +1220,7 @@ test(
         );
         cli("database", "backup-check", "--backup-directory", recovery);
         assert.throws(() => command(oldExecutable, ["database", "check"], env));
-        cli(
-          "organization",
-          "set-slug",
-          "--organization",
-          organization.id,
-          "--slug",
-          "example-team",
-        );
+        pg(`INSERT INTO organization_login_slugs(organization_id,slug) VALUES ('${organization.id}','example-team')`);
         await startProvider();
         const alias = await browser(`${issuer}/login/example-team`);
         assert.equal(alias.status, 303);
@@ -1412,14 +1405,7 @@ test(
             cli("organization", "create", "--name", label),
           );
           if (loginName)
-            cli(
-              "organization",
-              "set-slug",
-              "--organization",
-              org.id,
-              "--slug",
-              loginName,
-            );
+            pg(`INSERT INTO organization_login_slugs(organization_id,slug) VALUES ('${org.id}','${loginName}')`);
           const actor = JSON.parse(
             cli("member", "create", "--organization", org.id, "--name", label),
           );

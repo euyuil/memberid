@@ -14,7 +14,7 @@ import (
 
 func manage(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	if len(args) < 2 {
-		return errors.New("usage: memberid database <init|check|application-id-plan|upgrade-plan|upgrade|backup-check> | organization <create|set-slug> | member <create|block|unblock>")
+		return errors.New("usage: memberid database <init|check|application-id-plan|upgrade-plan|upgrade|backup-check> | organization create | member <create|block|unblock>")
 	}
 	if args[0] == "database" && (args[1] == "application-id-plan" || args[1] == "upgrade-plan" || args[1] == "upgrade" || args[1] == "backup-check") {
 		return databaseUpgrade(ctx, args[1:], stdout, stderr)
@@ -73,11 +73,6 @@ func manage(ctx context.Context, args []string, stdout, stderr io.Writer) error 
 	}
 	flags := flag.NewFlagSet(args[0]+" "+args[1], flag.ContinueOnError)
 	flags.SetOutput(stderr)
-	var slug string
-	setSlug := args[0] == "organization" && args[1] == "set-slug"
-	if setSlug {
-		flags.StringVar(&slug, "slug", "", "permanent organization login slug")
-	}
 	name := flags.String("name", "", "display name")
 	organizationID := flags.String("organization", "", "organization identifier")
 	memberID := flags.String("member", "", "member identifier")
@@ -87,7 +82,7 @@ func manage(ctx context.Context, args []string, stdout, stderr io.Writer) error 
 	if flags.NArg() != 0 {
 		return errors.New("unexpected positional arguments")
 	}
-	if args[0] == "organization" && args[1] != "create" && !setSlug || args[0] == "member" && args[1] != "create" && args[1] != "block" && args[1] != "unblock" {
+	if args[0] == "organization" && args[1] != "create" || args[0] == "member" && args[1] != "create" && args[1] != "block" && args[1] != "unblock" {
 		return errors.New("unknown management operation")
 	}
 	store, err := identity.Open(ctx, databaseURL)
@@ -98,14 +93,6 @@ func manage(ctx context.Context, args []string, stdout, stderr io.Writer) error 
 	var result any
 	switch args[0] {
 	case "organization":
-		if setSlug {
-			if flags.NFlag() != 2 || *organizationID == "" || slug == "" {
-				return errors.New("usage: memberid organization set-slug --organization ID --slug SLUG")
-			}
-			err = store.AssignOrganizationSlug(ctx, identity.OperatorPrincipal(), *organizationID, slug)
-			result = map[string]string{"organizationId": *organizationID, "slug": identity.CanonicalLoginName(slug)}
-			break
-		}
 		if *organizationID != "" || *memberID != "" {
 			return errors.New("organization create accepts only --name")
 		}

@@ -13,16 +13,25 @@ func TestOrganizationSlugReservations(t *testing.T) {
 	first, _ := organizationAndMember(t, store)
 	second, _ := organizationAndMember(t, store)
 	ctx := t.Context()
-	assign := func(id, slug string) error { return store.AssignOrganizationSlug(ctx, OperatorPrincipal(), id, slug) }
-	if err := store.AssignOrganizationSlug(ctx, Principal{}, first.ID, "example"); !errors.Is(err, ErrForbidden) {
-		t.Fatalf("assignment without operator authority: %v", err)
+	service := NewManagementService(store, nil, nil, 0)
+	admins := map[string]Principal{}
+	for n, org := range []string{first.ID, second.ID, store.SystemOrganizationID()} {
+		m, f := administratorMember(t, store, org, n+1)
+		admins[org] = administratorActor(t, store, m, f).Principal()
+	}
+	platform := admins[store.SystemOrganizationID()]
+	assign := func(id, slug string) error { return service.ChangeOrganizationSlug(ctx, admins[id], id, "", slug) }
+	for _, principal := range []Principal{Principal{}, OperatorPrincipal(), platform, admins[second.ID]} {
+		if err := service.ChangeOrganizationSlug(ctx, principal, first.ID, "", "example"); !errors.Is(err, ErrForbidden) {
+			t.Fatalf("unauthorized first assignment: %v", err)
+		}
 	}
 	for _, slug := range []string{"", "Kelvin", "SYSTEM", " example", "a--b", "a-", "-a", "a/b", "a_b", "团队", "system", strings.Repeat("a", 64)} {
 		if err := assign(first.ID, slug); !errors.Is(err, ErrInvalid) {
 			t.Fatalf("assigned invalid slug %q: %v", slug, err)
 		}
 	}
-	if err := assign(store.SystemOrganizationID(), "example"); !errors.Is(err, ErrInvalid) {
+	if err := assign(store.SystemOrganizationID(), "example"); !errors.Is(err, ErrForbidden) {
 		t.Fatal("system organization accepted an alias", err)
 	}
 	results := make(chan error, 2)
@@ -63,5 +72,34 @@ func TestOrganizationSlugReservations(t *testing.T) {
 	}
 	if err := assign(other, "example-2"); !errors.Is(err, ErrConflict) {
 		t.Fatal("disabled organization's slug was reused", err)
+	}
+	if err := service.ChangeOrganizationSlug(ctx, admins[id], id, "example-2", "new-team"); !errors.Is(err, ErrForbidden) {
+		t.Fatal("owner renamed existing slug", err)
+	}
+	if err := assign(other, "occupied"); err != nil {
+		t.Fatal(err)
+	}
+	rename := func(from, to string) error { return service.ChangeOrganizationSlug(ctx, platform, id, from, to) }
+	if err := rename("example-2", "occupied"); !errors.Is(err, ErrConflict) {
+		t.Fatal("occupied rename", err)
+	}
+	if err := rename("stale", "new-team"); !errors.Is(err, ErrConflict) {
+		t.Fatal("stale rename", err)
+	}
+	if err := rename("Example-2", "NEW-team"); err != nil {
+		t.Fatal(err)
+	}
+	if suffix, err := store.OrganizationLoginSuffix(ctx, id); err != nil || suffix != "new-team" {
+		t.Fatal(suffix, err)
+	}
+	if err := service.ChangeOrganizationSlug(ctx, platform, other, "occupied", "example-2"); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := store.LoginOrganizationIDBySlug(ctx, "example-2"); got != other || err != nil {
+		t.Fatal(got, err)
+	}
+	events, err := store.ManagementEvents(ctx, id, "", 0)
+	if err != nil || len(events) == 0 || events[0].Action != "organization.slug.update" || events[0].Actor != platform.memberID {
+		t.Fatal("missing rename audit", events, err)
 	}
 }

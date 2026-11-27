@@ -12,21 +12,31 @@ import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { RecordIdentifier } from "@/components/directory"
 
-export type Organization = { id: string; name: string; status: string }
+export type Organization = {
+  id: string
+  name: string
+  status: string
+  slug?: string
+}
 
 export function OrganizationDetails({
   organization,
   canChangeStatus,
+  canChangeSlug,
+  onChangeSlug,
   save,
   onSaved,
   onStatusChange,
 }: {
   organization: Organization
+  canChangeSlug: boolean
+  onChangeSlug: (slug: string) => void
   canChangeStatus: boolean
   save: (name: string) => Promise<Organization>
   onSaved: (organization: Organization) => void
   onStatusChange: () => void
 }) {
+  const [slug, setSlug] = useState(organization.slug ?? "")
   const [name, setName] = useState(organization.name)
   const [pending, setPending] = useState(false)
   const [invalid, setInvalid] = useState(false)
@@ -107,6 +117,40 @@ export function OrganizationDetails({
             ) : null}
           </div>
         </form>
+        {canChangeSlug ? (
+          <form
+            className="mb-6"
+            onSubmit={(event) => {
+              event.preventDefault()
+              onChangeSlug(slug.toLowerCase())
+            }}
+          >
+            <Field>
+              <FieldLabel htmlFor="organization-slug">组织登录名</FieldLabel>
+              <div className="flex items-center gap-2">
+                <Input
+                  id="organization-slug"
+                  value={slug}
+                  required
+                  pattern="[A-Za-z0-9]+(-[A-Za-z0-9]+)*"
+                  maxLength={63}
+                  onChange={(event) => setSlug(event.target.value)}
+                />
+                <Button
+                  type="submit"
+                  disabled={!slug || slug.toLowerCase() === organization.slug}
+                >
+                  {organization.slug ? "修改登录名" : "设置登录名"}
+                </Button>
+              </div>
+            </Field>
+          </form>
+        ) : (
+          <dl className="mb-6">
+            <dt>组织登录名</dt>
+            <dd>{organization.slug || "未设置"}</dd>
+          </dl>
+        )}
         <dl>
           <dt>组织 ID</dt>
           <dd>

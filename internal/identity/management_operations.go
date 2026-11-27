@@ -24,6 +24,7 @@ type managementResource string
 const (
 	organizationsResource                    managementResource = "organizations"
 	organizationResource                     managementResource = organizationsResource + "/{organizationId}"
+	organizationSlugResource                 managementResource = organizationResource + "/loginSlug"
 	membersResource                          managementResource = organizationResource + "/members"
 	memberResource                           managementResource = membersResource + "/{memberId}"
 	memberPasswordResource                   managementResource = memberResource + "/password"
@@ -57,6 +58,7 @@ const (
 var managementOperations = map[managementResource][]string{
 	organizationsResource:                    {actionCreate, actionList},
 	organizationResource:                     {actionGet, actionUpdate, actionStatusUpdate},
+	organizationSlugResource:                 {actionCreate, actionUpdate},
 	membersResource:                          {actionCreate, actionList},
 	memberResource:                           {actionGet, actionUpdate, actionStatusUpdate},
 	memberPasswordResource:                   {actionCreate, actionUpdate},

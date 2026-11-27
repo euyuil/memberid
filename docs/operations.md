@@ -36,7 +36,6 @@ an incompatible database and choose a separately prepared installation; retrying
 
 ```sh
 memberid organization create --name "Example organization"
-memberid organization set-slug --organization ORGANIZATION_ID --slug example-team
 memberid member create --organization ORGANIZATION_ID --name "Example member"
 memberid member block --organization ORGANIZATION_ID --member MEMBER_ID
 memberid member unblock --organization ORGANIZATION_ID --member MEMBER_ID
@@ -44,7 +43,7 @@ memberid member unblock --organization ORGANIZATION_ID --member MEMBER_ID
 
 Commands return JSON containing the affected identity. Use the identifiers returned by creation in subsequent commands. Names do not establish identity or verified contact ownership.
 
-An operator can assign one permanent login slug to an ordinary organization. Choose 1–63 ASCII letters or digits, optionally separated by single internal hyphens. Assignment and lookup accept either ASCII letter case. For example, `North-Team` is stored as `north-team` and both spellings resolve to that organization. Surrounding whitespace is rejected. The name `system` is reserved. The names `callback`, `dingtalk`, and `feishu` are available. The system organization uses `/login/system`. Assignment is explicit and final. Renaming or disabling an organization preserves its reservation, and its published slug can never be assigned to another organization. At `/login`, a Member can enter the assigned login name or the permanent organization ID. Both open the same organization and authentication methods. An organization without a login name can use its ID in the form or bookmark `/login/{organizationID}`.
+An ordinary organization can start without a login slug. Its own organization administrator may assign the first slug in the console. Only a platform administrator may rename an assigned slug. Each slug is 1–63 ASCII letters or digits, optionally separated by single internal hyphens. Input is case-insensitive and stored in lowercase. The built-in slug `system` is permanent. Display-name changes and disablement preserve the mapping. A rename immediately releases the old slug for another organization. Old bookmarks and saved password-manager usernames with that suffix stop reaching the original organization. Update them or use its permanent ID. At `/login`, a Member can enter the assigned login name or the permanent organization ID. Both open the same organization and authentication methods. An organization without a login name can use its ID in the form or bookmark `/login/{organizationID}`.
 
 These commands use the operator's explicit database access. They do not create an end-user password, bypass an authentication provider, or grant permissions in another application. Manual unblocking preserves any external-departure block.
 

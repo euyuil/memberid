@@ -101,6 +101,7 @@ comes from stored relationships, not caller-supplied path strings.
 | --- | --- |
 | `organizations` | Platform organization collection; creation and platform listing. |
 | `O` | One organization; ordinary properties and status share this target. |
+| `O/loginSlug` | `PUT /api/organizations/{organizationId}/login-slug` compares `expectedSlug` with the current mapping. An empty expected slug selects `create` and requires an administrator belonging to the organization. Renaming requires `update`. The system organization is protected. |
 | `O/members`, `M` | Member collection and individual Member. |
 | `M/password` | One Member's local password credential. |
 | `M/email` | One Member's administrator-managed email and provenance; supported actions are `get` and `update`. |
@@ -132,6 +133,7 @@ Member. All administrative entries require current identity/session eligibility.
 | Read organizations | Global collection and any organization | Own organization only | Account-page organization context only |
 | Create organization | `create` on `organizations` | No | No |
 | Rename organization | `update` on any `O` | `update` on own `O` | No |
+| Assign or rename an organization login slug | Rename an existing ordinary organization slug | First assignment in own organization | No |
 | Enable/disable organization | `status.update` on ordinary `O` | No | No |
 | List/get/create Members | Any organization's collection or Member; global directory | Own organization's collection or Member | Account-page self context only; no management directory |
 | Rename Member | `update` on any `M` | `update` on own organization's `M` | No self-service rename interface |

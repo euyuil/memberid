@@ -43,6 +43,11 @@ export function describeEvent(event: ManagementEvent) {
     case "member.create":
       label = "创建成员"
       break
+    case "organization.slug.create":
+    case "organization.slug.update":
+      label = action.endsWith(".create") ? "设置组织登录名" : "修改组织登录名"
+      field("slug", "组织登录名", name)
+      break
     case "organization.update":
       label = "更新组织"
       field("name", "重命名", name)
