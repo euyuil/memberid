@@ -2,8 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'release/[0-9]*.[0-9]*']
   pull_request:
+    types: [opened, reopened, synchronize, edited]
 
 permissions:
   contents: read
@@ -86,13 +87,13 @@ jobs:
         if: runner.os == 'Linux'
         run: go test -race ./...
       - name: Export the tested image
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && runner.os == 'Linux'
+        if: github.event_name == 'push' && runner.os == 'Linux'
         run: |
           mkdir -p dist/image
           docker save --output dist/image/memberid.tar memberid:ci
           (cd dist/image && sha256sum memberid.tar > SHA256SUMS)
       - name: Retain the tested image for publication
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && runner.os == 'Linux'
+        if: github.event_name == 'push' && runner.os == 'Linux'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: memberid-linux-amd64-image
@@ -103,7 +104,7 @@ jobs:
   publish:
     name: Publish container image
     needs: [build, security, database]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push'
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -135,7 +136,15 @@ jobs:
         run: |
           docker push "$MEMBERID_IMAGE"
           digest=$(docker image inspect "$MEMBERID_IMAGE" --format '{{index .RepoDigests 0}}')
+          printf '{"commit":"%s","digest":"%s"}\n' "$GITHUB_SHA" "${digest##*@}" > "$RUNNER_TEMP/image.json"
           printf 'Published `%s`\n\nDeploy manually using `%s`.\n' "$MEMBERID_IMAGE" "$digest" >> "$GITHUB_STEP_SUMMARY"
+          printf '\nManual release source: `%s/%s`.\n' "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" >> "$GITHUB_STEP_SUMMARY"
+      - name: Record the published digest for manual release
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: image-receipt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/image.json
+          if-no-files-found: error
       - name: Remove registry credentials
         if: always()
         run: rm -rf -- "$DOCKER_CONFIG"
@@ -159,6 +168,13 @@ jobs:
           echo "$RUNNER_TEMP/gitleaks-bin" >> "$GITHUB_PATH"
       - name: Check commit metadata
         run: sh scripts/check-metadata.sh history HEAD
+      - name: Validate the PR title
+        if: github.event_name == 'pull_request'
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: python3 -B -c 'import os, sys; sys.path.insert(0, "scripts"); from release_version import impact; impact(os.environ["PR_TITLE"])'
+      - name: Test release planning and publication
+        run: python3 -B -m unittest discover -s scripts -p 'test_release.py'
       - name: Scan Git history
         run: gitleaks git --redact --no-banner --no-color --log-opts="--all"
 

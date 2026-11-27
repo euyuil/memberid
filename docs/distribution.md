@@ -22,7 +22,7 @@ The destination must not exist and its parent must already exist. Failed builds 
 
 ## Automatically published images
 
-A successful `main` push publishes the Linux amd64 image to
+A successful push to `main` or a `release/X.Y` stabilization branch publishes the Linux amd64 image to
 `ghcr.io/euyuil/memberid:sha-<full-commit-sha>`. Pull requests run validation without
 publishing. Publication waits for both platform builds, repository security, and
 PostgreSQL integration. The Linux job exports the same image whose executable was
@@ -47,6 +47,10 @@ including a Kubernetes or k3s Pod's `image` field. SHA tags identify the source
 revision, but are not registry-enforced immutable references; a rerun may replace
 the tag. The digest pins the exact published image. Only Linux amd64 is currently
 published; there is no `latest` tag or multi-architecture image.
+
+The publishing job also retains an image digest receipt for its specific CI run
+and attempt. A maintainer can select that receipt to [publish a versioned release](releases.md).
+The executable and its OCI version label continue to identify the tested SHA build.
 
 Before a manual rollout, back up the database, configuration, keys, and current
 image digest; follow the [explicit database upgrade procedure](database-upgrades.md)

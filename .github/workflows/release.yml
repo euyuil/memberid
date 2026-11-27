@@ -1,0 +1,55 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Release operation
+        type: choice
+        options: [rc, stable, promote]
+        required: true
+      source:
+        description: CI RUN_ID/ATTEMPT from its publication summary, or the exact RC tag for promotion
+        required: true
+        type: string
+      confirm_version:
+        description: Leave empty to preview. Enter the exact proposed version to publish.
+        type: string
+      rolling_from:
+        description: Space-separated stable versions verified for rolling upgrade (empty means unverified)
+        type: string
+      declare_api:
+        description: Explicitly declare the first stable public API (target 1.0.0)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: versioned-releases
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      packages: write
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Plan or publish the selected build
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_MODE: ${{ inputs.mode }}
+          RELEASE_SOURCE: ${{ inputs.source }}
+          CONFIRM_VERSION: ${{ inputs.confirm_version }}
+          ROLLING_FROM: ${{ inputs.rolling_from }}
+          DECLARE_API: ${{ inputs.declare_api }}
+        run: python3 -B scripts/publish_release.py | tee -a "$GITHUB_STEP_SUMMARY"
+        shell: bash

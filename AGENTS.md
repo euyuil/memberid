@@ -82,6 +82,7 @@ The repository is being bootstrapped. These guidelines define intended implement
 - Before merging, review the complete PR diff and existing review feedback, verify that required checks pass for the latest revision, and satisfy repository protection and approval requirements. Resolve routine CI failures and merge conflicts within scope without asking for renewed permission. Never bypass checks or required approvals.
 - An implementation item is complete only after its PR is verified as merged into `main`, or the issue is explicitly skipped with evidence. Opening a PR alone does not complete an implementation task.
 - Use Conventional Commits, such as `feat: add OIDC client registration`. Keep each commit focused.
+- Use a Conventional Commit PR title and retain it as the squash commit title. Mark breaking public interface or configuration changes with `!` in the title and document migration in the PR. Follow the [manual release policy](docs/releases.md).
 - Scope each PR to one clearly stated purpose and a complete outcome that can be reviewed, validated, and merged independently. Include the implementation, tests, and documentation needed for that outcome.
 - Split unrelated cleanup, broad refactoring, and additional features into separate PRs when they provide independently useful results. Do not bundle independent concerns into the same PR.
 - Keep tightly coupled changes together so intermediate merged states build, remain usable, and preserve correctness. Do not split a change so that a later PR is required to make an earlier one work correctly.
