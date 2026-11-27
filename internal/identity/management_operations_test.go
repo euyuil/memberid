@@ -31,6 +31,7 @@ func TestManagementOperationMatrix(t *testing.T) {
 			{oidcClientResource, []string{"example-client"}, "oidcApplications/example-client", []string{"update", "status.update", "credential.rotate"}, nil, nil},
 			{organizationsResource, nil, "organizations", []string{"create", "list"}, nil, nil},
 			{organizationResource, []string{targetOrganization}, base, []string{"get", "update", "status.update"}, []string{"get", "update"}, nil},
+			{organizationSlugResource, []string{targetOrganization}, base + "/loginSlug", []string{"create", "update"}, []string{"create"}, nil},
 			{membersResource, []string{targetOrganization}, base + "/members", []string{"create", "list"}, []string{"create", "list"}, nil},
 			{memberResource, []string{targetOrganization, memberID}, base + "/members/" + memberID, []string{"get", "update", "status.update"}, []string{"get", "update", "status.update"}, []string{"get"}},
 			{memberPasswordResource, []string{targetOrganization, memberID}, base + "/members/" + memberID + "/password", []string{"create", "update"}, nil, nil},

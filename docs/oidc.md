@@ -38,7 +38,7 @@ Opening the login page and selecting an organization create no authorization req
 
 With reusable SSO, displaying the Member and consent choices also leaves the request in the browser. Confirmation rechecks the displayed session and current eligibility, then records the completed interaction before the OIDC callback issues a code. Silent authorization follows the same completion path when policy permits. Concurrent confirmations and callbacks can issue at most one code per interaction. The original ten-minute login deadline also applies after organization selection. After code expiry, cleanup retains the request ID long enough to cover any outstanding login link.
 
-An operator-assigned `/login/{slug}` is a bookmarkable GET alias. It resolves the enabled organization and redirects to the same issuer’s permanent `/login/{organizationID}` path, forwarding only the `request` parameter. The ID path checks the browser transaction and the client’s registered organization before presenting authentication methods. See [slug assignment](operations.md#provision-identities).
+An organization’s current `/login/{slug}` is a bookmarkable GET alias. It resolves the enabled organization and redirects to the same issuer’s permanent `/login/{organizationID}` path, forwarding only the `request` parameter. The ID path checks the browser transaction and the client’s registered organization before presenting authentication methods. See [slug assignment](operations.md#provision-identities).
 
 Organization login URLs return HTTP 404 for unknown or disabled organizations. If the organization lookup fails because of a database error, the login URL and organization selection form return HTTP 503.
 

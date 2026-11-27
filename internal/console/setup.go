@@ -70,6 +70,7 @@ func New(ctx context.Context, store *identity.Store, installation *config.Loaded
 		respond(w, v, e)
 	})
 	s.routes.HandleFunc("PATCH /api/organizations/{organizationId}", s.mutate)
+	s.routes.HandleFunc("PUT /api/organizations/{organizationId}/login-slug", s.changeOrganizationSlug)
 	s.routes.HandleFunc("GET /api/members", s.allOrganizationMembers)
 	s.routes.HandleFunc("GET /api/organizations/{organizationId}/members", s.members)
 	s.routes.HandleFunc("POST /api/organizations/{organizationId}/members", s.mutate)

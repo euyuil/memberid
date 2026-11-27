@@ -51,9 +51,7 @@ func TestOIDCOrganizationLaunch(t *testing.T) {
 		}
 	}
 	const loginName = "subscriber-b"
-	if err := f.store.AssignOrganizationSlug(ctx, operator, b.OrganizationID, loginName); err != nil {
-		t.Fatal(err)
-	}
+	f.seedOrganizationSlug(b.OrganizationID, loginName)
 	start, _ := f.authorization(app.ClientID, scope, nil)
 	f.status(start, 302)
 	common := f.call(f.browser, "GET", start.header.Get("Location"), nil, nil)

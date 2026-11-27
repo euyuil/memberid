@@ -4,6 +4,8 @@ import (
 	"context"
 	"regexp"
 	"strings"
+
+	"github.com/jackc/pgx/v5"
 )
 
 var organizationSlugPattern = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
@@ -22,18 +24,56 @@ func ValidOrganizationSlug(slug string) bool {
 	return len(slug) <= 63 && organizationSlugPattern.MatchString(CanonicalLoginName(slug))
 }
 
-// AssignOrganizationSlug reserves both identifiers in one insert. Disabled
-// organizations retain their mapping, and there is no reassignment operation.
-func (store *Store) AssignOrganizationSlug(ctx context.Context, principal Principal, id, slug string) error {
-	if principal.kind != operatorPrincipal {
+// ChangeOrganizationSlug compares the observed slug with the current mapping.
+// Only an administrator who belongs to the organization can first assign its name.
+func (service *ManagementService) ChangeOrganizationSlug(ctx context.Context, principal Principal, id, expected, slug string) error {
+	if principal.kind != memberPrincipal {
 		return ErrForbidden
 	}
-	slug = CanonicalLoginName(slug)
-	if !ValidID(id, OrganizationKind) || id == store.systemOrganizationID || slug == SystemOrganizationSlug || !ValidOrganizationSlug(slug) {
+	expected, slug = CanonicalLoginName(expected), CanonicalLoginName(slug)
+	if !ValidID(id, OrganizationKind) || !ValidOrganizationSlug(slug) || slug == SystemOrganizationSlug || expected != "" && !ValidOrganizationSlug(expected) {
 		return ErrInvalid
 	}
-	_, err := store.pool.Exec(ctx, "INSERT INTO organization_login_slugs(organization_id,slug) VALUES($1,$2)", id, slug)
-	return storageError(err)
+	if id == service.store.systemOrganizationID {
+		return ErrForbidden
+	}
+	return pgx.BeginFunc(ctx, service.store.pool, func(tx pgx.Tx) error {
+		if err := managementLock(ctx, tx); err != nil {
+			return err
+		}
+		actor, err := managementActor(ctx, tx, principal.memberID, principal.grantID)
+		if err != nil {
+			return err
+		}
+		action, event := actionUpdate, "organization.slug.update"
+		if expected == "" {
+			if actor.OrganizationID != id {
+				return ErrForbidden
+			}
+			action, event = actionCreate, "organization.slug.create"
+		}
+		if err := checkManagementPermissions(managementPermissions(actor), organizationSlugResource.require(action, id)); err != nil {
+			return err
+		}
+		if expected == "" {
+			_, err = tx.Exec(ctx, "INSERT INTO organization_login_slugs(organization_id,slug) VALUES($1,$2)", id, slug)
+			if err != nil {
+				return storageError(err)
+			}
+		} else {
+			result, err := tx.Exec(ctx, "UPDATE organization_login_slugs SET slug=$3 WHERE organization_id=$1 AND slug=$2", id, expected, slug)
+			if err != nil {
+				return storageError(err)
+			}
+			if result.RowsAffected() == 0 {
+				return ErrConflict
+			}
+			if expected == slug {
+				return nil
+			}
+		}
+		return managementEvent(ctx, tx, principal, id, "", event, map[string]string{"slug": slug}, map[string]any{"slug": expected})
+	})
 }
 
 // OrganizationLoginSuffix returns the current slug or the permanent ID for a password login.
