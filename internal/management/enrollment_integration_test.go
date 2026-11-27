@@ -11,19 +11,11 @@ import (
 
 func TestEnrollmentManagementContract(t *testing.T) {
 	f := newFixture(t)
-	organizationID, err := identity.NewID(identity.OrganizationKind)
-	if err != nil {
-		t.Fatal(err)
-	}
-	memberID, err := identity.NewID(identity.MemberKind)
-	if err != nil {
-		t.Fatal(err)
-	}
 	factor, err := f.store.EnsureFactor(t.Context(), "phone", "phone:e164", "+8619900000001")
 	if err != nil {
 		t.Fatal(err)
 	}
-	input := identity.OrganizationEnrollment{OrganizationID: organizationID, MemberID: memberID, FactorID: factor.ID, BindingID: "00000000-0000-4000-8000-000000000001", Name: "Example organization"}
+	input := identity.OrganizationEnrollment{IdempotencyKey: "00000000-0000-4000-8000-000000000010", FactorID: factor.ID, BindingID: "00000000-0000-4000-8000-000000000001", Name: "Example organization"}
 	body, err := json.Marshal(input)
 	if err != nil {
 		t.Fatal(err)
@@ -31,10 +23,10 @@ func TestEnrollmentManagementContract(t *testing.T) {
 	var first, second identity.EnrollmentReceipt
 	f.call(t, "POST", "/v1/organization-enrollments", string(body), 200, &first)
 	f.call(t, "POST", "/v1/organization-enrollments", string(body), 200, &second)
-	if first != second || first.OrganizationID != organizationID || first.MemberID != memberID {
+	if first != second || !identity.ValidID(first.OrganizationID, identity.OrganizationKind) || !identity.ValidID(first.MemberID, identity.MemberKind) {
 		t.Fatal("HTTP enrollment replay changed the receipt")
 	}
-	f.call(t, "GET", "/v1/organizations/"+organizationID+"/enrollment", "", 200, &second)
+	f.call(t, "GET", "/v1/organizations/"+first.OrganizationID+"/enrollment", "", 200, &second)
 	if second != first {
 		t.Fatal("HTTP receipt lookup differs")
 	}
@@ -44,18 +36,17 @@ func TestEnrollmentManagementContract(t *testing.T) {
 		t.Fatal(err)
 	}
 	f.call(t, "POST", "/v1/organization-enrollments", string(body), 409, nil)
-	input.OrganizationID, err = identity.NewID(identity.OrganizationKind)
-	if err != nil {
-		t.Fatal(err)
+	for _, addition := range []string{`"organizationId":"` + first.OrganizationID + `"`, `"memberId":"` + first.MemberID + `"`, `"memberId":null`, `"organizationId":""`} {
+		var failure map[string]string
+		f.call(t, "POST", "/v1/organization-enrollments", string(body[:len(body)-1])+","+addition+"}", 400, &failure)
+		if failure["error"] != "invalid_request" {
+			t.Fatal(failure)
+		}
 	}
+	input.IdempotencyKey = ""
 	body, err = json.Marshal(input)
 	if err != nil {
 		t.Fatal(err)
 	}
-	var failure map[string]string
-	f.call(t, "POST", "/v1/organization-enrollments", string(body), 422, &failure)
-	if failure["error"] != "member_id_conflict" {
-		t.Fatal("collision category was lost")
-	}
-	f.call(t, "GET", "/v1/organizations/"+input.OrganizationID, "", 404, nil)
+	f.call(t, "POST", "/v1/organization-enrollments", string(body), 400, nil)
 }
