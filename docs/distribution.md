@@ -24,10 +24,9 @@ The destination must not exist and its parent must already exist. Failed builds 
 
 A successful push to `main` or a `release/X.Y` stabilization branch publishes the Linux amd64 image to
 `ghcr.io/euyuil/memberid:sha-<full-commit-sha>`. Pull requests run validation without
-publishing. Publication waits for both platform builds, repository security, and
-PostgreSQL integration. The Linux job exports the same image whose executable was
-compared with the native package; the publishing job verifies its archive checksum
-and version before pushing it. It does not rebuild the executable or image.
+publishing. Publication waits for repository security. The Linux job packages the executable, checks
+its file hashes, builds the image, and verifies its version. Full CI independently pulls
+the published digest and compares its executable to the Linux package under test.
 
 The workflow uses GitHub's short-lived `GITHUB_TOKEN` with `packages: write` only
 in the publishing job. It requires no custom registry credential or deployment
@@ -41,9 +40,9 @@ outside the repository and workflow. Do not supply them through CI secrets,
 variables, build arguments, artifacts, or logs. CI has no deployment step or
 cluster access; a publication never updates a running installation.
 
-Select a successful commit and copy its `ghcr.io/euyuil/memberid@sha256:...`
-reference from the publication job summary. Use that digest for manual deployment,
-including a Kubernetes or k3s Pod's `image` field. SHA tags identify the source
+Select a fully validated stable release for a production rollout and use its
+`ghcr.io/euyuil/memberid@sha256:...` reference, including in a Kubernetes or k3s
+Pod's `image` field. SHA tags identify the source
 revision, but are not registry-enforced immutable references; a rerun may replace
 the tag. The digest pins the exact published image. Only Linux amd64 is currently
 published; there is no `latest` tag or multi-architecture image.
@@ -57,7 +56,7 @@ image digest; follow the [explicit database upgrade procedure](database-upgrades
 if required. Configure the installation and trust mounts separately, then verify
 the deployed issuer, console, and an actual login. Rolling back an image alone
 cannot undo a database migration: recovery requires the matching recovery set.
-The temporary Actions archive expires after seven days; the pushed image is a
+The small Actions receipt follows repository artifact retention. The pushed image is a
 separate registry artifact. These CI snapshots do not create Git tags or GitHub
 Releases, and do not select MemberID's project license.
 

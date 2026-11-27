@@ -14,140 +14,40 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
-    name: Build and test (${{ matrix.os }})
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-24.04, windows-2025]
-    runs-on: ${{ matrix.os }}
-    env:
-      PACKAGE_VERSION: sha-${{ github.sha }}
+  quick:
+    name: PR checks
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 0
           persist-credentials: false
+      - name: Select affected checks
+        id: scope
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: python3 -B scripts/pr_checks.py "$BASE_SHA" "$HEAD_SHA" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        if: steps.scope.outputs.code == 'true'
         with:
           go-version-file: go.mod
-          cache: false
+          cache: true
       - name: Install reviewed Node LTS
-        shell: bash
+        if: steps.scope.outputs.code == 'true'
         run: sh scripts/ci-node.sh
-      - name: Check and build
-        shell: bash
+      - name: Check and build on Linux
+        if: steps.scope.outputs.code == 'true'
         run: sh scripts/check.sh
-      - name: Compile optional interoperability checks
-        run: go test -tags=interop ./internal/interop
-      - name: Package native executable
-        shell: bash
-        run: |
-          sh scripts/package.sh "$PACKAGE_VERSION" dist/package
-          (cd dist/package && sha256sum --check --quiet SHA256SUMS)
-          if [ "$RUNNER_OS" = Windows ]; then binary=memberid.exe; else binary=memberid; fi
-          test "$(./dist/package/$binary version)" = "MemberID $PACKAGE_VERSION"
-          if sh scripts/package.sh "$PACKAGE_VERSION" dist/package; then
-            printf 'Packaging overwrote an existing destination.\n' >&2
-            exit 1
-          fi
-          (cd dist/package && sha256sum --check --quiet SHA256SUMS)
-      - name: Verify container uses the packaged executable
-        if: runner.os == 'Linux'
-        run: |
-          docker build --tag memberid:ci \
-            --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
-            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
-            --label "org.opencontainers.image.version=$PACKAGE_VERSION" dist/package
-          test "$(docker run --rm --read-only --network none --cap-drop ALL --security-opt no-new-privileges memberid:ci version)" = "MemberID $PACKAGE_VERSION"
-          container=$(docker create memberid:ci version)
-          trap 'docker rm "$container"' EXIT
-          docker cp "$container:/usr/local/bin/memberid" dist/from-container
-          cmp dist/package/memberid dist/from-container
-      - name: Check out the supported schema 26 baseline
-        if: runner.os == 'Linux'
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: a7c3ebed19d4cfb7196108f80c6360fc9449f882
-          path: .local/schema26-source
-          persist-credentials: false
-      - name: Package the supported schema 26 baseline
-        if: runner.os == 'Linux'
-        run: |
-          cd .local/schema26-source
-          sh scripts/package.sh baseline26 ../../dist/baseline26
-      - name: Independent SAML consumer acceptance
-        if: runner.os == 'Linux'
+      - name: Test CI and release scripts
+        if: steps.scope.outputs.automation == 'true'
+        run: python3 -B -m unittest discover -s scripts -p 'test_*.py'
+      - name: Test affected database behavior
+        if: steps.scope.outputs.integration != ''
         env:
-          MEMBERID_SAML_PACKAGE: ${{ github.workspace }}/dist/package
-          MEMBERID_UPGRADE_BASELINE_PACKAGE: ${{ github.workspace }}/dist/baseline26
-        run: |
-          npm --prefix internal/interop/saml ci --ignore-scripts
-          npm --prefix internal/interop/saml test
-      - name: Race tests
-        if: runner.os == 'Linux'
-        run: go test -race ./...
-      - name: Export the tested image
-        if: github.event_name == 'push' && runner.os == 'Linux'
-        run: |
-          mkdir -p dist/image
-          docker save --output dist/image/memberid.tar memberid:ci
-          (cd dist/image && sha256sum memberid.tar > SHA256SUMS)
-      - name: Retain the tested image for publication
-        if: github.event_name == 'push' && runner.os == 'Linux'
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: memberid-linux-amd64-image
-          path: dist/image/
-          if-no-files-found: error
-          retention-days: 7
-
-  publish:
-    name: Publish container image
-    needs: [build, security, database]
-    if: github.event_name == 'push'
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-      packages: write
-    env:
-      DOCKER_CONFIG: ${{ github.workspace }}/.memberid-docker
-    steps:
-      - name: Download this run's tested image
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: memberid-linux-amd64-image
-          path: image
-      - name: Verify and load the tested image
-        run: |
-          (cd image && sha256sum --check --quiet SHA256SUMS)
-          docker load --input image/memberid.tar
-          test "$(docker run --rm --read-only --network none --cap-drop ALL --security-opt no-new-privileges memberid:ci version)" = "MemberID sha-$GITHUB_SHA"
-          repository=$(printf '%s' "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')
-          image="ghcr.io/$repository:sha-$GITHUB_SHA"
-          docker tag memberid:ci "$image"
-          printf 'MEMBERID_IMAGE=%s\n' "$image" >> "$GITHUB_ENV"
-      - name: Sign in to GitHub Container Registry
-        env:
-          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          mkdir -m 700 -p "$DOCKER_CONFIG"
-          printf '%s' "$REGISTRY_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
-      - name: Publish the tested image
-        run: |
-          docker push "$MEMBERID_IMAGE"
-          digest=$(docker image inspect "$MEMBERID_IMAGE" --format '{{index .RepoDigests 0}}')
-          printf '{"commit":"%s","digest":"%s"}\n' "$GITHUB_SHA" "${digest##*@}" > "$RUNNER_TEMP/image.json"
-          printf 'Published `%s`\n\nDeploy manually using `%s`.\n' "$MEMBERID_IMAGE" "$digest" >> "$GITHUB_STEP_SUMMARY"
-          printf '\nManual release source: `%s/%s`.\n' "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" >> "$GITHUB_STEP_SUMMARY"
-      - name: Record the published digest for manual release
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: image-receipt-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/image.json
-          if-no-files-found: error
-      - name: Remove registry credentials
-        if: always()
-        run: rm -rf -- "$DOCKER_CONFIG"
+          MEMBERID_TEST_PATTERN: ${{ steps.scope.outputs.integration }}
+        run: sh scripts/test-integration.sh
 
   security:
     name: Repository security
@@ -173,14 +73,19 @@ jobs:
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: python3 -B -c 'import os, sys; sys.path.insert(0, "scripts"); from release_version import impact; impact(os.environ["PR_TITLE"])'
-      - name: Test release planning and publication
-        run: python3 -B -m unittest discover -s scripts -p 'test_release.py'
       - name: Scan Git history
         run: gitleaks git --redact --no-banner --no-color --log-opts="--all"
 
-  database:
-    name: PostgreSQL integration
+  publish:
+    name: Publish SHA image
+    needs: security
+    if: github.event_name == 'push'
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    env:
+      DOCKER_CONFIG: ${{ github.workspace }}/.memberid-docker
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -189,5 +94,40 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-      - name: Test with disposable PostgreSQL
-        run: sh scripts/test-integration.sh
+      - name: Install reviewed Node LTS
+        shell: bash
+        run: sh scripts/ci-node.sh
+      - name: Package and smoke-test the SHA image
+        run: |
+          mkdir -p dist
+          sh scripts/package.sh "sha-$GITHUB_SHA" dist/package
+          (cd dist/package && sha256sum --check --quiet SHA256SUMS)
+          image="ghcr.io/${GITHUB_REPOSITORY,,}:sha-$GITHUB_SHA"
+          docker build --tag "$image" \
+            --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
+            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            --label "org.opencontainers.image.version=sha-$GITHUB_SHA" dist/package
+          test "$(docker run --rm --network none "$image" version)" = "MemberID sha-$GITHUB_SHA"
+          echo "MEMBERID_IMAGE=$image" >> "$GITHUB_ENV"
+      - name: Sign in to GitHub Container Registry
+        env:
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -m 700 -p "$DOCKER_CONFIG"
+          printf '%s' "$REGISTRY_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+      - name: Publish the tested image
+        run: |
+          docker push "$MEMBERID_IMAGE"
+          digest=$(docker image inspect "$MEMBERID_IMAGE" --format '{{index .RepoDigests 0}}')
+          printf '{"commit":"%s","digest":"%s"}\n' "$GITHUB_SHA" "${digest##*@}" > "$RUNNER_TEMP/image.json"
+          printf 'Published `%s`\n\nPinned snapshot `%s`.\n' "$MEMBERID_IMAGE" "$digest" >> "$GITHUB_STEP_SUMMARY"
+          printf '\nManual release source: `%s/%s`.\n' "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" >> "$GITHUB_STEP_SUMMARY"
+      - name: Record the published digest for manual release
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: image-receipt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/image.json
+          if-no-files-found: error
+      - name: Remove registry credentials
+        if: always()
+        run: rm -rf -- "$DOCKER_CONFIG"

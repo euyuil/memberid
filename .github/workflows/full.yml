@@ -1,0 +1,148 @@
+name: Full CI
+
+on:
+  schedule:
+    - cron: '17 19 * * *'
+  workflow_dispatch:
+    inputs:
+      source:
+        description: SHA build RUN_ID/ATTEMPT or RC tag (empty selects the triggering main commit)
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+  packages: read
+
+jobs:
+  select:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    outputs:
+      sha: ${{ steps.image.outputs.sha }}
+      digest: ${{ steps.image.outputs.digest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: image
+        name: Resolve the selected SHA image
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CI_SOURCE: ${{ inputs.source }}
+        run: python3 -B scripts/full_ci.py >> "$GITHUB_OUTPUT"
+      - name: Test release gates and PR check selection
+        run: python3 -B -m unittest discover -s scripts -p 'test_*.py'
+
+  build:
+    name: Build and test (${{ matrix.os }})
+    needs: select
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2025]
+    runs-on: ${{ matrix.os }}
+    env:
+      PACKAGE_VERSION: sha-${{ needs.select.outputs.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ needs.select.outputs.sha }}
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Install reviewed Node LTS
+        shell: bash
+        run: sh scripts/ci-node.sh
+      - name: Check and build
+        shell: bash
+        run: sh scripts/check.sh
+      - name: Compile optional interoperability checks
+        run: go test -tags=interop ./internal/interop
+      - name: Package native executable
+        shell: bash
+        run: |
+          sh scripts/package.sh "$PACKAGE_VERSION" dist/package
+          (cd dist/package && sha256sum --check --quiet SHA256SUMS)
+          if [ "$RUNNER_OS" = Windows ]; then binary=memberid.exe; else binary=memberid; fi
+          test "$(./dist/package/$binary version)" = "MemberID $PACKAGE_VERSION"
+          if sh scripts/package.sh "$PACKAGE_VERSION" dist/package; then
+            printf 'Packaging overwrote an existing destination.\n' >&2
+            exit 1
+          fi
+          (cd dist/package && sha256sum --check --quiet SHA256SUMS)
+      - name: Verify the pinned image matches the tested executable
+        env:
+          DIGEST: ${{ needs.select.outputs.digest }}
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        if: runner.os == 'Linux'
+        run: |
+          image="ghcr.io/${GITHUB_REPOSITORY,,}@$DIGEST"
+          printf '%s' "$REGISTRY_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          docker pull "$image"
+          docker logout ghcr.io
+          test "$(docker run --rm --read-only --network none --cap-drop ALL "$image" version)" = "MemberID $PACKAGE_VERSION"
+          container=$(docker create "$image" version)
+          trap 'docker rm "$container"' EXIT
+          docker cp "$container:/usr/local/bin/memberid" dist/from-container
+          cmp dist/package/memberid dist/from-container
+      - name: Check out the supported schema 26 baseline
+        if: runner.os == 'Linux'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: a7c3ebed19d4cfb7196108f80c6360fc9449f882
+          path: .local/schema26-source
+          persist-credentials: false
+      - name: Package the supported schema 26 baseline
+        if: runner.os == 'Linux'
+        run: |
+          cd .local/schema26-source
+          sh scripts/package.sh baseline26 ../../dist/baseline26
+      - name: Independent SAML consumer acceptance
+        if: runner.os == 'Linux'
+        env:
+          MEMBERID_SAML_PACKAGE: ${{ github.workspace }}/dist/package
+          MEMBERID_UPGRADE_BASELINE_PACKAGE: ${{ github.workspace }}/dist/baseline26
+        run: |
+          npm --prefix internal/interop/saml ci --ignore-scripts
+          npm --prefix internal/interop/saml test
+      - name: Race tests
+        if: runner.os == 'Linux'
+        run: go test -race ./...
+
+  database:
+    name: PostgreSQL integration
+    needs: select
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ needs.select.outputs.sha }}
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Test with disposable PostgreSQL
+        run: sh scripts/test-integration.sh
+
+  evidence:
+    name: Full validation ${{ needs.select.outputs.sha }} ${{ needs.select.outputs.digest }}
+    needs: [select, build, database]
+    runs-on: ubuntu-24.04
+    permissions:
+      statuses: write
+    steps:
+      - name: Index this successful verification on the tested commit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          COMMIT: ${{ needs.select.outputs.sha }}
+          DIGEST: ${{ needs.select.outputs.digest }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/statuses/$COMMIT" --method POST \
+            -f state=success -f "context=full-ci/$DIGEST" \
+            -f description='Full validation of this exact commit and image' \
+            -f "target_url=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT" --silent
