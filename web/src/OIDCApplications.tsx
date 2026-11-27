@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react"
+import { routeURL } from "@/routes"
 import { Plus } from "lucide-react"
 import {
   DirectoryResults,
@@ -60,6 +61,7 @@ export type OIDCApplication = {
   evidenceAudience?: string
   refresh: boolean
   enabled: boolean
+  published: boolean
   system: boolean
   revision: number
 }
@@ -77,7 +79,7 @@ type Request = <T>(path: string, init?: RequestInit) => Promise<T>
 type Panel =
   | { kind: "create" }
   | {
-      kind: "detail" | "edit" | "rotate" | "toggle"
+      kind: "detail" | "edit" | "rotate" | "toggle" | "publication"
       application: OIDCApplication
     }
   | { kind: "secret"; application: OIDCApplication; secret: string }
@@ -160,13 +162,51 @@ export function OIDCApplications({
   const applicationPath = application
     ? `${endpoint}/${encodeURIComponent(application.clientId)}`
     : endpoint
-  const confirmation = panel?.kind === "rotate" || panel?.kind === "toggle"
+  async function publish(app: OIDCApplication) {
+    setPending(true)
+    setError("")
+    const path =
+      "/api/organizations/" +
+      encodeURIComponent(app.ownerOrganizationId) +
+      "/oidc-applications"
+    try {
+      await request(
+        path + "/" + encodeURIComponent(app.clientId) + "/publication",
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf },
+          body: JSON.stringify({ enabled: !app.published }),
+        }
+      )
+      const latest = (await request<OIDCApplicationDirectory>(path)).items.find(
+        (item) => item.clientId === app.clientId
+      )
+      if (!latest) throw new Error("找不到应用，请刷新列表。")
+      onComplete(latest)
+      open({ kind: "detail", application: latest })
+    } catch (failure) {
+      setError(
+        failure instanceof Error
+          ? failure.message
+          : "未能更新共享设置，请刷新后重试。"
+      )
+    } finally {
+      setPending(false)
+    }
+  }
+  const publication = panel?.kind === "publication"
+  const confirmation =
+    publication || panel?.kind === "rotate" || panel?.kind === "toggle"
   const rotating = panel?.kind === "rotate"
-  const action = rotating
-    ? "轮换密钥"
-    : application?.enabled
-      ? "停用应用"
-      : "启用应用"
+  const action = publication
+    ? application?.published
+      ? "停止共享"
+      : "开放跨组织使用"
+    : rotating
+      ? "轮换密钥"
+      : application?.enabled
+        ? "停用应用"
+        : "启用应用"
 
   return (
     <section aria-label="OIDC 应用列表">
@@ -210,7 +250,11 @@ export function OIDCApplications({
                     </div>
                   </TableCell>
                   <TableCell>{item.clientId}</TableCell>
-                  <TableCell>{organizationName(item.organizationId)}</TableCell>
+                  <TableCell>
+                    {item.published
+                      ? "已启用的组织"
+                      : organizationName(item.organizationId)}
+                  </TableCell>
                   <TableCell>
                     <ApplicationStatus application={item} />
                   </TableCell>
@@ -286,9 +330,54 @@ export function OIDCApplications({
                 />
                 <ReadField
                   label="允许登录的组织"
-                  value={organizationName(panel.application.organizationId)}
+                  value={
+                    panel.application.published
+                      ? "已启用的组织"
+                      : organizationName(panel.application.organizationId)
+                  }
                 />
               </div>
+              {!panel.application.system &&
+                panel.application.subjectKind === "member" &&
+                panel.application.organizationId ===
+                  panel.application.ownerOrganizationId && (
+                  <Field>
+                    <FieldLabel>跨组织使用</FieldLabel>
+                    {panel.application.published && (
+                      <CopyField
+                        label="接入链接"
+                        value={
+                          new URL(
+                            routeURL({
+                              view: "oidc-applications",
+                              join: panel.application.clientId,
+                            }),
+                            window.location.origin
+                          ).href
+                        }
+                      />
+                    )}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="self-start"
+                      disabled={
+                        !panel.application.enabled &&
+                        !panel.application.published
+                      }
+                      onClick={() =>
+                        open({
+                          kind: "publication",
+                          application: panel.application,
+                        })
+                      }
+                    >
+                      {panel.application.published
+                        ? "停止共享"
+                        : "开放跨组织使用"}
+                    </Button>
+                  </Field>
+                )}
               <ReadField
                 label="Refresh Token"
                 value={panel.application.refresh ? "允许" : "不允许"}
@@ -376,11 +465,15 @@ export function OIDCApplications({
             <AlertDialogHeader>
               <AlertDialogTitle>{action}</AlertDialogTitle>
               <AlertDialogDescription>
-                {rotating
-                  ? `「${application.displayName}」的旧密钥会立即失效。生成后请更新应用服务端的配置。`
-                  : application.enabled
-                    ? `停用「${application.displayName}」会阻止新登录和续期，并撤销它在 MemberID 的现有授权。`
-                    : `启用「${application.displayName}」后，允许登录的成员可以重新授权。`}
+                {publication
+                  ? application.published
+                    ? "所有外部组织将失去登录和续期权限，现有授权会被撤销。再次共享后，各组织需要重新启用。"
+                    : "其他组织的管理员可以通过接入链接为自己的组织启用此应用。"
+                  : rotating
+                    ? `「${application.displayName}」的旧密钥会立即失效。生成后请更新应用服务端的配置。`
+                    : application.enabled
+                      ? `停用「${application.displayName}」会阻止所有组织的新登录和续期，并撤销它们在 MemberID 的现有授权。`
+                      : `启用「${application.displayName}」后，允许登录的成员可以重新授权。`}
               </AlertDialogDescription>
             </AlertDialogHeader>
             {error && (
@@ -398,18 +491,26 @@ export function OIDCApplications({
               </Button>
               <Button
                 variant={
-                  rotating || application.enabled ? "destructive" : "default"
+                  (
+                    publication
+                      ? application.published
+                      : rotating || application.enabled
+                  )
+                    ? "destructive"
+                    : "default"
                 }
                 disabled={pending}
                 onClick={() =>
-                  rotating
-                    ? mutate(`${applicationPath}/rotate-secret`, "POST", {
-                        expectedRevision: application.revision,
-                      })
-                    : mutate(applicationPath, "PATCH", {
-                        enabled: !application.enabled,
-                        expectedRevision: application.revision,
-                      })
+                  publication
+                    ? publish(application)
+                    : rotating
+                      ? mutate(`${applicationPath}/rotate-secret`, "POST", {
+                          expectedRevision: application.revision,
+                        })
+                      : mutate(applicationPath, "PATCH", {
+                          enabled: !application.enabled,
+                          expectedRevision: application.revision,
+                        })
                 }
               >
                 {pending ? "正在处理…" : action}

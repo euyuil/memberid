@@ -62,6 +62,19 @@ test("OIDC application navigation retains the selected management scope", () => 
   )
 })
 
+test("a shared application link acquires only the signed-in organization scope", () => {
+  const join = "app_example"
+  const link = routeURL({ view: "oidc-applications", join })
+  assert.equal(link, "/oidc-applications?join=app_example")
+  const target = parseRoute(link)!
+  assert.equal(target.org, "")
+  assert.equal(target.query.get("join"), join)
+  assert.equal(
+    routeURL({ view: "oidc-applications", org: "org_example", oidcUse: true }),
+    "/organizations/org_example/oidc-applications?tab=used"
+  )
+})
+
 test("organization detail controls follow the page when navigating within a scope", () => {
   const org = "org_system"
   const detailURL = routeURL({ org })

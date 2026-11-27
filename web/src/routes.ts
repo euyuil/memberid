@@ -16,6 +16,8 @@ export type Route = {
   administrator?: string
   after?: string
   before?: string
+  oidcUse?: boolean
+  join?: string
   provider?: string
   serviceProvider?: string
   target?: string
@@ -33,6 +35,9 @@ export function routeURL(route: Route): string {
   if (view === "members" && !member) {
     for (const key of ["q", "status", "administrator", "after"] as const)
       if (route[key]) query.set(key, route[key])
+  } else if (view === "oidc-applications") {
+    if (route.join) query.set("join", route.join)
+    else if (org && route.oidcUse) query.set("tab", "used")
   } else if (view === "providers" && org) {
     if (route.provider) query.set("providerId", route.provider)
   } else if (view === "saml-service-providers") {

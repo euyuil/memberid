@@ -98,6 +98,7 @@ import {
   type AuthenticationEventPage,
 } from "@/authentication-events"
 import { Providers, type ProviderDirectory } from "@/Providers"
+import { OIDCUses, ApplicationViews, type ApplicationUse } from "@/OIDCUses"
 import { SAMLServiceProviders } from "@/SAMLServiceProviders"
 import { MemberPassword } from "@/MemberPassword"
 import { MemberEmail, type ManagedEmail } from "@/MemberEmail"
@@ -162,6 +163,8 @@ type Data = {
   authenticationEvents?: AuthenticationEventPage
   historyMember?: Member
   providers?: ProviderDirectory
+  oidcUses?: ApplicationUse[]
+  oidcPreview?: ApplicationUse | null
   oidcApplications?: OIDCApplicationDirectory
   saml?: SAMLDirectory
   serviceProvider?: SAMLServiceProvider
@@ -366,6 +369,9 @@ export default function App() {
   const authenticationEvents = view === "authentication-events"
   const providers = view === "providers"
   const oidcApplications = view === "oidc-applications"
+  const join = oidcApplications ? params.get("join") || "" : ""
+  const usingApps =
+    oidcApplications && !!org && (params.get("tab") === "used" || !!join)
   const saml = view === "saml-service-providers"
   const membersView = view === "members"
   const activeView = view ?? "organization"
@@ -463,7 +469,12 @@ export default function App() {
   }, [session])
 
   useEffect(() => {
-    if (session && parseRoute(location)?.root) {
+    if (session && join && !org) {
+      navigate(
+        { view: "oidc-applications", org: session.actor.organizationId, join },
+        { replace: true }
+      )
+    } else if (session && parseRoute(location)?.root) {
       navigate(
         session.actor.platform
           ? { view: "organization" }
@@ -471,10 +482,10 @@ export default function App() {
         { replace: true }
       )
     }
-  }, [session, location])
+  }, [session, location, join, org])
 
   useEffect(() => {
-    if (!session || !route || route.root || forbidden) return
+    if (!session || !route || route.root || forbidden || (join && !org)) return
     const abort = new AbortController()
     async function load() {
       setLoading(true)
@@ -492,7 +503,32 @@ export default function App() {
       }
       try {
         let result: Data
-        if (oidcApplications) {
+        if (usingApps) {
+          const base =
+            "/api/organizations/" +
+            encodeURIComponent(org) +
+            "/oidc-application-uses"
+          if (join) {
+            const [preview, organization] = await Promise.all([
+              request<ApplicationUse>(
+                base + "/" + encodeURIComponent(join),
+                options
+              ).catch((err: unknown) => {
+                if (err instanceof RequestError && err.status === 404)
+                  return null
+                throw err
+              }),
+              fetchOrganization(),
+            ])
+            result = { oidcPreview: preview, organization }
+          } else {
+            const [uses, organization] = await Promise.all([
+              request<{ items: ApplicationUse[] }>(base, options),
+              fetchOrganization(),
+            ])
+            result = { oidcUses: uses.items, organization }
+          }
+        } else if (oidcApplications) {
           const [directory, organization] = await Promise.all([
             request<OIDCApplicationDirectory>(
               `/api${routeURL({ view: "oidc-applications", org })}`,
@@ -1074,6 +1110,20 @@ export default function App() {
           </div>
         ) : (
           <>
+            {oidcApplications && org && (
+              <ApplicationViews org={org} used={usingApps} />
+            )}
+            {usingApps && data.organization && (
+              <OIDCUses
+                key={location}
+                org={data.organization}
+                items={data.oidcUses}
+                preview={data.oidcPreview}
+                csrf={session.csrf}
+                request={request}
+                refresh={refresh}
+              />
+            )}
             {data.oidcApplications && (
               <OIDCApplications
                 key={org}
