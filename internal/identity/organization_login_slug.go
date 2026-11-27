@@ -36,6 +36,14 @@ func (store *Store) AssignOrganizationSlug(ctx context.Context, principal Princi
 	return storageError(err)
 }
 
+// OrganizationLoginSuffix returns the current slug or the permanent ID for a password login.
+func (store *Store) OrganizationLoginSuffix(ctx context.Context, id string) (string, error) {
+	var suffix string
+	err := store.pool.QueryRow(ctx, `SELECT COALESCE(s.slug,o.id) FROM organizations o
+		LEFT JOIN organization_login_slugs s ON s.organization_id=o.id WHERE o.id=$1`, id).Scan(&suffix)
+	return suffix, storageError(err)
+}
+
 func (store *Store) LoginOrganizationIDBySlug(ctx context.Context, slug string) (string, error) {
 	if !ValidOrganizationSlug(slug) {
 		return "", ErrInvalid

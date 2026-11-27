@@ -40,7 +40,7 @@ func TestConsoleFirstLoginAndMemberPasswordManagement(t *testing.T) {
 		response = f.call(f.browser, "GET", response.header.Get("Location"), nil, nil)
 		f.status(response, 303)
 	}
-	fields := url.Values{"username": {"ROOT"}, "password": {"incorrect"}}
+	fields := url.Values{"username": {"ROOT@SYSTEM"}, "password": {"incorrect"}}
 	login := f.submit(loginPage(f.store.SystemOrganizationID()).body, "password", fields)
 	f.status(login, 200)
 	if !strings.Contains(login.body, "password is incorrect") {

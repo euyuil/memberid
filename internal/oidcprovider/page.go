@@ -37,7 +37,7 @@ type pageData struct {
 	Direct                                                         bool
 	PhoneEnabled, ProviderEnabled, OrganizationRestricted          bool
 	OrganizationRequired, PasswordEnabled                          bool
-	PasswordUsername                                               string
+	PasswordUsername, PasswordSuffix                               string
 	ProviderOrganizationID, ProviderOrganizationName               string
 	Providers                                                      []identity.Provider
 }
@@ -104,8 +104,19 @@ func (service *Service) renderLogin(w http.ResponseWriter, r *http.Request, requ
 			http.Error(w, "Login temporarily unavailable", http.StatusServiceUnavailable)
 			return
 		}
-		if r.PostForm.Get("action") == "password" {
-			data.PasswordUsername = identity.CanonicalLoginName(r.PostForm.Get("username"))
+		if data.PasswordEnabled && data.ProviderOrganizationID != "" {
+			data.PasswordSuffix, err = service.store.OrganizationLoginSuffix(r.Context(), data.ProviderOrganizationID)
+			if err != nil {
+				writeLoginOrganizationError(w, err)
+				return
+			}
+			if value := r.PostForm.Get("username"); r.PostForm.Get("action") == "password" && value != "" {
+				name, suffix, qualified := splitPasswordLoginName(value)
+				if !qualified {
+					suffix = data.PasswordSuffix
+				}
+				data.PasswordUsername = name + "@" + suffix
+			}
 		}
 	}
 	if !data.OrganizationRequired && !verified && !data.PhoneEnabled && !data.ProviderEnabled && !data.PasswordEnabled && data.Message == "" {
@@ -143,6 +154,6 @@ func (service *Service) renderLogin(w http.ResponseWriter, r *http.Request, requ
 	if data.ProviderEnabled && service.dingtalk != nil {
 		formTargets = append(formTargets, "https://login.dingtalk.com")
 	}
-	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'nonce-"+data.Nonce+"'; form-action "+strings.Join(formTargets, " ")+"; base-uri 'none'; frame-ancestors 'none'")
+	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'nonce-"+data.Nonce+"'; script-src 'nonce-"+data.Nonce+"'; form-action "+strings.Join(formTargets, " ")+"; base-uri 'none'; frame-ancestors 'none'")
 	writeHTMLPage(w, loginPage, data)
 }

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -11,6 +12,14 @@ import (
 	"github.com/zhizhun-tech/memberid/internal/config"
 	"github.com/zhizhun-tech/memberid/internal/identity"
 )
+
+func splitPasswordLoginName(value string) (name, suffix string, qualified bool) {
+	name, suffix, qualified = strings.Cut(value, "@")
+	if identity.ValidOrganizationSlug(suffix) {
+		suffix = identity.CanonicalLoginName(suffix)
+	}
+	return identity.CanonicalLoginName(name), suffix, qualified
+}
 
 func (service *Service) passwordLogin(w http.ResponseWriter, r *http.Request, request *authorizationRequest, registered loginPolicy) {
 	if registered.registration.SubjectKind != "member" || request.phonePending() || request.externalPending() || request.Verification != nil ||
@@ -23,7 +32,18 @@ func (service *Service) passwordLogin(w http.ResponseWriter, r *http.Request, re
 		http.Error(w, "Select an organization before password login", http.StatusBadRequest)
 		return
 	}
-	username := r.PostForm.Get("username")
+	username, suffix, qualified := splitPasswordLoginName(r.PostForm.Get("username"))
+	if qualified && suffix != organizationID {
+		id, err := service.store.LoginOrganizationIDBySlug(r.Context(), suffix)
+		if err != nil && !errors.Is(err, identity.ErrInvalid) && !errors.Is(err, identity.ErrNotFound) {
+			writeLoginOrganizationError(w, err)
+			return
+		}
+		if id != organizationID {
+			service.renderLogin(w, r, request, registered, "The username does not match this organization.")
+			return
+		}
+	}
 	if request.entry != nil {
 		if err := service.storage.insertLoginEntry(r.Context(), request); err != nil {
 			http.Error(w, "Login transaction expired", http.StatusBadRequest)
