@@ -163,7 +163,7 @@ func (service *Service) finishSAML(w http.ResponseWriter, r *http.Request, reque
 			} else if err != nil {
 				return err
 			}
-			if err := tx.QueryRow(r.Context(), "SELECT display_name FROM members WHERE id=$1", request.MemberID).Scan(&auth.DisplayName); err != nil {
+			if err := tx.QueryRow(r.Context(), "SELECT display_name, organization_id FROM members WHERE id=$1", request.MemberID).Scan(&auth.DisplayName, &auth.OrganizationID); err != nil {
 				return err
 			}
 			if slices.Contains(sp.Attributes, "Email") {

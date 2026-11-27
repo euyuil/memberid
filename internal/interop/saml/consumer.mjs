@@ -116,6 +116,7 @@ export function createConsumer({
         nameIDFormat: profile.nameIDFormat,
         inResponseTo: profile.inResponseTo,
         email: profile.Email,
+        organizationId: profile.OrganizationID,
       };
     },
   };

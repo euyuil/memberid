@@ -640,7 +640,8 @@ test(
             initialSP.id,
           ),
         );
-        registration.attributes = ["Email"];
+        assert.equal(before.organizationId, undefined);
+        registration.attributes = upgradeBaseline ? ["Email"] : ["Email", "OrganizationID"];
         writeFileSync(spFile, JSON.stringify(registration));
         cli(
           "saml",
@@ -653,6 +654,10 @@ test(
         );
         const released = await session();
         assert.equal(released.email, "managed@example.test");
+        if (!upgradeBaseline) {
+          const workspaces = new Map([[organization.id, "finance"]]);
+          assert.equal(workspaces.get(released.organizationId), "finance");
+        }
         assert.equal(released.nameID, before.nameID);
         setEmail("changed@example.test", 1);
         const changed = await session();
