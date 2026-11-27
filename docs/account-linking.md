@@ -64,29 +64,9 @@ Automated HTTP and disposable-PostgreSQL tests cover real forms and callbacks, p
 
 ### Browser regression: external authorization redirects
 
-The external account page's CSP `form-action` allows its own origin and only the
-selected provider's authorization origin: `https://accounts.feishu.cn` for Feishu
-or `https://login.dingtalk.com` for DingTalk. The HTTP regression tests check this
-allowlist on both the initial form and the completed callback page. The other
-restrictions remain `default-src 'none'`, nonce-protected styles,
-`base-uri 'none'`, and `frame-ancestors 'none'`.
+Feishu sign-in and account linking finish the form POST on MemberID and open a new top-level navigation to the authorization endpoint. Further redirects by Feishu do not require changes to the MemberID form policy. The page includes a **Continue to Feishu** link and a link back to the pending operation. Reopen that operation to cancel verification and start again. DingTalk still uses its provider-specific form redirect.
 
-For changes to these forms or their CSP, use a temporary HTTPS installation and
-synthetic identities, following [local development](local-development.md):
-
-1. Establish a fresh MemberID session, then open the Feishu account page for an
-   eligible Member with an enabled Feishu application.
-2. Submit **Verify and link Feishu**. Confirm that the browser follows the
-   same-origin POST and its HTTP 303 to `accounts.feishu.cn`; inspect browser
-   errors if it remains on the form. A server-side 303 alone does not establish
-   that the browser accepted the redirect under `form-action`.
-3. Repeat with **Verify and link DingTalk**, confirming navigation to
-   `login.dingtalk.com`.
-
-Reauthenticate if the five-minute freshness window expires. With synthetic
-provider application identifiers, reaching a provider error page verifies only
-the outbound browser navigation; it does not verify real provider authorization
-or completion of the binding callback.
+Set `MEMBERID_TEST_BROWSER` to the path of a Chromium or Edge executable and run `go test -tags integration ./internal/oidcprovider -run TestFeishuTopLevelBrowser` with an isolated PostgreSQL fixture. The test exercises both forms in fresh browser profiles. Synthetic authorization responses redirect through a second origin and return to the real MemberID callback.
 
 On 2026-11-16, Chrome inspection of the production handlers and templates in an
 isolated HTTPS fixture reached both provider origins with synthetic applications.

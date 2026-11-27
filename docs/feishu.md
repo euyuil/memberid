@@ -27,6 +27,8 @@ The enabled OIDC process checks enabled applications on startup and before each 
 
 Administrators can independently disable an application from the provider list. Offline JWT verifiers can continue to accept already-issued JWTs until their short expiry. Confirmed employee departure is reconciled as described below. Member blocking and explicit binding revocation remain independent local controls.
 
+The sign-in form opens Feishu through a MemberID navigation page. If navigation stops, select **Continue to Feishu**, or return to MemberID to cancel the pending attempt and start again.
+
 This integration is covered by simulated Feishu HTTP responses and disposable database tests. Verify actual application availability, redirect configuration, and a real Feishu login in the target tenant before deployment.
 
 ## Employee membership reconciliation

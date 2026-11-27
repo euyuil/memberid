@@ -281,6 +281,10 @@ func (service *Service) accountExternalPost(w http.ResponseWriter, r *http.Reque
 			http.Error(w, "Account request expired. Reopen the account page.", 400)
 			return
 		}
+		if kind == "feishu" {
+			writeFeishuNavigation(w, destination, accountAddress(request.accountDetails))
+			return
+		}
 		http.Redirect(w, r, destination, http.StatusSeeOther)
 	default:
 		http.Error(w, "Invalid account action", 400)
@@ -452,10 +456,10 @@ func (service *Service) renderAccount(w http.ResponseWriter, r *http.Request, re
 		}
 	}
 	label := "DingTalk"
-	formAction := "https://login.dingtalk.com"
+	formAction := "'self' https://login.dingtalk.com"
 	if request.Kind == "feishu" {
 		label = "Feishu"
-		formAction = "https://accounts.feishu.cn"
+		formAction = "'self'"
 	}
 	fresh := service.freshAccountSession(session)
 	if message == "" {
@@ -495,6 +499,6 @@ func (service *Service) renderAccount(w http.ResponseWriter, r *http.Request, re
 	if !availableProvider && message == "" {
 		data.Message = "No available application. Existing or revoked bindings require an administrator."
 	}
-	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'nonce-"+data.Nonce+"'; form-action 'self' "+formAction+"; base-uri 'none'; frame-ancestors 'none'")
+	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'nonce-"+data.Nonce+"'; form-action "+formAction+"; base-uri 'none'; frame-ancestors 'none'")
 	writeHTMLPage(w, accountPage, data)
 }

@@ -3,6 +3,7 @@ package oidcprovider
 import (
 	"context"
 	"errors"
+	"html/template"
 	"net/http"
 	"time"
 
@@ -42,7 +43,27 @@ func (service *Service) startFeishu(w http.ResponseWriter, r *http.Request, requ
 		http.Error(w, "Login transaction expired", http.StatusBadRequest)
 		return
 	}
-	http.Redirect(w, r, feishu.AuthorizationURL(app.ClientID, service.configuration.Issuer+feishuCallbackPath, state, verifier), http.StatusSeeOther)
+	writeFeishuNavigation(w, feishu.AuthorizationURL(app.ClientID, service.configuration.Issuer+feishuCallbackPath, state, verifier), requestLoginURL(request))
+}
+
+var feishuNavigation = template.Must(template.New("feishu-navigation").Parse(`<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Continue to Feishu</title></head><body><main>
+<p><a id="provider" href="{{.Destination}}">Continue to Feishu</a></p>
+<p><a id="resume" href="{{.Resume}}">Return to MemberID</a></p></main>
+<script nonce="{{.Nonce}}">
+// Back and reload must reopen the pending interaction with GET.
+history.replaceState(null, "", document.getElementById("resume").href);
+history.pushState(null, "", location.href);
+location.replace(document.getElementById("provider").href);
+</script></body></html>`))
+
+func writeFeishuNavigation(w http.ResponseWriter, destination, resume string) {
+	nonce := config.RandomSecret()
+	w.Header().Set("Content-Security-Policy", "default-src 'none'; script-src 'nonce-"+nonce+"'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'")
+	w.Header().Set("Referrer-Policy", "no-referrer")
+	w.Header().Set("Cache-Control", "no-store")
+	writeHTMLPage(w, feishuNavigation, struct{ Destination, Resume, Nonce string }{destination, resume, nonce})
 }
 
 func (service *Service) feishuCallback(w http.ResponseWriter, r *http.Request) {

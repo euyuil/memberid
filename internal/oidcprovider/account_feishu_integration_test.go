@@ -55,8 +55,7 @@ func feishuAccountSubmit(f *fixture, page reply, provider, action string) reply 
 func startFeishuAccount(f *fixture, page reply, provider string) string {
 	f.t.Helper()
 	response := feishuAccountSubmit(f, page, provider, "link")
-	f.status(response, 303)
-	location, err := url.Parse(response.header.Get("Location"))
+	location, err := url.Parse(f.externalDestination(response, "feishu"))
 	if err != nil {
 		f.t.Fatal(err)
 	}
@@ -92,7 +91,7 @@ func accountLoginSnapshot(t *testing.T, f *fixture) string {
 
 func TestFeishuAccountPreservesIdentityAndAuthentication(t *testing.T) {
 	f, provider, id, page := feishuAccountFixture(t)
-	assertAccountFormAction(t, page, "https://accounts.feishu.cn")
+	assertAccountFormAction(t, page, "")
 	sp := enableSAML(t, f)
 	samlLogin := samlPage(t, f, sp)
 	before := verifySAMLResponse(t, f, sp, f.submit(samlLogin.body, "continue", url.Values{"member": {f.member.ID}, "consent": {"yes"}}))
@@ -100,7 +99,7 @@ func TestFeishuAccountPreservesIdentityAndAuthentication(t *testing.T) {
 	callback := startFeishuAccount(f, page, id)
 	result := f.call(f.browser, "GET", callback, nil, nil)
 	f.status(result, 200)
-	assertAccountFormAction(t, result, "https://accounts.feishu.cn")
+	assertAccountFormAction(t, result, "")
 	if !strings.Contains(result.body, "Feishu is linked to this Member") || !strings.Contains(result.body, `href="`+accountReturn+`"`) || result.header.Get("Set-Cookie") != "" {
 		t.Fatal("incorrect link result")
 	}
@@ -115,8 +114,7 @@ func TestFeishuAccountPreservesIdentityAndAuthentication(t *testing.T) {
 	f.browser = browserClient()
 	login, verifier := f.loginPage("example-web", "openid offline_access")
 	response := f.submit(login.body, "feishu", url.Values{"organization": {f.member.OrganizationID}, "provider": {id}})
-	f.status(response, 303)
-	location, _ := url.Parse(response.header.Get("Location"))
+	location, _ := url.Parse(f.externalDestination(response, "feishu"))
 	response = f.call(f.browser, "GET", feishuCallbackPath+"?"+url.Values{"state": {location.Query().Get("state")}, "code": {"synthetic-code"}}.Encode(), nil, nil)
 	f.status(response, 303)
 	login = f.call(f.browser, "GET", response.header.Get("Location"), nil, nil)

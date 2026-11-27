@@ -10,8 +10,10 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/xml"
+	"html"
 	"math/big"
 	"net/url"
+	"regexp"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -525,8 +527,18 @@ func TestSAMLExternalAuthentication(t *testing.T) {
 			}
 			page := samlPage(t, f, sp)
 			start := f.submit(page.body, method, url.Values{"organization": {f.member.OrganizationID}, "provider": {providerID}})
-			f.status(start, 303)
-			location, _ := url.Parse(start.header.Get("Location"))
+			location, _ := url.Parse(f.externalDestination(start, method))
+			if method == "feishu" {
+				resume := regexp.MustCompile(`id="resume" href="([^"]+)"`).FindStringSubmatch(start.body)
+				if len(resume) != 2 {
+					t.Fatal("missing SAML resume link")
+				}
+				pending := f.call(f.browser, "GET", html.UnescapeString(resume[1]), nil, nil)
+				f.status(pending, 200)
+				if !strings.Contains(pending.body, `value="cancel"`) {
+					t.Fatal("cannot resume pending SAML interaction")
+				}
+			}
 			callback := location.Query().Get("redirect_uri") + "?" + url.Values{"state": {location.Query().Get("state")}, "code": {"synthetic-code"}}.Encode()
 			f.status(f.call(browserClient(), "GET", callback, nil, nil), 400)
 			result := f.call(f.browser, "GET", callback, nil, nil)
