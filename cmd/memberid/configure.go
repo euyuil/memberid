@@ -143,7 +143,7 @@ func configure(ctx context.Context, args []string, stdout, stderr io.Writer) err
 			}, installation.AllowLoopbackHTTP)
 			client.ID = application.ClientID
 		} else {
-			_, err = store.RotateOIDCClientSecret(ctx, principal, client.ID, 0, client.SecretSHA256)
+			_, err = store.RotateOIDCClientSecret(ctx, principal, "", client.ID, 0, client.SecretSHA256)
 		}
 		if err != nil {
 			return err

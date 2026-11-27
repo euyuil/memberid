@@ -82,7 +82,6 @@ type Panel =
     }
   | { kind: "secret"; application: OIDCApplication; secret: string }
 
-const endpoint = "/api/oidc-applications"
 const dialogClass = "max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-xl"
 
 function ApplicationStatus({ application }: { application: OIDCApplication }) {
@@ -95,15 +94,15 @@ function ApplicationStatus({ application }: { application: OIDCApplication }) {
 
 export function OIDCApplications({
   directory,
-  canCreate,
-  canEdit,
+  ownerId,
+  platform,
   csrf,
   request,
   onComplete,
 }: {
   directory: OIDCApplicationDirectory
-  canCreate: boolean
-  canEdit: boolean
+  ownerId: string
+  platform: boolean
   csrf: string
   request: Request
   onComplete: (application: OIDCApplication) => void
@@ -153,6 +152,11 @@ export function OIDCApplications({
   }
   const application =
     panel && "application" in panel ? panel.application : undefined
+  const scoped = !application || !platform
+  const endpoint =
+    scoped && ownerId
+      ? `/api/organizations/${encodeURIComponent(ownerId)}/oidc-applications`
+      : "/api/oidc-applications"
   const applicationPath = application
     ? `${endpoint}/${encodeURIComponent(application.clientId)}`
     : endpoint
@@ -166,14 +170,12 @@ export function OIDCApplications({
 
   return (
     <section aria-label="OIDC 应用列表">
-      {canCreate && (
-        <div className="flex justify-end pb-4">
-          <Button onClick={() => open({ kind: "create" })}>
-            <Plus data-icon="inline-start" />
-            添加 OIDC 应用
-          </Button>
-        </div>
-      )}
+      <div className="flex justify-end pb-4">
+        <Button onClick={() => open({ kind: "create" })}>
+          <Plus data-icon="inline-start" />
+          添加 OIDC 应用
+        </Button>
+      </div>
       <div className="overflow-hidden rounded-md border">
         <DirectoryResults
           count={directory.items.length}
@@ -235,6 +237,10 @@ export function OIDCApplications({
           key={application?.clientId ?? "create"}
           application={application}
           organizations={organizations}
+          fixedOrganization={
+            scoped && ownerId ? organizationName(ownerId) : undefined
+          }
+          platform={platform}
           allowLoopbackHttp={directory.allowLoopbackHttp}
           pending={pending}
           error={error}
@@ -326,37 +332,41 @@ export function OIDCApplications({
                 values={panel.application.postLogoutRedirectUris ?? []}
               />
             </FieldGroup>
-            {canEdit && !panel.application.system && (
-              <DialogFooter className="sm:justify-between">
-                <Button
-                  variant={
-                    panel.application.enabled ? "destructive" : "outline"
-                  }
-                  onClick={() =>
-                    open({ kind: "toggle", application: panel.application })
-                  }
-                >
-                  {panel.application.enabled ? "停用应用" : "启用应用"}
-                </Button>
-                <div className="flex flex-wrap justify-end gap-2">
+            {!panel.application.system &&
+              (platform ||
+                (panel.application.subjectKind === "member" &&
+                  panel.application.ownerOrganizationId === ownerId &&
+                  panel.application.organizationId === ownerId)) && (
+                <DialogFooter className="sm:justify-between">
                   <Button
-                    variant="outline"
+                    variant={
+                      panel.application.enabled ? "destructive" : "outline"
+                    }
                     onClick={() =>
-                      open({ kind: "rotate", application: panel.application })
+                      open({ kind: "toggle", application: panel.application })
                     }
                   >
-                    轮换密钥
+                    {panel.application.enabled ? "停用应用" : "启用应用"}
                   </Button>
-                  <Button
-                    onClick={() =>
-                      open({ kind: "edit", application: panel.application })
-                    }
-                  >
-                    编辑应用
-                  </Button>
-                </div>
-              </DialogFooter>
-            )}
+                  <div className="flex flex-wrap justify-end gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={() =>
+                        open({ kind: "rotate", application: panel.application })
+                      }
+                    >
+                      轮换密钥
+                    </Button>
+                    <Button
+                      onClick={() =>
+                        open({ kind: "edit", application: panel.application })
+                      }
+                    >
+                      编辑应用
+                    </Button>
+                  </div>
+                </DialogFooter>
+              )}
           </DialogContent>
         </Dialog>
       )}
@@ -475,6 +485,8 @@ function URIFields({ label, values }: { label: string; values: string[] }) {
 function ApplicationForm({
   application,
   organizations,
+  fixedOrganization,
+  platform,
   allowLoopbackHttp,
   pending,
   error,
@@ -483,6 +495,8 @@ function ApplicationForm({
 }: {
   application?: OIDCApplication
   organizations: Organization[]
+  fixedOrganization?: string
+  platform: boolean
   allowLoopbackHttp: boolean
   pending: boolean
   error: string
@@ -494,7 +508,8 @@ function ApplicationForm({
     application?.preauthorized ?? false
   )
   const [validationError, setValidationError] = useState("")
-  const memberPolicy = !application || application.subjectKind === "member"
+  const memberPolicy =
+    platform && (!application || application.subjectKind === "member")
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const form = new FormData(event.currentTarget)
@@ -532,13 +547,17 @@ function ApplicationForm({
     setValidationError("")
     onSave({
       displayName: field("displayName"),
-      organizationId:
-        field("organizationId") === "*" ? "" : field("organizationId"),
+      ...(!fixedOrganization
+        ? {
+            organizationId:
+              field("organizationId") === "*" ? "" : field("organizationId"),
+          }
+        : {}),
       redirectUris,
       postLogoutRedirectUris,
       accountReturnUris,
       ...(memberPolicy ? { evidenceScope, evidenceAudience } : {}),
-      preauthorized,
+      ...(platform ? { preauthorized } : {}),
       refresh,
     })
   }
@@ -574,30 +593,34 @@ function ApplicationForm({
                 <CopyField label="客户端 ID" value={application.clientId} />
               )}
             </div>
-            <Field>
-              <FieldLabel htmlFor="oidc-organization">
-                允许登录的组织
-              </FieldLabel>
-              <select
-                id="oidc-organization"
-                name="organizationId"
-                className="h-8 w-full rounded-lg border border-input bg-background px-2.5 text-sm focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-                defaultValue={
-                  application ? (application.organizationId ?? "*") : ""
-                }
-                required
-              >
-                <option value="" disabled>
-                  选择组织
-                </option>
-                {organizations.map((organization) => (
-                  <option key={organization.id} value={organization.id}>
-                    {organization.name}
+            {fixedOrganization ? (
+              <ReadField label="允许登录的组织" value={fixedOrganization} />
+            ) : (
+              <Field>
+                <FieldLabel htmlFor="oidc-organization">
+                  允许登录的组织
+                </FieldLabel>
+                <select
+                  id="oidc-organization"
+                  name="organizationId"
+                  className="h-8 w-full rounded-lg border border-input bg-background px-2.5 text-sm focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                  defaultValue={
+                    application ? (application.organizationId ?? "*") : ""
+                  }
+                  required
+                >
+                  <option value="" disabled>
+                    选择组织
                   </option>
-                ))}
-                <option value="*">所有组织</option>
-              </select>
-            </Field>
+                  {organizations.map((organization) => (
+                    <option key={organization.id} value={organization.id}>
+                      {organization.name}
+                    </option>
+                  ))}
+                  <option value="*">所有组织</option>
+                </select>
+              </Field>
+            )}
             <Field>
               <FieldLabel htmlFor="oidc-redirects">登录回调地址</FieldLabel>
               <Textarea
@@ -664,17 +687,19 @@ function ApplicationForm({
                 </Field>
               </div>
             )}
-            <Field orientation="horizontal">
-              <Checkbox
-                id="oidc-preauthorized"
-                checked={preauthorized}
-                onCheckedChange={setPreauthorized}
-              />
-              <FieldLabel htmlFor="oidc-preauthorized">
-                跳过用户授权确认
-              </FieldLabel>
-            </Field>
-            {preauthorized && (
+            {platform && (
+              <Field orientation="horizontal">
+                <Checkbox
+                  id="oidc-preauthorized"
+                  checked={preauthorized}
+                  onCheckedChange={setPreauthorized}
+                />
+                <FieldLabel htmlFor="oidc-preauthorized">
+                  跳过用户授权确认
+                </FieldLabel>
+              </Field>
+            )}
+            {platform && preauthorized && (
               <Alert>
                 <AlertDescription>
                   此应用可在用户完成认证后接收请求的身份信息，无需再次确认授权。应用明确要求确认时仍需用户确认。

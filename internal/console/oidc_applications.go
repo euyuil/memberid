@@ -15,7 +15,6 @@ type oidcApplicationResult struct {
 
 func (s *Service) registerOIDCApplicationRoutes(installation *config.Loaded) {
 	const collection = "/api/oidc-applications"
-	const item = collection + "/{clientId}"
 	const scopedCollection = "/api/organizations/{organizationId}/oidc-applications"
 	list := func(w http.ResponseWriter, r *http.Request) {
 		value, err := s.management.OIDCApplications(r.Context(), r.Context().Value(sessionKey{}).(session).principal(), r.PathValue("organizationId"))
@@ -25,9 +24,7 @@ func (s *Service) registerOIDCApplicationRoutes(installation *config.Loaded) {
 			AllowLoopbackHTTP bool   `json:"allowLoopbackHttp"`
 		}{value, installation.Issuer, installation.AllowLoopbackHTTP}, err)
 	}
-	s.routes.HandleFunc("GET "+collection, list)
-	s.routes.HandleFunc("GET "+scopedCollection, list)
-	s.routes.HandleFunc("POST "+collection, func(w http.ResponseWriter, r *http.Request) {
+	create := func(w http.ResponseWriter, r *http.Request) {
 		var input struct {
 			DisplayName            string   `json:"displayName"`
 			OrganizationID         string   `json:"organizationId"`
@@ -43,7 +40,7 @@ func (s *Service) registerOIDCApplicationRoutes(installation *config.Loaded) {
 			return
 		}
 		secret := config.RandomSecret()
-		value, err := s.management.CreateOIDCApplication(r.Context(), r.Context().Value(sessionKey{}).(session).principal(),
+		value, err := s.management.CreateOIDCApplication(r.Context(), r.Context().Value(sessionKey{}).(session).principal(), r.PathValue("organizationId"),
 			identity.OIDCApplication{
 				DisplayName: input.DisplayName, OrganizationID: input.OrganizationID,
 				RedirectURIs: input.RedirectURIs, PostLogoutRedirectURIs: input.PostLogoutRedirectURIs, Refresh: input.Refresh,
@@ -51,17 +48,17 @@ func (s *Service) registerOIDCApplicationRoutes(installation *config.Loaded) {
 				EvidenceScope: input.EvidenceScope, EvidenceAudience: input.EvidenceAudience,
 			}, config.SecretHash(secret), installation.AllowLoopbackHTTP)
 		respond(w, oidcApplicationResult{value, secret}, err)
-	})
-	s.routes.HandleFunc("PATCH "+item, func(w http.ResponseWriter, r *http.Request) {
+	}
+	update := func(w http.ResponseWriter, r *http.Request) {
 		var input identity.OIDCApplicationChange
 		if !management.DecodeRequest(w, r, &input) {
 			return
 		}
 		value, err := s.management.UpdateOIDCApplication(r.Context(), r.Context().Value(sessionKey{}).(session).principal(),
-			r.PathValue("clientId"), input, installation.AllowLoopbackHTTP)
+			r.PathValue("organizationId"), r.PathValue("clientId"), input, installation.AllowLoopbackHTTP)
 		respond(w, oidcApplicationResult{Application: value}, err)
-	})
-	s.routes.HandleFunc("POST "+item+"/rotate-secret", func(w http.ResponseWriter, r *http.Request) {
+	}
+	rotate := func(w http.ResponseWriter, r *http.Request) {
 		var input struct {
 			ExpectedRevision int64 `json:"expectedRevision"`
 		}
@@ -70,7 +67,14 @@ func (s *Service) registerOIDCApplicationRoutes(installation *config.Loaded) {
 		}
 		secret := config.RandomSecret()
 		value, err := s.management.RotateOIDCApplicationSecret(r.Context(), r.Context().Value(sessionKey{}).(session).principal(),
-			r.PathValue("clientId"), input.ExpectedRevision, config.SecretHash(secret))
+			r.PathValue("organizationId"), r.PathValue("clientId"), input.ExpectedRevision, config.SecretHash(secret))
 		respond(w, oidcApplicationResult{value, secret}, err)
-	})
+	}
+	for _, path := range []string{collection, scopedCollection} {
+		item := path + "/{clientId}"
+		s.routes.HandleFunc("GET "+path, list)
+		s.routes.HandleFunc("POST "+path, create)
+		s.routes.HandleFunc("PATCH "+item, update)
+		s.routes.HandleFunc("POST "+item+"/rotate-secret", rotate)
+	}
 }

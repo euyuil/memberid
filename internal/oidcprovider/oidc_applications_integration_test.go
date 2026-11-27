@@ -136,6 +136,7 @@ func TestManageOIDCApplicationWithoutRestart(t *testing.T) {
 	consoleLogin(t, f, server, f.member.ID)
 	csrf = consoleJSON(t, f, server, "GET", "/api/session", "", "", 200)["csrf"].(string)
 	checkDirectory(ownerDirectory, owned.ClientID)
+	consoleJSON(t, f, server, "POST", ownerDirectory+"/"+owned.ClientID+"/rotate-secret", csrf, `{"expectedRevision":2}`, 403)
 	consoleJSON(t, f, server, "GET", foreignDirectory, "", "", 403)
 	consoleJSON(t, f, server, "GET", base, "", "", 403)
 	options := consoleJSON(t, f, server, "GET", ownerDirectory, "", "", 200)["organizations"].([]any)
@@ -163,6 +164,73 @@ func TestManageOIDCApplicationWithoutRestart(t *testing.T) {
 	consoleJSON(t, f, server, "PATCH", base+"/"+owned.ClientID, csrf, `{"expectedRevision":2,"enabled":false}`, 403)
 }
 
+func TestOrganizationAdministratorManagesOwnedOIDCApplication(t *testing.T) {
+	f := newFixture(t)
+	ctx := t.Context()
+	operator := identity.OperatorPrincipal()
+	owner, other := f.member.OrganizationID, f.otherMember.OrganizationID
+	if err := f.store.SetAdministrator(ctx, operator, owner, f.member.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	server := consoleFixture(t, f)
+	consoleLoginTo(t, f, server, f.member.ID, "/organizations/"+owner+"/oidc-applications")
+	csrf := consoleJSON(t, f, server, "GET", "/api/session", "", "", 200)["csrf"].(string)
+	base := "/api/organizations/" + owner + "/oidc-applications"
+	foreign := "/api/organizations/" + other + "/oidc-applications"
+	create := `{"displayName":"Local application","redirectUris":["https://example.test/callback"]}`
+	consoleJSON(t, f, server, "POST", foreign, csrf, create, 403)
+	consoleJSON(t, f, server, "POST", "/api/oidc-applications", csrf, create, 403)
+	consoleJSON(t, f, server, "POST", base, csrf, strings.TrimSuffix(create, "}")+`,"ownerOrganizationId":"org_system"}`, 400)
+	for _, policy := range []string{`"organizationId":"org_system"`, `"preauthorized":true`, `"evidenceScope":"member:evidence","evidenceAudience":"https://api.example.test"`} {
+		consoleJSON(t, f, server, "POST", base, csrf, strings.TrimSuffix(create, "}")+","+policy+"}", 403)
+	}
+
+	created := consoleJSON(t, f, server, "POST", base, csrf, create, 200)
+	app := created["application"].(map[string]any)
+	id := app["clientId"].(string)
+	if !identity.ValidID(id, identity.ApplicationKind) || app["ownerOrganizationId"] != owner || app["organizationId"] != owner {
+		t.Fatal("registration did not use the assigned ID and authorized owner")
+	}
+	item := base + "/" + id
+	update := `{"expectedRevision":1,"displayName":"Updated","redirectUris":["https://example.test/new-callback"],"refresh":true}`
+	for _, policy := range []string{`"organizationId":"org_system"`, `"preauthorized":true`, `"evidenceScope":"member:evidence","evidenceAudience":"https://api.example.test"`} {
+		consoleJSON(t, f, server, "PATCH", item, csrf, strings.TrimSuffix(update, "}")+","+policy+"}", 403)
+	}
+	edited := consoleJSON(t, f, server, "PATCH", item, csrf, update, 200)["application"].(map[string]any)
+	if edited["organizationId"] != owner || edited["redirectUris"].([]any)[0] != "https://example.test/new-callback" {
+		t.Fatal("callback update did not preserve owner-only admission")
+	}
+
+	otherApp, err := f.store.CreateOIDCClient(ctx, operator, identity.OIDCClientRegistration{
+		DisplayName: "Other owner", OwnerOrganizationID: other, Client: identity.OIDCClient{
+			SubjectKind: "member", OrganizationID: owner, SecretSHA256: config.SecretHash(config.RandomSecret()), RedirectURIs: []string{callback},
+		}}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, target := range []struct {
+		path   string
+		status int
+	}{
+		{foreign + "/" + otherApp.ClientID, 403}, {base + "/" + otherApp.ClientID, 404},
+		{base + "/" + f.consoleID, 404}, {"/api/oidc-applications/" + id, 403},
+	} {
+		consoleJSON(t, f, server, "PATCH", target.path, csrf, update, target.status)
+		consoleJSON(t, f, server, "PATCH", target.path, csrf, `{"expectedRevision":1,"enabled":false}`, target.status)
+		consoleJSON(t, f, server, "POST", target.path+"/rotate-secret", csrf, `{"expectedRevision":1}`, target.status)
+	}
+	rotated := consoleJSON(t, f, server, "POST", item+"/rotate-secret", csrf, `{"expectedRevision":2}`, 200)
+	if rotated["clientSecret"] == created["clientSecret"] {
+		t.Fatal("credential rotation reused the secret")
+	}
+	consoleJSON(t, f, server, "PATCH", item, csrf, `{"expectedRevision":2,"enabled":false}`, 409)
+	disabled := consoleJSON(t, f, server, "PATCH", item, csrf, `{"expectedRevision":3,"enabled":false}`, 200)
+	enabled := consoleJSON(t, f, server, "PATCH", item, csrf, `{"expectedRevision":4,"enabled":true}`, 200)
+	if disabled["application"].(map[string]any)["enabled"] != false || enabled["application"].(map[string]any)["enabled"] != true {
+		t.Fatal("owner status transitions failed")
+	}
+}
+
 func TestOIDCApplicationPolicyManagement(t *testing.T) {
 	f := newFixture(t)
 	ctx := t.Context()
@@ -188,6 +256,11 @@ func TestOIDCApplicationPolicyManagement(t *testing.T) {
 	const scope = "member:evidence"
 	const audience = "https://api.example.test"
 	payload := fmt.Sprintf(`{"displayName":"Policy application","redirectUris":[%q],"accountReturnUris":["https://app.example.invalid/account"],"preauthorized":true,"refresh":true,"evidenceScope":%q,"evidenceAudience":%q}`, callback, scope, audience)
+	scoped := "/api/organizations/" + f.member.OrganizationID + "/oidc-applications"
+	scopedApp := consoleJSON(t, f, server, "POST", scoped, csrf, payload, 200)["application"].(map[string]any)
+	if scopedApp["evidenceScope"] != scope || scopedApp["evidenceAudience"] != audience || scopedApp["organizationId"] != f.member.OrganizationID {
+		t.Fatal("platform policy missing on a scoped registration")
+	}
 	consoleJSON(t, f, server, "POST", base, csrf, strings.Replace(payload, audience, "", 1), 400)
 	created := consoleJSON(t, f, server, "POST", base, csrf, payload, 200)
 	application := created["application"].(map[string]any)

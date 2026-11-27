@@ -1078,14 +1078,15 @@ export default function App() {
               <OIDCApplications
                 key={org}
                 directory={data.oidcApplications}
-                canCreate={actor.platform && !org}
-                canEdit={actor.platform}
+                ownerId={org}
+                platform={actor.platform}
                 csrf={session.csrf}
                 request={request}
                 onComplete={(application) =>
                   setData((current) => {
                     const directory = current.oidcApplications
-                    if (!directory) return current
+                    if (!directory || currentLocation() !== location)
+                      return current
                     const items = directory.items.filter(
                       (item) => item.clientId !== application.clientId
                     )
