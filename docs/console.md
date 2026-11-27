@@ -36,6 +36,7 @@ The [Member role definitions](roles.md) and [management scopes and actions](mana
 | Set or reset a Member password or change the password username | Any organization, including `org_system` | No |
 | List, configure and disable identity providers | Any organization | Own organization |
 | Create, inspect, update, disable and retire SAML applications | Any organization | Own organization |
+| List OIDC applications | All or selected owner | Own organization |
 | Manage OIDC applications | Installation-wide | No |
 | Read, set or clear a Member's managed email | Any organization | Own organization |
 
@@ -113,7 +114,7 @@ Send `evidenceScope` and `evidenceAudience` together when editing the policy. Om
 
 The installation operator creates protected system clients (`--system`) and factor-subject clients (`--subject factor`). The console shows the subject kind and the evidence policy of factor clients read-only. The protected console registration is read-only. Its secret can be rotated with the operator's `memberid client rotate-secret` command. Organization administrators and ordinary Members cannot manage OIDC registrations.
 
-The create and rotate dialogs return the new secret once. Rotation immediately replaces the old verifier. Disabling a registration blocks fresh authorization, code exchange and renewal, and revokes its current MemberID grants. Re-enabling requires a new authorization. The application's own session and offline JWT expiration continue to follow the relying party's policy. Changes to the registration are audited under the system organization without secret values or verifiers.
+The create and rotate dialogs return the new secret once. Rotation immediately replaces the old verifier. Disabling a registration blocks fresh authorization, code exchange and renewal, and revokes its current MemberID grants. Re-enabling requires a new authorization. The application's own session and offline JWT expiration continue to follow the relying party's policy. New registration events record the management owner and acting administrator, including platform administrators acting on an organization's application. Historical entries retain their original attribution. Secret values and verifiers are excluded.
 
 ## SAML applications
 
@@ -148,7 +149,7 @@ and Member IDs identify resources; names do not participate in routing.
 | `/organizations/{organizationId}/authentication-events` | Organization authentication events. |
 | `/providers` | Organization picker for provider management (platform administrators). |
 | `/oidc-applications` | Installation OIDC application management with all-organization management scope (platform administrators). |
-| `/organizations/{organizationId}/oidc-applications` | Installation OIDC application management retaining the selected organization. The scope does not filter registrations or change application login policy. |
+| `/organizations/{organizationId}/oidc-applications` | Registrations owned by the selected organization. Organization administrators can inspect their own directory. Platform administrators can also edit registrations and use the installation-wide view to create platform-owned applications. |
 | `/saml-service-providers` | Organization picker for SAML application management (platform administrators). |
 | `/organizations/{organizationId}/saml-service-providers` | Organization SAML applications; `after` cursor and optional `serviceProviderId` detail selection. |
 

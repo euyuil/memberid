@@ -494,7 +494,10 @@ export default function App() {
         let result: Data
         if (oidcApplications) {
           const [directory, organization] = await Promise.all([
-            request<OIDCApplicationDirectory>("/api/oidc-applications", options),
+            request<OIDCApplicationDirectory>(
+              `/api${routeURL({ view: "oidc-applications", org })}`,
+              options
+            ),
             org ? fetchOrganization() : undefined,
           ])
           result = { oidcApplications: directory, organization }
@@ -791,18 +794,11 @@ export default function App() {
           label: "应用接入",
           icon: AppWindow,
           items: [
-            ...(actor.platform
-              ? [
-                  {
-                    label: "OIDC 应用",
-                    href: routeURL({
-                      view: "oidc-applications",
-                      ...navigationScope,
-                    }),
-                    active: oidcApplications,
-                  },
-                ]
-              : []),
+            {
+              label: "OIDC 应用",
+              href: routeURL({ view: "oidc-applications", ...navigationScope }),
+              active: oidcApplications,
+            },
             {
               label: "SAML 应用",
               href: routeURL({
@@ -1080,7 +1076,10 @@ export default function App() {
           <>
             {data.oidcApplications && (
               <OIDCApplications
+                key={org}
                 directory={data.oidcApplications}
+                canCreate={actor.platform && !org}
+                canEdit={actor.platform}
                 csrf={session.csrf}
                 request={request}
                 onComplete={(application) =>

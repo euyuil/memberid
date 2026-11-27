@@ -96,13 +96,17 @@ type OIDCApplicationDirectory struct {
 	Organizations []Organization    `json:"organizations"`
 }
 
-func (service *ManagementService) OIDCApplications(ctx context.Context, principal Principal) (OIDCApplicationDirectory, error) {
+func (service *ManagementService) OIDCApplications(ctx context.Context, principal Principal, ownerID string) (OIDCApplicationDirectory, error) {
 	store := service.store
-	if err := store.authorizeManagementRead(ctx, principal, oidcClientsResource.require(actionList), organizationsResource.require(actionList)); err != nil {
+	requirement := oidcClientsResource.require(actionList)
+	if ownerID != "" {
+		requirement = organizationOIDCClientsResource.require(actionList, ownerID)
+	}
+	if err := store.authorizeManagementRead(ctx, principal, requirement); err != nil {
 		return OIDCApplicationDirectory{}, err
 	}
 	directory := OIDCApplicationDirectory{Items: []OIDCApplication{}, Organizations: []Organization{}}
-	rows, err := store.pool.Query(ctx, "SELECT "+oidcClientColumns+" FROM oidc_clients ORDER BY client_id")
+	rows, err := store.pool.Query(ctx, "SELECT "+oidcClientColumns+" FROM oidc_clients WHERE ($1::text = '' OR owner_organization_id=$1) ORDER BY client_id", ownerID)
 	if err != nil {
 		return directory, err
 	}
@@ -116,7 +120,7 @@ func (service *ManagementService) OIDCApplications(ctx context.Context, principa
 		directory.Items = append(directory.Items, client.Application())
 	}
 	for after := ""; ; {
-		page, err := store.Organizations(ctx, after, 100)
+		page, err := service.Organizations(ctx, principal, after, 100)
 		if err != nil {
 			return directory, err
 		}
@@ -176,7 +180,7 @@ func (store *Store) CreateOIDCClient(ctx context.Context, principal Principal, r
 		if err := insertOIDCClient(ctx, tx, registration); err != nil {
 			return err
 		}
-		return managementEvent(ctx, tx, principal, SystemOrganizationID, "", "oidc.application.create", application, nil)
+		return managementEvent(ctx, tx, principal, registration.OwnerOrganizationID, "", "oidc.application.create", application, nil)
 	})
 	if err != nil {
 		return OIDCApplication{}, err
@@ -312,7 +316,7 @@ func (store *Store) changeOIDCClient(ctx context.Context, principal Principal, i
 		if err := json.Unmarshal(before, &values); err != nil {
 			return err
 		}
-		return managementEvent(ctx, tx, principal, SystemOrganizationID, "", "oidc.application."+action, result, values)
+		return managementEvent(ctx, tx, principal, registration.OwnerOrganizationID, "", "oidc.application."+action, result, values)
 	})
 	if err != nil {
 		return OIDCApplication{}, err
