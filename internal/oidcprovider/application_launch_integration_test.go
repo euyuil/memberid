@@ -46,8 +46,22 @@ func TestOIDCOrganizationLaunch(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	const loginName = "subscriber-b"
+	if err := f.store.AssignOrganizationSlug(ctx, operator, b.OrganizationID, loginName); err != nil {
+		t.Fatal(err)
+	}
+	start, _ := f.authorization(app.ClientID, scope, nil)
+	f.status(start, 302)
+	common := f.call(f.browser, "GET", start.header.Get("Location"), nil, nil)
+	f.status(common, 200)
+	if declined := f.selectOrganization(common, loginName); !strings.Contains(declined.body, "Enter a valid organization login name or ID.") {
+		t.Fatal("unsubscribed organization was selected by name")
+	}
 	enroll(true)
-	launch := func(scoped bool) (reply, string) {
+	// The interactive selector accepts login names. Protocol hints require a permanent ID.
+	denied(app.ClientID, url.Values{"memberid_organization": {loginName}})
+	launch := func(selection string) (reply, string) {
+		scoped := selection == ""
 		t.Helper()
 		var extra url.Values
 		if scoped {
@@ -64,15 +78,15 @@ func TestOIDCOrganizationLaunch(t *testing.T) {
 			t.Fatal("organization selection did not match launch")
 		}
 		if !scoped {
-			page = f.selectOrganization(page, b.OrganizationID)
+			page = f.selectOrganization(page, selection)
 		}
 		if strings.Contains(page.body, `id="phone"`) {
 			page = f.verifyPhone(page)
 		}
 		return page, verifier
 	}
-	for _, scoped := range []bool{true, false} {
-		page, verifier := launch(scoped)
+	for _, selection := range []string{"", b.OrganizationID, loginName} {
+		page, verifier := launch(selection)
 		wrong := f.submit(page.body, "continue", url.Values{"member": {a.ID}, "consent": {"yes"}})
 		f.status(wrong, 200)
 		if !strings.Contains(wrong.body, "Select an available Member identity.") {
@@ -85,7 +99,7 @@ func TestOIDCOrganizationLaunch(t *testing.T) {
 			t.Fatal("incorrect signed organization, Member or nonce")
 		}
 	}
-	pending, _ := launch(true)
+	pending, _ := launch("")
 	enroll(false)
 	enroll(true)
 	refused := f.submit(pending.body, "continue", url.Values{"member": {b.ID}, "consent": {"yes"}})

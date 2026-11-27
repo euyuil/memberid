@@ -227,8 +227,15 @@ func (service *Service) bindLaunchOrganization(ctx context.Context, request *aut
 	return service.selectLoginOrganization(ctx, request, policy, id)
 }
 
-func (service *Service) selectLoginOrganization(ctx context.Context, request *authorizationRequest, policy loginPolicy, id string) error {
-	if err := service.requireLoginOrganization(ctx, id); err != nil {
+func (service *Service) selectLoginOrganization(ctx context.Context, request *authorizationRequest, policy loginPolicy, value string) error {
+	id := value
+	var err error
+	if identity.ValidID(value, identity.OrganizationKind) {
+		err = service.requireLoginOrganization(ctx, id)
+	} else {
+		id, err = service.store.LoginOrganizationIDBySlug(ctx, value)
+	}
+	if err != nil {
 		return err
 	}
 	if policy.activation != nil {
@@ -243,16 +250,15 @@ func (service *Service) selectLoginOrganization(ctx context.Context, request *au
 }
 
 func (service *Service) selectedLoginOrganization(w http.ResponseWriter, r *http.Request, request *authorizationRequest, policy loginPolicy) string {
-	id := r.PostForm.Get("organization")
-	if err := service.selectLoginOrganization(r.Context(), request, policy, id); err != nil {
-		if errors.Is(err, identity.ErrInvalid) || errors.Is(err, identity.ErrIneligible) {
-			service.renderLogin(w, r, request, policy, "Enter a valid organization ID.")
+	if err := service.selectLoginOrganization(r.Context(), request, policy, r.PostForm.Get("organization")); err != nil {
+		if errors.Is(err, identity.ErrInvalid) || errors.Is(err, identity.ErrIneligible) || errors.Is(err, identity.ErrNotFound) {
+			service.renderLogin(w, r, request, policy, "Enter a valid organization login name or ID.")
 		} else {
 			writeLoginOrganizationError(w, err)
 		}
 		return ""
 	}
-	return id
+	return request.ProviderOrganizationID
 }
 
 func (service *Service) login(w http.ResponseWriter, r *http.Request) {
