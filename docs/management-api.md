@@ -55,9 +55,7 @@ Atomic enrollment allocates both IDs and has its own [retry contract](#atomic-or
 
 Display names are nonblank text of at most 128 Unicode code points without control characters. Changing a name preserves the stable Member subject.
 
-Fresh initialization includes the reserved organization `org_system`. It is returned by organization queries and accepted as an existing organization ID, but rejected for creation or enrollment and cannot be disabled (403). Member blocking and binding revocation preserve the last currently available administrator (409); the same guard applies to immutable Member updates. This credential does not impersonate a platform Member.
-
-Password-based installation bootstrap reserves `mbr_root` for its first Member in `org_system`. Member lookup accepts that ID. Member creation and organization enrollment reject an attempt to supply it (400).
+Fresh initialization creates the enabled system organization with a generated organization ID and the login name `system`. Disabling it returns 403. Member blocking and binding revocation preserve the last available administrator (409). The system root password binding is permanent. Password bootstrap assigns its Member a generated ID. Standalone creation and enrollment allocate all organization and Member IDs server-side.
 
 Every Member lookup or mutation is constrained by its organization. A Member in another organization returns 404. Disabling an organization prevents its Members from passing current eligibility without deleting their identities. Manual unblock preserves an independent external-departure block. An organization's enabled status and the Member's own status are separate facts; inspect eligibility for the complete binding decision.
 

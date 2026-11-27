@@ -51,7 +51,7 @@ func TestConsolePhoneIdentitySwitchPreservesIndependentAuthority(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	platform, err := f.store.CreateMember(t.Context(), identity.OperatorPrincipal(), identity.SystemOrganizationID, "", "Separate platform Member")
+	platform, err := f.store.CreateMember(t.Context(), identity.OperatorPrincipal(), f.store.SystemOrganizationID(), "", "Separate platform Member")
 	if err != nil {
 		t.Fatal(err)
 	}

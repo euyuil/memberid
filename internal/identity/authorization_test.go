@@ -10,6 +10,7 @@ import (
 func TestManagementWritePermissionBoundaries(t *testing.T) {
 	org, _ := NewID(OrganizationKind)
 	member, _ := NewID(MemberKind)
+	otherOrg, _ := NewID(OrganizationKind)
 	base := "organizations/" + org
 	permissions := managementPermissions(ManagementActor{OrganizationID: org})
 	for _, test := range []struct {
@@ -22,7 +23,7 @@ func TestManagementWritePermissionBoundaries(t *testing.T) {
 		{base + "/members/" + member + "/bindings", "create", false},
 		{base + "/roleAssignments", "create", true}, {base + "/roleAssignments/" + member, "delete", true},
 		{base + "/roleAssignments/" + member, "update", false},
-		{"organizations/" + SystemOrganizationID + "/members", "create", false},
+		{"organizations/" + otherOrg + "/members", "create", false},
 	} {
 		err := authorization.Check(permissions, authorization.Requirement{Target: test.target, Action: test.action})
 		if (err == nil) != test.allow {

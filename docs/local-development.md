@@ -30,7 +30,7 @@ Run from the repository root to create the persistent preview. For feature work,
 sh dev/setup.sh
 ```
 
-Setup issues a separate server key and 90-day certificate under the shared root, builds the local image with the pinned Go and Node versions, generates the installation configuration and console client, and initializes a new PostgreSQL volume with `org_system/root`. Each server certificate has the exact admin and auth hostnames for that environment. Caddy mounts its server certificate and key. The console mounts a copy of the public root to verify the OIDC issuer.
+Setup issues a separate server key and 90-day certificate under the shared root, builds the local image with the pinned Go and Node versions, generates the installation configuration and console client, and initializes a new PostgreSQL volume with `system/root`. Each server certificate has the exact admin and auth hostnames for that environment. Caddy mounts its server certificate and key. The console mounts a copy of the public root to verify the OIDC issuer.
 
 The Compose project, installation configuration, credentials, and environment TLS files live under the ignored `.local/compose/` directory. Keep that directory and its matching PostgreSQL volume together. Setup requires a new state directory. If it stops partway through, inspect the generated configuration and Compose state before retrying. The Docker build excludes the local state.
 
@@ -47,7 +47,7 @@ dc up -d --wait
 dc ps
 ```
 
-Open the admin URL and choose **Sign in with MemberID**. Enter organization ID `org_system`, username `root`, and the password saved by setup in `.local/compose/bootstrap/initial-root-password`. The password file is available only to the operator through the protected local state and is outside the runtime mounts. Remove it once the password is stored securely. To rotate a lost password, use `dc run --rm --no-deps -T auth setup reset-password` and save the new password from the terminal.
+Open the admin URL and choose **Sign in with MemberID**. Enter organization login name `system`, username `root`, and the password saved by setup in `.local/compose/bootstrap/initial-root-password`. The password file is available only to the operator through the protected local state and is outside the runtime mounts. Remove it once the password is stored securely. To rotate a lost password, use `dc run --rm --no-deps -T auth setup reset-password` and save the new password from the terminal.
 
 No external providers are enabled by default. For phone sign-in, add `MEMBERID_PHONE_ENABLED=true` and the protected test provider settings from [phone verification](phone-authentication.md) to `auth.env`. Configure a development application and enable its adapter for [DingTalk](dingtalk.md) or [Feishu](feishu.md). After editing `auth.env`, run `dc up -d --wait auth` to apply the new environment. The installation directory inside the container is `/etc/memberid`.
 

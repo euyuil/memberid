@@ -57,7 +57,7 @@ func (service *ManagementService) ConsoleIdentities(ctx context.Context, princip
 			page.NextAfter = page.Items[len(page.Items)-1].MemberID
 			break
 		}
-		item.Platform = item.OrganizationID == SystemOrganizationID
+		item.Platform = item.OrganizationID == service.store.systemOrganizationID
 		page.Items = append(page.Items, item)
 	}
 	return page, rows.Err()

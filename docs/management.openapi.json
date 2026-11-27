@@ -1155,13 +1155,13 @@
     "schemas": {
       "OrganizationID": {
         "type": "string",
-        "pattern": "^org_(system|[0-9bcdfghjkmnpqrstvwxz]{27})$",
-        "description": "org_system is reserved for existing lookups; creation and enrollment reject it."
+        "pattern": "^org_[0-9bcdfghjkmnpqrstvwxz]{27}$",
+        "description": "Generated organization identifier, including for the system organization."
       },
       "MemberID": {
         "type": "string",
-        "pattern": "^mbr_(root|[0-9bcdfghjkmnpqrstvwxz]{27})$",
-        "description": "mbr_root is reserved for the Member created by installation bootstrap."
+        "pattern": "^mbr_[0-9bcdfghjkmnpqrstvwxz]{27}$",
+        "description": "Generated Member identifier, including for the bootstrap administrator."
       },
       "FactorID": {
         "type": "string",

@@ -26,10 +26,10 @@ func (store *Store) PrepareSystemDingTalkAdmissionForSource(ctx context.Context,
 	return pgx.BeginFunc(ctx, store.pool, func(tx pgx.Tx) error {
 		// Match the login transaction's organization-first lock order.
 		var id string
-		if err := tx.QueryRow(ctx, "SELECT id FROM organizations WHERE id=$1 FOR UPDATE", SystemOrganizationID).Scan(&id); err != nil {
+		if err := tx.QueryRow(ctx, "SELECT id FROM organizations WHERE id=$1 FOR UPDATE", store.systemOrganizationID).Scan(&id); err != nil {
 			return err
 		}
-		if _, err := readMember(tx.QueryRow(ctx, "SELECT "+memberColumns+" FROM members WHERE id=$1 AND organization_id=$2", memberID, SystemOrganizationID)); err != nil {
+		if _, err := readMember(tx.QueryRow(ctx, "SELECT "+memberColumns+" FROM members WHERE id=$1 AND organization_id=$2", memberID, store.systemOrganizationID)); err != nil {
 			return err
 		}
 		var previouslyEnabled bool
@@ -40,12 +40,12 @@ func (store *Store) PrepareSystemDingTalkAdmissionForSource(ctx context.Context,
 			return err
 		}
 		if unionID != "" {
-			namespace, err := dingTalkNamespace(ctx, tx, SystemOrganizationID, providerID)
+			namespace, err := dingTalkNamespace(ctx, tx, store.systemOrganizationID, providerID)
 			if err != nil {
 				return ErrIneligible
 			}
 			var active bool
-			if err := tx.QueryRow(ctx, "SELECT enabled AND authorization_status='active' FROM dingtalk_applications WHERE namespace=$1 AND organization_id=$2", namespace, SystemOrganizationID).Scan(&active); err != nil || !active {
+			if err := tx.QueryRow(ctx, "SELECT enabled AND authorization_status='active' FROM dingtalk_applications WHERE namespace=$1 AND organization_id=$2", namespace, store.systemOrganizationID).Scan(&active); err != nil || !active {
 				return ErrIneligible
 			}
 			var bound bool
@@ -59,6 +59,6 @@ func (store *Store) PrepareSystemDingTalkAdmissionForSource(ctx context.Context,
 				return storageError(err)
 			}
 		}
-		return managementEvent(ctx, tx, principal, SystemOrganizationID, memberID, "dingtalk.admission", map[string]bool{"enabled": unionID != ""}, map[string]any{"enabled": previouslyEnabled})
+		return managementEvent(ctx, tx, principal, store.systemOrganizationID, memberID, "dingtalk.admission", map[string]bool{"enabled": unionID != ""}, map[string]any{"enabled": previouslyEnabled})
 	})
 }

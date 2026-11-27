@@ -6,16 +6,17 @@ Schema 26 is the first supported baseline. Upgrades are explicit operator operat
 
 | Source | Target | Result |
 | --- | --- | --- |
-| Empty database | 37 | Explicit initialization and generated IDs for all new registrations. |
-| 26–31 | 37 | Apply each outstanding version in one transaction with a matching recovery set and reviewed application ID manifest. |
-| 32 | 37 | Preserve all application IDs and existing admission policies. Apply the sharing migration with a recovery set. |
-| 33 | 37 | Validate the opt-in organization disclosure policy. Existing registrations remain opted out. |
-| 34 | 37 | Preserve SAML registrations and pairwise subjects with owner-only admission and an empty consumer enrollment table. |
-| 35 | 37 | Release the organization login names `callback`, `dingtalk` and `feishu` while preserving existing assignments. |
-| 36 | 37 | Add a unique key for new enrollments and preserve existing receipt lookup by organization ID. |
-| 37 | 37 | Return `upgraded: false` without creating a recovery set or generating IDs. |
-| Earlier than 26, later than 37, missing/ambiguous version | 37 | Refuse the upgrade. |
-| 37 | Earlier version | Restore the matching source database, installation, consumer configurations and executable to new destinations. |
+| Empty database | 38 | Explicit initialization and generated IDs for all new registrations. |
+| 26–31 | 38 | Apply each outstanding version in one transaction with a matching recovery set and reviewed application ID manifest. |
+| 32 | 38 | Preserve all application IDs and existing admission policies. Apply the sharing migration with a recovery set. |
+| 33 | 38 | Validate the opt-in organization disclosure policy. Existing registrations remain opted out. |
+| 34 | 38 | Preserve SAML registrations and pairwise subjects with owner-only admission and an empty consumer enrollment table. |
+| 35 | 38 | Release the organization login names `callback`, `dingtalk` and `feishu` while preserving existing assignments. |
+| 36 | 38 | Add a unique key for new enrollments and preserve existing receipt lookup by organization ID. |
+| 37 | 38 | Generate installation identities and bind the permanent system and root login names. |
+| 38 | 38 | Return `upgraded: false` without creating a recovery set or generating IDs. |
+| Earlier than 26, later than 38, missing/ambiguous version | 38 | Refuse the upgrade. |
+| 38 | Earlier version | Restore the matching source database, installation, consumer configurations and executable to new destinations. |
 
 The schema 26 baseline executable is the ordinary distribution built from commit `a7c3ebed19d4cfb7196108f80c6360fc9449f882`. The schema 27 baseline is the distribution built from `2e6881ef0190b4fbf9cc9ed84edd3fe9c6a55902`. Schema 27 introduced the `database_upgrades` ledger. Schema 28 adds `feishu_memberships`, seeding pending checks for existing Feishu bindings without inferring employment state.
 
@@ -35,7 +36,17 @@ Schema 36 widens the login slug constraint. Before switching binaries, register 
 
 Schema 37 preserves existing enrollment receipts with a null key and enforces uniqueness for new enrollment keys. Follow the [caller cutover procedure](management-api.md#cut-over-callers-with-pending-enrollments) before reopening provisioning.
 
-Each applied migration records its source and target versions and SQL checksum together with the recovery-set receipt. Registration import, all applied migrations, and the ledger commit in the same transaction. Fresh schema 37 installations have an empty ledger.
+Each applied migration records its source and target versions and SQL checksum together with the recovery-set receipt. Registration import, all applied migrations, and the ledger commit in the same transaction. Fresh schema 38 installations have an empty ledger.
+
+## System organization and root cutover
+
+Schema 38 generates a system organization ID and a bootstrap Member ID once in the upgrade transaction. Existing ordinary organization and Member IDs stay the same. A schema-only installation gains the permanent `system` login name and reserves `root` without creating a Member or granting privileges. The protected console registration moves with its owner and retains its application ID, credentials, callbacks and protection when upgrading from schema 37.
+
+1. Before the window, inventory consumers of `org_system` and every relying party where `(issuer, mbr_root)` identifies an existing account. For each one, verify its issuer, external subject, local account primary key and current grants through the application's administrative records. Back up those associations and pause automatic provisioning and sign-in during the cutover. Keep the MemberID issuer, installation keys and credentials. For a renamed bootstrap username the upgrade restores `root` on the same password factor. If another system Member already holds that name, resolve ownership on the source installation before retrying. The upgrade aborts transactionally on ambiguity.
+2. Stop writers, preserve the verified source recovery set and run the forward upgrade. Run `memberid setup identities` on the upgraded database. Record the returned `organizationId` and, when provisioned, `rootMemberId`. Replace explicit system organization references in consumer configurations and bookmarks. Use `/login/system` for the permanent login entry. Update organization-scoped claim mappings independently of account associations.
+3. In each affected relying party, use its supported administrative operation to update the verified account's external key from `(same issuer, mbr_root)` to `(same issuer, rootMemberId)`. Require exactly one matching old key, the expected local account, and a free destination key. Stop for manual reconciliation if any check fails. Keep the same local account ID and business grants. Contact details and display names cannot establish account ownership.
+4. Sign in fresh as `system/root` to the protected console, verify platform access and check its unchanged application ID and generated system owner. In each affected relying party verify a signed ID token for that client, the same issuer, the new subject, and the same local account and permissions. Exercise an ordinary account as a control. Reopen sign-in after these checks. Allow previously issued offline-validated tokens to expire or use the consuming application's revocation controls.
+5. For recovery, stop traffic again and restore the matching database, executable, installation configuration and keys to isolated destinations as described below. Restore each relying party's verified pre-cutover association and configuration before reopening it. Test the original login, local account ID and grants. A later upgrade from that restored source generates new IDs, so capture the new mapping again.
 
 ## Preflight and maintenance
 
@@ -77,7 +88,7 @@ Before upgrading:
 
 ```sh
 memberid database upgrade --directory ./installation \
-  --backup-directory ./protected-backups/before-schema-37 \
+  --backup-directory ./protected-backups/before-schema-38 \
   --application-id-manifest ./protected-backups/application-ids.json \
   --maintenance-confirmed
 ```
@@ -90,7 +101,7 @@ The backup destination must be new and outside the installation. Existing destin
 
 - `database.dump`: a complete custom-format `pg_dump` archive, without ownership/ACL commands. Global database roles, tablespaces, external service settings and secrets outside the installation are not included; provision those separately on recovery.
 - `installation/`: the complete protected directory, including the issuer/client configuration, SAML signing material, OIDC keys, protocol/provider secrets and management credentials. Symlinks and special files are rejected. Copied files are made owner-only on Unix and their contents flushed.
-- `manifest.json`: the source schema (26 through 36), a random recovery-set ID, creation time and SHA-256 checksums for every file. Written last after verifying the copy and that source files did not change during backup. This detects damage/mixed sets, not a malicious operator able to rewrite both files and manifest.
+- `manifest.json`: the source schema (26 through 37), a random recovery-set ID, creation time and SHA-256 checksums for every file. Written last after verifying the copy and that source files did not change during backup. This detects damage/mixed sets, not a malicious operator able to rewrite both files and manifest.
 
 The command creates the archive while holding PostgreSQL SHARE locks over the public tables, excluding writes while allowing `pg_dump` to read. It then takes an exclusive version-table lock, rechecks stopped clients and applies the migration and ledger atomically. A shared maintenance lock on current MemberID database connections prevents a new current-version process from starting during upgrade. The final version-table lock also prevents a late schema 26 process from reading the old version and starting after commit. These checks complement the required maintenance window; they do not coordinate arbitrary external SQL tools, filesystem writers or deployment controllers. See [PostgreSQL locking](https://www.postgresql.org/docs/18/explicit-locking.html) and [pg_dump](https://www.postgresql.org/docs/18/app-pgdump.html).
 
@@ -99,11 +110,11 @@ The command creates the archive while holding PostgreSQL SHARE locks over the pu
 - Preflight or backup failure commits no database changes. An incomplete recovery directory may remain for inspection; it is not a completed backup without a valid manifest. Choose a new destination on a new attempt. Never delete the source to make initialization or upgrade pass.
 - Concurrent upgrades fail promptly on the database advisory lock. No process is terminated automatically. Locks are released with the connection/transaction; there is no stale filesystem lock to remove.
 - A SQL error or interruption before commit rolls back the DDL, ledger and version together. Keep the source offline, inspect it and correct the cause before retrying.
-- A connection failure around commit is an uncertain response, not proof of rollback. Run `upgrade-plan` and `database check` after the first connection has ended. Schema 37 means the complete transaction committed. Inspect `database_upgrades` and verify the recorded recovery set. Repeating `upgrade` at schema 37 returns a no-op without touching its backup destination. An unchanged source version (26 through 36) means retry the supported upgrade with a new recovery destination. Never attempt a reverse SQL script.
+- A connection failure around commit is an uncertain response, not proof of rollback. Run `upgrade-plan` and `database check` after the first connection has ended. Schema 38 means the complete transaction committed. Inspect `database_upgrades` and verify the recorded recovery set. Repeating `upgrade` at schema 38 returns a no-op without touching its backup destination. An unchanged source version (26 through 37) means retry the supported upgrade with a new recovery destination. Never attempt a reverse SQL script.
 - Filesystem or storage failure can invalidate a backup independently of the database transaction. Verify and protect the complete recovery set; the workflow is not a distributed transaction between PostgreSQL and backup storage, a continuous backup service or protection against losing both copies on one disk.
 
 ```sh
-memberid database backup-check --backup-directory ./protected-backups/before-schema-37
+memberid database backup-check --backup-directory ./protected-backups/before-schema-38
 memberid database check
 ```
 
@@ -119,7 +130,7 @@ Recovery returns to the backup point. It does not preserve writes made after the
    ```sh
    pg_restore --dbname=memberid_recovered \
      --exit-on-error --single-transaction --no-owner --no-acl \
-     ./protected-backups/before-schema-37/database.dump
+     ./protected-backups/before-schema-38/database.dump
    ```
 
 3. Copy the backed-up `installation/` into a new protected directory, preserving contents and enforcing access controls. Select the matching source-schema executable and configure its connection to the **new restored database**. Verify `config check`, `database check`, and key/certificate validity before starting services. The backup does not renew expired certificates or change SP trust.
@@ -139,7 +150,9 @@ Schema 32 consumes pending application requests and revokes existing OIDC grants
 
 ## Validation
 
-PostgreSQL integration tests additionally preserve populated schema 27 Feishu identities and seed unknown membership observations. They cover backup refusal, active legacy clients, competing upgrades, blocked current-version startup, cancellation, SQL failure after DDL starts, rollback, retry, unsupported versions, and catalog equivalence between a migrated and freshly initialized schema 37. Recovery-set tests reject changed, missing and extra files.
+PostgreSQL integration tests additionally preserve populated schema 27 Feishu identities and seed unknown membership observations. They cover backup refusal, active legacy clients, competing upgrades, blocked current-version startup, cancellation, SQL failure after DDL starts, rollback, retry, unsupported versions, and catalog equivalence between a migrated and freshly initialized schema 38. Recovery-set tests reject changed, missing and extra files.
+
+The installation cutover fixture runs the schema 37 and current packages against isolated PostgreSQL. Set `MEMBERID_SCHEMA37_PACKAGE` and `MEMBERID_UPGRADE_PACKAGE` to their absolute distribution directories, then run `node --test internal/interop/installation/cutover.test.mjs` from the repository root. It completes a fresh root sign-in to the protected console and a separate OIDC client before upgrade, after upgrade and after restoring the source installation. It verifies each ID token and checks the relying party's local account and permissions after explicit relinking. The fixture uses loopback HTTP with a private test configuration.
 
 The [packaged SAML fixture](saml-interop.md) accepts `MEMBERID_UPGRADE_BASELINE_PACKAGE` pointing to an ordinary schema 26 or 27 distribution, with `MEMBERID_SAML_PACKAGE` pointing to the current distribution. It creates Members, password bindings, administrator assignments, managed email, persistent and legacy NameIDs, an OIDC client, sessions and a Refresh Token using the old executable. It checks retained data across upgrade, rejects old-client credentials, obtains the same subject on a fresh grant, and completes SAML login with the same NameID. It then restores the generated recovery set into new destinations, invalidates restored sessions, rejects the old Refresh Token, and completes fresh SAML login with the matching old executable. The original upgraded database is retained until owned fixture cleanup. CI builds the pinned baseline and runs this rehearsal on Linux; the same fixture supports Windows native packages. This is automated HTTPS acceptance, not actual-browser inspection or real external-provider verification.
 

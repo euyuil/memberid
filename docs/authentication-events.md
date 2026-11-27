@@ -146,7 +146,7 @@ Set event organization ownership only from a validated server-side workflow
 that already belongs to one organization, or from the established Member/grant
 target. An input organization ID alone is insufficient. Shared or unresolved
 authentication events have no organization owner and remain platform-visible.
-Do not assign them to `org_system`, duplicate them into every bound organization,
+Do not assign them to the system organization, duplicate them into every bound organization,
 or retrospectively expose them when a new binding appears.
 
 | Reader | Allowed visibility |
@@ -419,7 +419,7 @@ events and performs no retention cleanup; configured service cleanup and query
 expiry policy remain authoritative. Repeated operator revocation preserves the
 original revocation timestamp and produces no additional state-change event.
 
-The fresh-install schema is version 37. Startup never migrates or resets existing
+The fresh-install schema is version 38. Startup never migrates or resets existing
 databases; [explicit forward upgrades](database-upgrades.md) start at schema 26.
 The new store intentionally has no foreign keys to transient
 sessions, flows, grants, or causal events. Events remain historical evidence after

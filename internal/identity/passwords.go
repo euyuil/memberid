@@ -76,6 +76,9 @@ func (store *Store) SetMemberPassword(ctx context.Context, principal Principal, 
 			return err
 		}
 		if !exists {
+			if organizationID == store.systemOrganizationID && username == RootUsername {
+				return ErrForbidden
+			}
 			return insertMemberPassword(ctx, tx, principal, organizationID, memberID, username, hash)
 		}
 		return rotateMemberPassword(ctx, tx, organizationID, memberID, username, hash)

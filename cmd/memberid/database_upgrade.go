@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -107,11 +108,20 @@ func databaseUpgrade(ctx context.Context, args []string, stdout, stderr io.Write
 		if err != nil {
 			return identity.UpgradePreparation{}, err
 		}
-		if version >= 29 {
-			return identity.UpgradePreparation{ApplicationIDs: assignments, Backup: receipt}, nil
+		installation, err := config.Load(filepath.Join(backup, "installation"))
+		if err != nil {
+			return identity.UpgradePreparation{}, err
 		}
-		clients, err := legacyOIDCRegistrations(filepath.Join(backup, "installation"))
-		return identity.UpgradePreparation{ApplicationIDs: assignments, Backup: receipt, OIDCClients: clients}, err
+		key, err := base64.StdEncoding.DecodeString(installation.Secrets.ProviderKey)
+		if err != nil {
+			return identity.UpgradePreparation{}, err
+		}
+		prepared := identity.UpgradePreparation{ApplicationIDs: assignments, Backup: receipt, ProviderKey: key}
+		if version >= 29 {
+			return prepared, nil
+		}
+		prepared.OIDCClients, err = legacyOIDCRegistrations(filepath.Join(backup, "installation"))
+		return prepared, err
 	})
 	if err != nil {
 		return err

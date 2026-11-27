@@ -145,7 +145,7 @@ func TestAuthenticationEventClientNamesPreserveHistoryAndProtocol(t *testing.T) 
 	ctx := t.Context()
 	const clientID = "shared-client-id"
 	_, err := store.pool.Exec(ctx, `INSERT INTO oidc_clients(client_id,display_name,enabled,system,revision,registration,owner_organization_id)
- VALUES($1,'Current OIDC name',true,false,1,jsonb_build_object('client_id',$1::text),'org_system')`, clientID)
+ VALUES($1,'Current OIDC name',true,false,1,jsonb_build_object('client_id',$1::text),system_organization_id())`, clientID)
 	if err != nil {
 		t.Fatal(err)
 	}

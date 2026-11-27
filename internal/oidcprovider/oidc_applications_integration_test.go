@@ -16,7 +16,7 @@ func TestManageOIDCApplicationWithoutRestart(t *testing.T) {
 	f := newFixture(t)
 	ctx := t.Context()
 	operator := identity.OperatorPrincipal()
-	admin, err := f.store.CreateMember(ctx, operator, identity.SystemOrganizationID, "", "Platform operator")
+	admin, err := f.store.CreateMember(ctx, operator, f.store.SystemOrganizationID(), "", "Platform operator")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,7 +41,7 @@ func TestManageOIDCApplicationWithoutRestart(t *testing.T) {
 	created := consoleJSON(t, f, server, "POST", base, csrf, payload, 200)
 	platformOwned := created["application"].(map[string]any)
 	managed := platformOwned["clientId"].(string)
-	if platformOwned["ownerOrganizationId"] != identity.SystemOrganizationID || platformOwned["organizationId"] != f.member.OrganizationID {
+	if platformOwned["ownerOrganizationId"] != f.store.SystemOrganizationID() || platformOwned["organizationId"] != f.member.OrganizationID {
 		t.Fatal("wrong owner or login organization in console registration")
 	}
 	ownedClient := identity.OIDCClientRegistration{
@@ -181,7 +181,7 @@ func TestOrganizationAdministratorManagesOwnedOIDCApplication(t *testing.T) {
 	consoleJSON(t, f, server, "POST", foreign, csrf, create, 403)
 	consoleJSON(t, f, server, "POST", "/api/oidc-applications", csrf, create, 403)
 	consoleJSON(t, f, server, "POST", base, csrf, strings.TrimSuffix(create, "}")+`,"ownerOrganizationId":"org_system"}`, 400)
-	for _, policy := range []string{`"organizationId":"org_system"`, `"preauthorized":true`, `"evidenceScope":"member:evidence","evidenceAudience":"https://api.example.test"`} {
+	for _, policy := range []string{`"organizationId":"` + f.store.SystemOrganizationID() + `"`, `"preauthorized":true`, `"evidenceScope":"member:evidence","evidenceAudience":"https://api.example.test"`} {
 		consoleJSON(t, f, server, "POST", base, csrf, strings.TrimSuffix(create, "}")+","+policy+"}", 403)
 	}
 
@@ -193,7 +193,7 @@ func TestOrganizationAdministratorManagesOwnedOIDCApplication(t *testing.T) {
 	}
 	item := base + "/" + id
 	update := `{"expectedRevision":1,"displayName":"Updated","redirectUris":["https://example.test/new-callback"],"refresh":true}`
-	for _, policy := range []string{`"organizationId":"org_system"`, `"preauthorized":true`, `"evidenceScope":"member:evidence","evidenceAudience":"https://api.example.test"`} {
+	for _, policy := range []string{`"organizationId":"` + f.store.SystemOrganizationID() + `"`, `"preauthorized":true`, `"evidenceScope":"member:evidence","evidenceAudience":"https://api.example.test"`} {
 		consoleJSON(t, f, server, "PATCH", item, csrf, strings.TrimSuffix(update, "}")+","+policy+"}", 403)
 	}
 	edited := consoleJSON(t, f, server, "PATCH", item, csrf, update, 200)["application"].(map[string]any)
@@ -235,7 +235,7 @@ func TestOIDCApplicationPolicyManagement(t *testing.T) {
 	f := newFixture(t)
 	ctx := t.Context()
 	operator := identity.OperatorPrincipal()
-	admin, err := f.store.CreateMember(ctx, operator, identity.SystemOrganizationID, "", "Policy administrator")
+	admin, err := f.store.CreateMember(ctx, operator, f.store.SystemOrganizationID(), "", "Policy administrator")
 	if err != nil {
 		t.Fatal(err)
 	}

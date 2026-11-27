@@ -15,7 +15,7 @@ func TestSAMLManagementScopeLifecycleAndAudit(t *testing.T) {
 	org, ordinary := organizationAndMember(t, store)
 	other, _ := organizationAndMember(t, store)
 	admin, factor := administratorMember(t, store, org.ID, 91)
-	platform, platformFactor := administratorMember(t, store, SystemOrganizationID, 92)
+	platform, platformFactor := administratorMember(t, store, store.SystemOrganizationID(), 92)
 	principal := administratorActor(t, store, admin, factor).Principal()
 	platformPrincipal := administratorActor(t, store, platform, platformFactor).Principal()
 	service := NewManagementService(store, nil, nil, time.Hour)

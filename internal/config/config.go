@@ -177,7 +177,7 @@ func LoadLegacyClients(directory string, installation Installation) ([]Client, e
 	if err := ReadJSON(filepath.Join(directory, installation.ClientsFile), &clients); err != nil {
 		return nil, err
 	}
-	if err := ValidateClients(clients, installation.AllowLoopbackHTTP); err != nil {
+	if err := identity.ValidateLegacyOIDCClients(clients, installation.AllowLoopbackHTTP); err != nil {
 		return nil, err
 	}
 	return clients, nil

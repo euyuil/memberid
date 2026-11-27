@@ -15,7 +15,14 @@ import (
 //go:embed schema.sql
 var initialSchema string
 
-type Store struct{ pool *pgxpool.Pool }
+type Store struct {
+	pool                 *pgxpool.Pool
+	systemOrganizationID string
+	rootMemberID         string
+}
+
+func (store *Store) SystemOrganizationID() string { return store.systemOrganizationID }
+func (store *Store) RootMemberID() string         { return store.rootMemberID }
 
 var ErrDatabaseConfiguration = errors.New("invalid database connection settings")
 
@@ -62,10 +69,27 @@ func initialize(ctx context.Context, databaseURL string, savePassword func(strin
 		if populated {
 			return ErrDatabaseNotEmpty
 		}
-		if _, err = transaction.Exec(ctx, initialSchema); err != nil || savePassword == nil {
+		if _, err = transaction.Exec(ctx, initialSchema); err != nil {
 			return err
 		}
-		return provisionRoot(ctx, transaction, savePassword)
+		if _, err := transaction.Exec(ctx, installationIdentitySchema); err != nil {
+			return err
+		}
+		org, err := NewID(OrganizationKind)
+		if err != nil {
+			return err
+		}
+		member, err := NewID(MemberKind)
+		if err != nil {
+			return err
+		}
+		if _, err := transaction.Exec(ctx, "INSERT INTO organizations(id,name) VALUES($1,'System organization')", org); err != nil {
+			return err
+		}
+		if err := reserveInstallationIdentities(ctx, transaction, org, member); err != nil || savePassword == nil {
+			return err
+		}
+		return provisionRoot(ctx, transaction, org, member, savePassword)
 	})
 }
 
@@ -104,7 +128,12 @@ func Open(ctx context.Context, databaseURL string) (*Store, error) {
 		}
 		return nil, err
 	}
-	return &Store{pool: pool}, nil
+	store := &Store{pool: pool}
+	if err := pool.QueryRow(ctx, "SELECT s.organization_id,r.root_member_id FROM installation_identities r JOIN organization_login_slugs s USING(slug) WHERE s.slug='system'").Scan(&store.systemOrganizationID, &store.rootMemberID); err != nil {
+		pool.Close()
+		return nil, err
+	}
+	return store, nil
 }
 
 func (store *Store) Close() { store.pool.Close() }

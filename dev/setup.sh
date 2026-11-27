@@ -132,4 +132,4 @@ PY
 trap - EXIT
 printf 'Local installation ready. Review %s/auth.env, then start the Compose stack.\n' "$state"
 printf 'OIDC issuer: %s\nAdministration console: %s\n' "$issuer" "$console_origin"
-printf 'Platform administrator: org_system/root\nInitial password file: %s/bootstrap/initial-root-password\n' "$state"
+printf 'Platform administrator: system/root\nInitial password file: %s/bootstrap/initial-root-password\n' "$state"

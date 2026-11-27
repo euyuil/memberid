@@ -68,7 +68,7 @@ func (service *Service) accountHome(w http.ResponseWriter, r *http.Request) {
 		links = append(links, link{"Link phone", "/account/link/phone?" + query})
 	}
 	for _, kind := range []string{"dingtalk", "feishu"} {
-		if !service.accountProviderEnabled(kind) || occupiedKinds[kind] || kind == "feishu" && member.OrganizationID == identity.SystemOrganizationID {
+		if !service.accountProviderEnabled(kind) || occupiedKinds[kind] || kind == "feishu" && member.OrganizationID == service.store.SystemOrganizationID() {
 			continue
 		}
 		for _, provider := range providers {

@@ -4,7 +4,7 @@ This document records the agreed Member role definitions. The [management scopes
 
 ## Members and administrator assignments
 
-A Member is an organization-owned user identity. Every Member belongs to exactly one organization, including Members of the reserved system organization, `org_system`. The same natural person may have independent Members in different organizations; there is no global User account.
+A Member is an organization-owned user identity. Every Member belongs to exactly one organization, including Members of the system organization. The same natural person may have independent Members in different organizations; there is no global User account.
 
 Administrator authority is an explicit assignment to a particular Member. Creating a Member, joining an organization, or sharing a phone number or other authentication factor with an administrator does not grant administrator authority. Removing an assignment preserves the Member's identity and historical attribution.
 
@@ -51,7 +51,7 @@ Administrator removal and manual identity changes remain subject to the [last-av
 
 ## Current implementation and further design
 
-The current implementation stores administrator assignments separately from Members. An assigned administrator in `org_system` is a platform administrator; an assigned administrator in an ordinary organization administers that organization. Members without an assignment have no management authority. There is no generic role-definition or role-assignment API.
+The current implementation stores administrator assignments separately from Members. An assigned administrator in the system organization is a platform administrator; an assigned administrator in an ordinary organization administers that organization. Members without an assignment have no management authority. There is no generic role-definition or role-assignment API.
 
 The [console access matrix](console.md#first-version-access-model) describes current behavior. The [operation catalog](management-operation-catalog.md) supplies the complete scope/action mapping and enforcement boundaries. Trusted CLI operations and the installation-wide credential of the [private management API](management-api.md) retain their existing, separate access contracts; they are not additional Member roles.
 

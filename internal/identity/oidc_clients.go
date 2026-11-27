@@ -145,7 +145,7 @@ func (service *ManagementService) OIDCApplications(ctx context.Context, principa
 func (service *ManagementService) CreateOIDCApplication(ctx context.Context, principal Principal, ownerID string, application OIDCApplication, secretHash string, loopback bool) (OIDCApplication, error) {
 	requirements := []authorization.Requirement{oidcClientsResource.require(actionCreate)}
 	if ownerID == "" {
-		ownerID = SystemOrganizationID
+		ownerID = service.store.systemOrganizationID
 	} else {
 		requirements[0] = organizationOIDCClientsResource.require(actionCreate, ownerID)
 		if application.OrganizationID != "" && application.OrganizationID != ownerID {
@@ -190,7 +190,7 @@ func (store *Store) createOIDCClient(ctx context.Context, principal Principal, r
 	if !validText(registration.DisplayName, 128) || ValidateOIDCClients([]OIDCClient{registration.Client}, loopback) != nil {
 		return OIDCApplication{}, ErrInvalid
 	}
-	if registration.System && (principal.kind != operatorPrincipal || registration.OwnerOrganizationID != SystemOrganizationID || registration.Client.SubjectKind != "member" || registration.Client.OrganizationID != "") {
+	if registration.System && (principal.kind != operatorPrincipal || registration.OwnerOrganizationID != store.systemOrganizationID || registration.Client.SubjectKind != "member" || registration.Client.OrganizationID != "") {
 		return OIDCApplication{}, ErrForbidden
 	}
 	registration.Enabled, registration.Revision = true, 1
@@ -400,7 +400,7 @@ func importOIDCClients(ctx context.Context, tx pgx.Tx, registrations []OIDCClien
 			return errors.New("invalid legacy OIDC client registration")
 		}
 		registration.Enabled, registration.Revision = true, 1
-		registration.OwnerOrganizationID = SystemOrganizationID
+		registration.OwnerOrganizationID = "org_system" // Imported before the schema 38 rekey.
 		if err := insertOIDCClient(ctx, tx, registration); err != nil {
 			return err
 		}

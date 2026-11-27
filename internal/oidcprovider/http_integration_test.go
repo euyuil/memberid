@@ -160,7 +160,7 @@ func newFixtureWithInitializer(t *testing.T, refreshEnabled bool, initialize fun
 }
 func seedOIDCClient(t *testing.T, store *identity.Store, client config.Client, system bool) {
 	t.Helper()
-	if _, err := store.Database().Exec(t.Context(), "INSERT INTO oidc_clients(client_id,display_name,enabled,system,revision,registration,owner_organization_id) VALUES($1,$1,true,$2,1,$3,'org_system')", client.ID, system, client); err != nil {
+	if _, err := store.Database().Exec(t.Context(), "INSERT INTO oidc_clients(client_id,display_name,enabled,system,revision,registration,owner_organization_id) VALUES($1,$1,true,$2,1,$3,system_organization_id())", client.ID, system, client); err != nil {
 		t.Fatal(err)
 	}
 }

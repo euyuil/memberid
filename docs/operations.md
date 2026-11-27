@@ -10,7 +10,7 @@ memberid database init --initial-root-password-file /path/to/protected/initial-r
 
 This is an explicit installation operation. It refuses existing user relations and never resets, replaces, or migrates an existing database. Normal startup does not initialize schema.
 
-This command installs schema version 37 and provisions `org_system/root` with a generated password. The password output file must be new and in a protected directory. Running `database init` without the file option initializes only the schema and the reserved system organization. Existing schema 26–36 installations use [explicit forward upgrade and recovery](database-upgrades.md). See [first-time setup](administration.md#first-time-setup) for password delivery and recovery.
+This command installs schema version 38 and provisions `system/root` with a generated password. The password output file must be new and in a protected directory. Running `database init` without the file option initializes only the schema and the reserved system organization. Existing schema 26–37 installations use [explicit forward upgrade and recovery](database-upgrades.md). See [first-time setup](administration.md#first-time-setup) for password delivery and recovery.
 
 ## Check an existing database
 
@@ -44,7 +44,7 @@ memberid member unblock --organization ORGANIZATION_ID --member MEMBER_ID
 
 Commands return JSON containing the affected identity. Use the identifiers returned by creation in subsequent commands. Names do not establish identity or verified contact ownership.
 
-An operator can assign one permanent login slug to an ordinary organization. Choose 1–63 lowercase ASCII letters or digits, optionally separated by single internal hyphens. Case variants and surrounding whitespace are rejected. The name `system` is reserved. The names `callback`, `dingtalk`, and `feishu` are available. The system organization uses `/login/org_system`. Assignment is explicit and final. Renaming or disabling an organization preserves its reservation, and its published slug can never be assigned to another organization. At `/login`, a Member can enter the assigned login name or the permanent organization ID. Both open the same organization and authentication methods. An organization without a login name can use its ID in the form or bookmark `/login/{organizationID}`.
+An operator can assign one permanent login slug to an ordinary organization. Choose 1–63 lowercase ASCII letters or digits, optionally separated by single internal hyphens. Case variants and surrounding whitespace are rejected. The name `system` is reserved. The names `callback`, `dingtalk`, and `feishu` are available. The system organization uses `/login/system`. Assignment is explicit and final. Renaming or disabling an organization preserves its reservation, and its published slug can never be assigned to another organization. At `/login`, a Member can enter the assigned login name or the permanent organization ID. Both open the same organization and authentication methods. An organization without a login name can use its ID in the form or bookmark `/login/{organizationID}`.
 
 These commands use the operator's explicit database access. They do not create an end-user password, bypass an authentication provider, or grant permissions in another application. Manual unblocking preserves any external-departure block.
 
@@ -103,7 +103,7 @@ Run these commands after database initialization with `MEMBERID_DATABASE_URL` se
 
 The [MemberID account linking page](account-linking.md) uses `--account-return` destinations independently of OIDC callbacks and logout. Callback, post-logout, and account-management return destinations are separately registered exact URLs; no wildcards, fragments, or URL user information are allowed. Repeat `--redirect`, `--post-logout-redirect`, or `--account-return` for additional destinations. A localhost alias or an arbitrary HTTP address does not qualify for the loopback exception.
 
-The installation operator can set `--owner-organization ORGANIZATION_ID` on `client add`. It defaults to `org_system` and is fixed at registration. Protected system clients require that owner. This field records management ownership independently of the login restriction. The console also delegates routine management of owner-only Member clients to administrators of the owning organization.
+The installation operator can set `--owner-organization ORGANIZATION_ID` on `client add`. It defaults to the generated system organization ID and is fixed at registration. Protected system clients require that owner. This field records management ownership independently of the login restriction. The console also delegates routine management of owner-only Member clients to administrators of the owning organization.
 
 Clients default to independent Member subjects. Optional `--organization ORGANIZATION_ID` restricts the allowed organization. An explicit `--subject factor` policy represents a verified authentication factor without asserting organization membership; it requires both `--evidence-scope` and `--evidence-audience` and cannot select an organization. Ordinary Member clients cannot accidentally become factor clients.
 

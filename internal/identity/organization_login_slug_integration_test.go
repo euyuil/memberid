@@ -22,7 +22,7 @@ func TestOrganizationSlugReservations(t *testing.T) {
 			t.Fatalf("assigned invalid slug %q: %v", slug, err)
 		}
 	}
-	if err := assign(SystemOrganizationID, "example"); !errors.Is(err, ErrInvalid) {
+	if err := assign(store.SystemOrganizationID(), "example"); !errors.Is(err, ErrInvalid) {
 		t.Fatal("system organization accepted an alias", err)
 	}
 	results := make(chan error, 2)

@@ -23,7 +23,7 @@ func TestConcurrentApplicationRegistrationIDs(t *testing.T) {
 	for i := range ids {
 		group.Go(func() {
 			if i%2 == 0 {
-				app, err := store.CreateOIDCClient(ctx, operator, OIDCClientRegistration{Client: OIDCClient{SubjectKind: "member", SecretSHA256: strings.Repeat("a", 64), RedirectURIs: []string{"https://example.test/callback"}}, DisplayName: name, OwnerOrganizationID: SystemOrganizationID}, false)
+				app, err := store.CreateOIDCClient(ctx, operator, OIDCClientRegistration{Client: OIDCClient{SubjectKind: "member", SecretSHA256: strings.Repeat("a", 64), RedirectURIs: []string{"https://example.test/callback"}}, DisplayName: name, OwnerOrganizationID: store.SystemOrganizationID()}, false)
 				if err != nil {
 					t.Error(err)
 					return
@@ -34,7 +34,7 @@ func TestConcurrentApplicationRegistrationIDs(t *testing.T) {
 				if i == 3 {
 					entity = "https://b.example.test"
 				}
-				sp, err := store.PutSAMLServiceProvider(ctx, operator, SAMLServiceProvider{DisplayName: name, EntityID: entity, OrganizationID: SystemOrganizationID, ACSURL: "https://example.test/acs", Enabled: true, AllowUnsignedRequests: true}, false)
+				sp, err := store.PutSAMLServiceProvider(ctx, operator, SAMLServiceProvider{DisplayName: name, EntityID: entity, OrganizationID: store.SystemOrganizationID(), ACSURL: "https://example.test/acs", Enabled: true, AllowUnsignedRequests: true}, false)
 				if err != nil {
 					t.Error(err)
 					return
@@ -54,7 +54,7 @@ func TestConcurrentApplicationRegistrationIDs(t *testing.T) {
 	// Force a cross-protocol collision that concurrent random allocations are
 	// unlikely to encounter. The database must reject the entire registration.
 	_, err := store.pool.Exec(ctx, `INSERT INTO saml_service_providers(id,entity_id,organization_id,revision,data)
-		VALUES ($1,'urn:test:collision','org_system',1,jsonb_build_object('id',$1::text))`, ids[0])
+		VALUES ($1,'urn:test:collision',system_organization_id(),1,jsonb_build_object('id',$1::text))`, ids[0])
 	var conflict *pgconn.PgError
 	if !errors.As(err, &conflict) || conflict.Code != "23505" || conflict.ConstraintName != "application_ids_pkey" {
 		t.Fatalf("shared application ID reservation did not reject collision: %v", err)

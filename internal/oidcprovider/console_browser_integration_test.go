@@ -23,7 +23,7 @@ func TestConsoleBrowserFixture(t *testing.T) {
 		t.Fatal("status file must not exist")
 	}
 	f := newFixture(t)
-	m, err := f.store.CreateMember(t.Context(), identity.OperatorPrincipal(), identity.SystemOrganizationID, "", "演示平台管理员")
+	m, err := f.store.CreateMember(t.Context(), identity.OperatorPrincipal(), f.store.SystemOrganizationID(), "", "演示平台管理员")
 	if err != nil {
 		t.Fatal(err)
 	}

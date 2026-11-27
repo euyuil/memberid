@@ -15,7 +15,7 @@ func TestAccountAuthorityResolvesSessionAndSelectedBinding(t *testing.T) {
 	s := testStore(t)
 	org, member := organizationAndMember(t, s)
 	otherOrg, other := organizationAndMember(t, s)
-	systemMember, err := s.CreateMember(t.Context(), OperatorPrincipal(), SystemOrganizationID, "", "System account Member")
+	systemMember, err := s.CreateMember(t.Context(), OperatorPrincipal(), s.SystemOrganizationID(), "", "System account Member")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,10 +58,10 @@ func TestAccountAuthorityResolvesSessionAndSelectedBinding(t *testing.T) {
 		t.Fatal("substituted source binding", err)
 	}
 	systemPrincipal := AccountPrincipal(sessionID, systemMember.ID, factor.ID, bindings[systemMember.ID].ID)
-	if err := s.AuthorizeAccountView(t.Context(), systemPrincipal, SystemOrganizationID); err != nil {
+	if err := s.AuthorizeAccountView(t.Context(), systemPrincipal, s.SystemOrganizationID()); err != nil {
 		t.Fatal("ordinary system Member self access", err)
 	}
-	if err := s.SetAdministrator(t.Context(), OperatorPrincipal(), SystemOrganizationID, systemMember.ID, true); err != nil {
+	if err := s.SetAdministrator(t.Context(), OperatorPrincipal(), s.SystemOrganizationID(), systemMember.ID, true); err != nil {
 		t.Fatal(err)
 	}
 	if err := authorizeAll(t.Context(), s.pool, systemPrincipal, authorization.Requirement{Target: "organizations", Action: "create"}); !errors.Is(err, ErrForbidden) {

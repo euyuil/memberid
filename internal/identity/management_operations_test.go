@@ -13,8 +13,9 @@ func TestManagementOperationMatrix(t *testing.T) {
 	foreignOrganizationID, _ := NewID(OrganizationKind)
 	memberID, _ := NewID(MemberKind)
 	otherMemberID, _ := NewID(MemberKind)
+	otherOrganizationID, _ := NewID(OrganizationKind)
 	const bindingID = "00000000-0000-4000-8000-000000000001"
-	for _, targetOrganization := range []string{organizationID, SystemOrganizationID} {
+	for _, targetOrganization := range []string{organizationID, otherOrganizationID} {
 		base := "organizations/" + targetOrganization
 		// Literal paths and actions are an independent contract: deriving expected
 		// results from the registry would hide a shared builder/registry mistake.

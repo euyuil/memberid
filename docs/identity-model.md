@@ -6,18 +6,15 @@ An organization owns its Members. Each Member has a stable identifier that is in
 
 ## Identifiers
 
-Treat each ID as an opaque, case-sensitive string. Store, compare, and return the complete value, including its prefix. Ordinary OIDC clients identify an account by `(iss, sub)`, where `sub` is the Member ID. Two issuers can each return `mbr_root` for their own installation administrator. See [OIDC account identification](oidc.md#login-and-independent-subjects).
+Treat each ID as an opaque, case-sensitive string. Store, compare, and return the complete value, including its prefix. Ordinary OIDC clients identify an account by `(iss, sub)`, where `sub` is the Member ID. See [OIDC account identification](oidc.md#login-and-independent-subjects).
 
-| Record | Ordinary ID | Reserved ID |
-| --- | --- | --- |
-| Organization | `org_` + 27 characters | `org_system` |
-| Member | `mbr_` + 27 characters | `mbr_root` |
-| Authentication factor | `af_` + 27 characters | None |
+| Record | ID format |
+| --- | --- |
+| Organization | `org_` + 27 characters |
+| Member | `mbr_` + 27 characters |
+| Authentication factor | `af_` + 27 characters |
 
-The ordinary suffix encodes a UUIDv7 using the alphabet `0123456789bcdfghjkmnpqrstvwxz`. Clients reading IDs must also accept the exact reserved strings for their respective record types. A length check that requires a 27-character suffix for every record would reject both reserved IDs.
-
-- Database initialization creates `org_system`, the enabled system organization. It cannot be disabled. Customers and unaffiliated people are never assigned to it by default. Membership alone grants no management access. See [Member roles](roles.md).
-- Password-based installation bootstrap creates `mbr_root` in `org_system`. Schema-only initialization leaves that Member absent. Its ID stays fixed when the initial username `root` or its password changes. See [first-time setup](administration.md#first-time-setup).
+Each suffix encodes a UUIDv7 using the alphabet `0123456789bcdfghjkmnpqrstvwxz`. Each installation generates its own system organization and bootstrap Member IDs. The permanent organization login name `system` resolves to the enabled system organization. The permanent password username `root` in that organization belongs exclusively to its bootstrap Member. Schema-only initialization reserves the name without provisioning a Member. Other organizations may use the same username. Management authority requires an explicit assignment. Use `memberid setup identities` to read the generated IDs. See [first-time setup](administration.md#first-time-setup) and the [legacy identity cutover](database-upgrades.md#system-organization-and-root-cutover).
 
 MemberID allocates organization and Member IDs for both standalone create endpoints. Atomic enrollment also allocates both IDs and returns them in an immutable receipt. See [management creation and enrollment](management-api.md#organization-and-member-id-allocation).
 
@@ -29,7 +26,7 @@ A binding explicitly joins a factor to a Member in an organization. Database con
 
 Revocation retains the relationship and its uniqueness constraints. Repeating an active binding is idempotent; a revoked slot cannot be silently replaced or reactivated. Factor management that changes these relationships requires a separately authorized operation and fresh verification when authentication is involved.
 
-MemberID supports phone, [DingTalk](dingtalk.md), and [Feishu](feishu.md) authentication. DingTalk admission requires current verified corporation membership and may create an independent Member without SMS in ordinary organizations. In `org_system`, admission additionally requires an existing explicit binding or the operator's one-use approval for an existing Member. Provisioning a record or calling a storage operation is not a successful login.
+MemberID supports phone, [DingTalk](dingtalk.md), and [Feishu](feishu.md) authentication. DingTalk admission requires current verified corporation membership and may create an independent Member without SMS in ordinary organizations. In the system organization, admission additionally requires an existing explicit binding or the operator's one-use approval for an existing Member. Provisioning a record or calling a storage operation is not a successful login.
 
 ## Eligibility evidence
 
