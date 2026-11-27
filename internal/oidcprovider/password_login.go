@@ -28,12 +28,21 @@ func (service *Service) passwordLogin(w http.ResponseWriter, r *http.Request, re
 		return
 	}
 	organizationID := loginOrganizationID(request, registered)
-	if organizationID == "" {
-		http.Error(w, "Select an organization before password login", http.StatusBadRequest)
-		return
-	}
 	username, suffix, qualified := splitPasswordLoginName(r.PostForm.Get("username"))
-	if qualified && suffix != organizationID {
+	if organizationID == "" {
+		organizationID = service.selectedLoginOrganization(w, r, request, registered)
+		if organizationID == "" {
+			return
+		}
+		// Browser-held OIDC entries are inserted below. Other requests must
+		// retain this selection even when the first password attempt fails.
+		if request.entry == nil {
+			if err := service.saveLoginNavigation(r.Context(), request); err != nil {
+				http.Error(w, "Login transaction expired", http.StatusBadRequest)
+				return
+			}
+		}
+	} else if qualified && suffix != organizationID {
 		id, err := service.store.LoginOrganizationIDBySlug(r.Context(), suffix)
 		if err != nil && !errors.Is(err, identity.ErrInvalid) && !errors.Is(err, identity.ErrNotFound) {
 			writeLoginOrganizationError(w, err)

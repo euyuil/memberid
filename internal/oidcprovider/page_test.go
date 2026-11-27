@@ -62,8 +62,8 @@ func TestLoginPageShowsOnlyCurrentStep(t *testing.T) {
 		{
 			name:    "organization selection",
 			data:    pageData{PasswordEnabled: true, PhoneEnabled: true, ProviderEnabled: true, OrganizationRequired: true},
-			visible: []string{`id="organization"`, `value="choose-organization"`},
-			hidden:  []string{`id="username"`, `id="phone"`, `id="code"`, `id="member"`, `value="cancel"`, `value="continue"`},
+			visible: []string{`id="organization"`, `value="choose-organization"`, `id="username"`},
+			hidden:  []string{`id="phone"`, `id="code"`, `id="member"`, `value="cancel"`, `value="continue"`},
 		},
 		{
 			name:    "authentication choices",

@@ -85,8 +85,8 @@ func (service *Service) renderLogin(w http.ResponseWriter, r *http.Request, requ
 		OrganizationRestricted: client.registration.OrganizationID != "", ProviderOrganizationID: client.registration.OrganizationID,
 		FactorClient: client.registration.SubjectKind == "factor", ConsentRequired: !client.registration.Preauthorized || slices.Contains(request.prompts(), "consent"),
 	}
-	if request.browserHeldSAML() {
-		// Callback failures render a form for canceling the upstream attempt.
+	if request.browserHeldSAML() || r.URL.Path == "/login" && request.ProviderOrganizationID != "" {
+		// Continue at the bound organization after a callback or a common-entry submission.
 		data.Action = "/login"
 		if request.ProviderOrganizationID != "" {
 			data.Action += "/" + request.ProviderOrganizationID
@@ -110,12 +110,14 @@ func (service *Service) renderLogin(w http.ResponseWriter, r *http.Request, requ
 				writeLoginOrganizationError(w, err)
 				return
 			}
-			if value := r.PostForm.Get("username"); r.PostForm.Get("action") == "password" && value != "" {
-				name, suffix, qualified := splitPasswordLoginName(value)
-				if !qualified {
-					suffix = data.PasswordSuffix
-				}
-				data.PasswordUsername = name + "@" + suffix
+		}
+		if value := r.PostForm.Get("username"); r.PostForm.Get("action") == "password" && value != "" {
+			name, suffix, qualified := splitPasswordLoginName(value)
+			data.PasswordUsername = name
+			if qualified {
+				data.PasswordUsername += "@" + suffix
+			} else if data.PasswordSuffix != "" {
+				data.PasswordUsername += "@" + data.PasswordSuffix
 			}
 		}
 	}
