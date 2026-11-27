@@ -12,7 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-const SchemaVersion = 30
+const SchemaVersion = 31
 
 // The two-int key space is separate from existing bigint initialization,
 // administration and worker locks. MID identifies this maintenance namespace.
@@ -33,6 +33,9 @@ var upgrade29 string
 
 //go:embed migrations/0030_organization_login_slugs.sql
 var upgrade30 string
+
+//go:embed migrations/0031_oidc_client_owners.sql
+var upgrade31 string
 
 type DatabasePlan struct {
 	CurrentVersion  int  `json:"currentVersion"`
@@ -197,20 +200,21 @@ func UpgradeDatabase(ctx context.Context, databaseURL string, prepare func(conte
 		for _, migration := range []struct {
 			from, to int
 			sql      string
-		}{{26, 27, upgrade27}, {27, 28, upgrade28}, {28, 29, upgrade29}, {29, 30, upgrade30}} {
+		}{{26, 27, upgrade27}, {27, 28, upgrade28}, {28, 29, upgrade29}, {29, 30, upgrade30}, {30, 31, upgrade31}} {
 			if migration.from < plan.CurrentVersion {
 				continue
 			}
 			if _, err := tx.Exec(ctx, migration.sql); err != nil {
 				return err
 			}
-			if migration.to == 29 {
-				if err := importOIDCClients(ctx, tx, prepared.OIDCClients); err != nil {
-					return err
-				}
-			}
 			migrationHash := sha256.Sum256([]byte(migration.sql))
 			if _, err := tx.Exec(ctx, "INSERT INTO database_upgrades(from_version,to_version,migration_sha256,backup_id,backup_sha256) VALUES($1,$2,$3,$4,$5)", migration.from, migration.to, hex.EncodeToString(migrationHash[:]), receipt.ID, receipt.SHA256); err != nil {
+				return err
+			}
+		}
+		// Pre-29 installations kept clients in a file. Import into the final schema.
+		if plan.CurrentVersion < 29 {
+			if err := importOIDCClients(ctx, tx, prepared.OIDCClients); err != nil {
 				return err
 			}
 		}

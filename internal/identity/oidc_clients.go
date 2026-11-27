@@ -10,11 +10,12 @@ import (
 )
 
 type OIDCClientRegistration struct {
-	Client      OIDCClient `json:"-"`
-	DisplayName string
-	Enabled     bool
-	System      bool
-	Revision    int64
+	Client              OIDCClient `json:"-"`
+	DisplayName         string
+	OwnerOrganizationID string
+	Enabled             bool
+	System              bool
+	Revision            int64
 }
 
 // OIDCApplication contains only registration information safe to show to an
@@ -22,6 +23,7 @@ type OIDCClientRegistration struct {
 type OIDCApplication struct {
 	ClientID               string   `json:"clientId"`
 	DisplayName            string   `json:"displayName"`
+	OwnerOrganizationID    string   `json:"ownerOrganizationId"`
 	OrganizationID         string   `json:"organizationId,omitempty"`
 	RedirectURIs           []string `json:"redirectUris"`
 	PostLogoutRedirectURIs []string `json:"postLogoutRedirectUris,omitempty"`
@@ -40,18 +42,19 @@ func (registration OIDCClientRegistration) Application() OIDCApplication {
 	client := registration.Client
 	return OIDCApplication{
 		ClientID: client.ID, DisplayName: registration.DisplayName, OrganizationID: client.OrganizationID,
-		RedirectURIs: client.RedirectURIs, PostLogoutRedirectURIs: client.PostLogoutRedirectURIs, Refresh: client.Refresh,
+		OwnerOrganizationID: registration.OwnerOrganizationID,
+		RedirectURIs:        client.RedirectURIs, PostLogoutRedirectURIs: client.PostLogoutRedirectURIs, Refresh: client.Refresh,
 		AccountReturnURIs: client.AccountReturnURIs, Preauthorized: client.Preauthorized,
 		SubjectKind: client.SubjectKind, EvidenceScope: client.EvidenceScope, EvidenceAudience: client.EvidenceAudience,
 		Enabled: registration.Enabled, System: registration.System, Revision: registration.Revision,
 	}
 }
 
-const oidcClientColumns = "display_name,enabled,system,revision,registration"
+const oidcClientColumns = "display_name,enabled,system,revision,registration,owner_organization_id"
 
 func scanOIDCClient(row pgx.Row) (OIDCClientRegistration, error) {
 	var registration OIDCClientRegistration
-	err := row.Scan(&registration.DisplayName, &registration.Enabled, &registration.System, &registration.Revision, &registration.Client)
+	err := row.Scan(&registration.DisplayName, &registration.Enabled, &registration.System, &registration.Revision, &registration.Client, &registration.OwnerOrganizationID)
 	return registration, storageError(err)
 }
 
@@ -83,8 +86,8 @@ func (store *Store) OIDCClientCapabilities(ctx context.Context) (OIDCClientCapab
 }
 
 func insertOIDCClient(ctx context.Context, tx pgx.Tx, registration OIDCClientRegistration) error {
-	_, err := tx.Exec(ctx, "INSERT INTO oidc_clients(client_id,"+oidcClientColumns+") VALUES($1,$2,$3,$4,$5,$6)",
-		registration.Client.ID, registration.DisplayName, registration.Enabled, registration.System, registration.Revision, registration.Client)
+	_, err := tx.Exec(ctx, "INSERT INTO oidc_clients(client_id,"+oidcClientColumns+") VALUES($1,$2,$3,$4,$5,$6,$7)",
+		registration.Client.ID, registration.DisplayName, registration.Enabled, registration.System, registration.Revision, registration.Client, registration.OwnerOrganizationID)
 	return storageError(err)
 }
 
@@ -127,7 +130,8 @@ func (service *ManagementService) OIDCApplications(ctx context.Context, principa
 
 func (service *ManagementService) CreateOIDCApplication(ctx context.Context, principal Principal, application OIDCApplication, secretHash string, loopback bool) (OIDCApplication, error) {
 	registration := OIDCClientRegistration{
-		DisplayName: application.DisplayName,
+		DisplayName:         application.DisplayName,
+		OwnerOrganizationID: SystemOrganizationID,
 		Client: OIDCClient{
 			ID: application.ClientID, SecretSHA256: secretHash, SubjectKind: "member",
 			OrganizationID: application.OrganizationID, RedirectURIs: application.RedirectURIs,
@@ -143,7 +147,7 @@ func (store *Store) CreateOIDCClient(ctx context.Context, principal Principal, r
 	if !validText(registration.DisplayName, 128) || ValidateOIDCClients([]OIDCClient{registration.Client}, loopback) != nil {
 		return OIDCApplication{}, ErrInvalid
 	}
-	if registration.System && (principal.kind != operatorPrincipal || registration.Client.SubjectKind != "member" || registration.Client.OrganizationID != "") {
+	if registration.System && (principal.kind != operatorPrincipal || registration.OwnerOrganizationID != SystemOrganizationID || registration.Client.SubjectKind != "member" || registration.Client.OrganizationID != "") {
 		return OIDCApplication{}, ErrForbidden
 	}
 	registration.Enabled, registration.Revision = true, 1
@@ -323,6 +327,7 @@ func importOIDCClients(ctx context.Context, tx pgx.Tx, registrations []OIDCClien
 			return errors.New("invalid legacy OIDC client registration")
 		}
 		registration.Enabled, registration.Revision = true, 1
+		registration.OwnerOrganizationID = SystemOrganizationID
 		if err := insertOIDCClient(ctx, tx, registration); err != nil {
 			return err
 		}

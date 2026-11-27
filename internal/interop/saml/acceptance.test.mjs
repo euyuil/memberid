@@ -1011,9 +1011,35 @@ test(
         ];
         const upgraded = JSON.parse(cli(...upgradeArgs));
         assert.equal(upgraded.upgraded, true);
-        assert.equal(upgraded.currentVersion, 30);
-        t.diagnostic("upgrade rehearsal: schema 30 committed");
+        assert.equal(upgraded.currentVersion, 31);
+        t.diagnostic("upgrade rehearsal: schema 31 committed");
         assert.deepEqual(snapshot(), before);
+        assert.equal(
+          pg(
+            "SELECT owner_organization_id FROM oidc_clients WHERE client_id='upgrade-client'",
+          ),
+          "org_system",
+        );
+        cli(
+          "client",
+          "add",
+          "--directory",
+          installation,
+          "--id",
+          "owner-fixture",
+          "--owner-organization",
+          organization.id,
+          "--organization",
+          organization.id,
+          "--redirect",
+          `${spOrigin}/oidc-callback`,
+        );
+        assert.equal(
+          pg(
+            "SELECT owner_organization_id = registration->>'organizationId' FROM oidc_clients WHERE client_id='owner-fixture'",
+          ),
+          "t",
+        );
         assert.equal(
           Number(pg("SELECT count(*) FROM organization_login_slugs")),
           0,
@@ -1021,7 +1047,7 @@ test(
         assert.equal(JSON.parse(cli(...upgradeArgs)).upgraded, false);
         assert.equal(
           Number(pg("SELECT count(*) FROM database_upgrades")),
-          previousUpgrades + 30 - sourceSchemaVersion,
+          previousUpgrades + upgraded.currentVersion - sourceSchemaVersion,
         );
         cli("database", "backup-check", "--backup-directory", recovery);
         assert.throws(() => command(oldExecutable, ["database", "check"], env));

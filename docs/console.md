@@ -103,7 +103,9 @@ See [Feishu setup](feishu.md) and [DingTalk setup](dingtalk.md) for the required
 
 ## OIDC applications
 
-Platform administrators open **OIDC 应用** in the application integrations group. For a Member application, the console supports the registration settings of `memberid client add`, including client ID (immutable), display name, login and logout callbacks, account-link return destinations, one or all login organizations, refresh, consent, and optional identity evidence. The console can also edit the registration, enable or disable it, and rotate its secret. `prompt=consent` still requires confirmation for a preauthorized application.
+Platform administrators open **OIDC 应用** in the application integrations group. For a Member application, the console configures the client ID (immutable), display name, login and logout callbacks, account-link return destinations, one or all login organizations, refresh, consent, and optional identity evidence. The console can also edit the registration, enable or disable it, and rotate its secret. `prompt=consent` still requires confirmation for a preauthorized application.
+
+Application details show the management owner (`ownerOrganizationId`) alongside the organization whose Members may sign in (`organizationId`). Console-created applications belong to `org_system`. An installation operator can choose another owner at creation with `client add --owner-organization`. Editing the login restriction preserves the owner. Organization ownership alone grants no management permissions.
 
 To release identity evidence, enter a custom scope such as `member:evidence` and an exact resource audience such as `https://api.example.test`. When the client requests that scope, the access token for that audience carries the organization, Member and binding IDs along with authentication factor ID, type, method and times. An ordinary login without the evidence scope uses the UserInfo audience. The recipient must validate the token and decide its own resource permissions. See [access-token claims](oidc.md#token-validation-and-eligibility).
 
@@ -193,7 +195,7 @@ targets. Explicit console logout returns to `/`.
 
 Build with `sh scripts/check.sh` or `sh scripts/package.sh VERSION NEW_OUTPUT_DIRECTORY`. Both build the locked frontend before embedding it in Go. Node/npm are build dependencies; the resulting executable needs neither at runtime.
 
-Initialize a protected installation and a new database as described in [operator setup](operations.md). Fresh installations use schema version **30**. Existing schema 26–29 databases use the [explicit forward upgrade](database-upgrades.md); startup never migrates or erases data. Start the OIDC process before starting the console so its discovery and keys are reachable.
+Initialize a protected installation and a new database as described in [operator setup](operations.md). Fresh installations use schema version **31**. Existing schema 26–30 databases use the [explicit forward upgrade](database-upgrades.md); startup never migrates or erases data. Start the OIDC process before starting the console so its discovery and keys are reachable.
 
 Register a dedicated confidential Member client with no organization restriction:
 

@@ -95,12 +95,13 @@ func configure(ctx context.Context, args []string, stdout, stderr io.Writer) err
 		}
 		var client identity.OIDCClient
 		var system bool
-		var displayName string
+		var displayName, ownerOrganizationID string
 		flags.StringVar(&client.ID, "id", "", "client identifier")
 		var redirects, logouts, accountReturns repeatedFlag
 		if args[1] == "add" {
 			flags.BoolVar(&system, "system", false, "protect an all-organization console client from administrative mutation")
 			flags.StringVar(&displayName, "name", "", "display name (defaults to the client ID)")
+			flags.StringVar(&ownerOrganizationID, "owner-organization", identity.SystemOrganizationID, "organization that owns the registration")
 			flags.Var(&redirects, "redirect", "exact callback URL; repeat for multiple URLs")
 			flags.Var(&logouts, "post-logout-redirect", "exact post-logout URL")
 			flags.Var(&accountReturns, "account-return", "exact account-management return URL")
@@ -138,7 +139,7 @@ func configure(ctx context.Context, args []string, stdout, stderr io.Writer) err
 				displayName = client.ID
 			}
 			_, err = store.CreateOIDCClient(ctx, principal, identity.OIDCClientRegistration{
-				Client: client, DisplayName: displayName, System: system,
+				Client: client, DisplayName: displayName, System: system, OwnerOrganizationID: ownerOrganizationID,
 			}, installation.AllowLoopbackHTTP)
 		} else {
 			_, err = store.RotateOIDCClientSecret(ctx, principal, client.ID, 0, client.SecretSHA256)

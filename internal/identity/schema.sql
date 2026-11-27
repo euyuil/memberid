@@ -1,7 +1,7 @@
 CREATE TABLE memberid_schema (
-    version integer PRIMARY KEY CHECK (version = 30)
+    version integer PRIMARY KEY CHECK (version = 31)
 );
-INSERT INTO memberid_schema(version) VALUES (30);
+INSERT INTO memberid_schema(version) VALUES (31);
 
 CREATE TABLE database_upgrades (
     to_version integer PRIMARY KEY,
@@ -178,6 +178,8 @@ CREATE TABLE oidc_clients (
     system boolean NOT NULL,
     revision bigint NOT NULL CHECK (revision > 0),
     registration jsonb NOT NULL,
+    owner_organization_id text COLLATE "C" NOT NULL REFERENCES organizations(id),
+    CONSTRAINT oidc_clients_system_owner_check CHECK (NOT system OR owner_organization_id = 'org_system'),
     CHECK (NOT system OR enabled),
     CHECK ((registration->>'client_id') IS NOT DISTINCT FROM client_id)
 );
