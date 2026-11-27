@@ -9,8 +9,80 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/zhizhun-tech/memberid/internal/config"
 	"github.com/zhizhun-tech/memberid/internal/identity"
 )
+
+func TestOIDCConsumerOnboarding(t *testing.T) {
+	f := newFixture(t)
+	ctx, op := t.Context(), identity.OperatorPrincipal()
+	a, b := f.member, f.otherMember
+	if err := f.store.SetAdministrator(ctx, op, a.OrganizationID, a.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	server := consoleFixture(t, f)
+	owned := "/api/organizations/" + a.OrganizationID + "/oidc-applications"
+	app, err := f.store.CreateOIDCClient(ctx, op, identity.OIDCClientRegistration{OwnerOrganizationID: a.OrganizationID, DisplayName: "Onboarding", Client: identity.OIDCClient{SubjectKind: "member", OrganizationID: a.OrganizationID, RedirectURIs: []string{callback}, SecretSHA256: config.SecretHash(f.secret)}}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := app.ClientID
+	used := func(org string) string { return "/api/organizations/" + org + "/oidc-application-uses" }
+	preview := used(b.OrganizationID) + "/" + id
+	link := "/oidc-applications?join=" + id
+	f.status(f.call(f.browser, "GET", server.URL+link, nil, nil), 200)
+	consoleJSON(t, f, server, "GET", preview, "", "", 401)
+	r := consoleLoginTo(t, f, server, b.ID, link)
+	dest, err := url.Parse(r.header.Get("Location"))
+	if err != nil || dest.Path != "/oidc-applications" || dest.Query().Get("join") != id || dest.Query().Get("error") != "not_administrator" {
+		t.Fatal("ordinary Member return path", err)
+	}
+	consoleJSON(t, f, server, "GET", preview, "", "", 401)
+	if err := f.store.SetAdministrator(ctx, op, b.OrganizationID, b.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	if got := consoleLoginTo(t, f, server, b.ID, link).header.Get("Location"); got != link {
+		t.Fatal("lost onboarding destination", got)
+	}
+	consoleJSON(t, f, server, "GET", preview, "", "", 404)
+	consoleLogin(t, f, server, a.ID)
+	if got := consoleJSON(t, f, server, "GET", used(a.OrganizationID)+"/"+id, "", "", 200)["use"]; got != "included" {
+		t.Fatal(got)
+	}
+	consoleJSON(t, f, server, "GET", preview, "", "", 403)
+	csrf := consoleJSON(t, f, server, "GET", "/api/session", "", "", 200)["csrf"].(string)
+	consoleJSON(t, f, server, "PUT", owned+"/"+id+"/publication", csrf, `{"enabled":true}`, 200)
+	consoleLoginTo(t, f, server, b.ID, link)
+	csrf = consoleJSON(t, f, server, "GET", "/api/session", "", "", 200)["csrf"].(string)
+	check := func(want string) {
+		t.Helper()
+		value := consoleJSON(t, f, server, "GET", preview, "", "", 200)
+		if len(value) != 6 || value["ownerOrganizationId"] != a.OrganizationID || value["ownerName"] == "" || value["clientId"] != id || value["displayName"] != "Onboarding" || value["enabled"] != true || value["use"] != want {
+			t.Fatal("unsafe or incorrect consumer preview", value)
+		}
+		list := consoleJSON(t, f, server, "GET", used(b.OrganizationID), "", "", 200)["items"].([]any)
+		found := false
+		for _, item := range list {
+			v := item.(map[string]any)
+			if v["clientId"] == id {
+				found = true
+				if len(v) != 6 {
+					t.Fatal("unsafe directory fields")
+				}
+			}
+		}
+		if found != (want == "enabled") {
+			t.Fatal("incorrect membership in used directory", want)
+		}
+	}
+	check("available")
+	enable := "/api/organizations/" + b.OrganizationID + "/oidc-applications/" + id + "/enablement"
+	consoleJSON(t, f, server, "PUT", enable, csrf, `{"enabled":true}`, 200)
+	check("enabled")
+	consoleJSON(t, f, server, "PUT", enable, csrf, `{"enabled":false}`, 200)
+	check("withdrawn")
+	consoleJSON(t, f, server, "GET", used(a.OrganizationID), "", "", 403)
+}
 
 func TestOIDCSharingWithdrawal(t *testing.T) {
 	f := newFixture(t)

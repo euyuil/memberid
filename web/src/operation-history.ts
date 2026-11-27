@@ -107,6 +107,12 @@ export function describeEvent(event: ManagementEvent) {
     case "binding.revoke":
       label = "撤销绑定"
       break
+    case "oidc.application.publication.update":
+      label = changes.enabled ? "开放跨组织使用" : "恢复仅归属组织使用"
+      break
+    case "oidc.application.enablement.update":
+      label = changes.enabled ? "本组织启用应用" : "本组织停止使用应用"
+      break
     case "oidc.application.create":
       label = "添加 OIDC 应用"
       break
@@ -224,7 +230,11 @@ export function describeEvent(event: ManagementEvent) {
     organizationName: snapshot.organizationName || "组织名称未记录",
     targetName: snapshot.targetName || recordedName || "名称未记录",
     targetURL: oidc
-      ? routeURL({ view: "oidc-applications", org: event.organizationId })
+      ? routeURL({
+          view: "oidc-applications",
+          org: event.organizationId,
+          oidcUse: action === "oidc.application.enablement.update",
+        })
       : saml
         ? routeURL({
             org: event.organizationId,

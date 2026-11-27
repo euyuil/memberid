@@ -71,6 +71,17 @@ func (s *Service) registerOIDCApplicationRoutes(installation *config.Loaded) {
 			r.PathValue("organizationId"), r.PathValue("clientId"), input.ExpectedRevision, config.SecretHash(secret))
 		respond(w, oidcApplicationResult{value, secret}, err)
 	}
+	const uses = "/api/organizations/{organizationId}/oidc-application-uses"
+	readUses := func(w http.ResponseWriter, r *http.Request) {
+		items, err := s.management.OIDCApplicationUses(r.Context(), r.Context().Value(sessionKey{}).(session).principal(), r.PathValue("organizationId"), r.PathValue("clientId"))
+		if r.PathValue("clientId") != "" && err == nil {
+			respond(w, items[0], nil)
+			return
+		}
+		respond(w, map[string]any{"items": items}, err)
+	}
+	s.routes.HandleFunc("GET "+uses, readUses)
+	s.routes.HandleFunc("GET "+uses+"/{clientId}", readUses)
 	sharing := func(set func(context.Context, identity.Principal, string, string, bool) error) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
 			var input struct {
