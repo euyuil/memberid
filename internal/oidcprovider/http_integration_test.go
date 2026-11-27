@@ -63,6 +63,20 @@ type reply struct {
 
 const callback = "http://127.0.0.1:8484/callback"
 
+func (f *fixture) externalDestination(r reply, provider string) string {
+	f.t.Helper()
+	if provider != "feishu" {
+		f.status(r, 303)
+		return r.header.Get("Location")
+	}
+	f.status(r, 200)
+	link := regexp.MustCompile(`id="provider" href="([^"]+)"`).FindStringSubmatch(r.body)
+	if len(link) != 2 || !strings.Contains(r.body, `id="resume" href="/`) || r.header.Get("Referrer-Policy") != "no-referrer" {
+		f.t.Fatal("missing Feishu navigation or pending interaction")
+	}
+	return html.UnescapeString(link[1])
+}
+
 func browserClient() *http.Client {
 	jar, _ := cookiejar.New(nil)
 	return &http.Client{Jar: jar, Timeout: 10 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}

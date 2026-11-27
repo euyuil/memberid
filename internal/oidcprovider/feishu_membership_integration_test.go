@@ -43,8 +43,7 @@ func feishuLoginCallback(t *testing.T, f *fixture, id string) (string, string) {
 	f.browser = browserClient()
 	page, verifier := f.loginPage("example-web", "openid offline_access")
 	response := f.submit(page.body, "feishu", url.Values{"organization": {f.member.OrganizationID}, "provider": {id}})
-	f.status(response, 303)
-	location, err := url.Parse(response.header.Get("Location"))
+	location, err := url.Parse(f.externalDestination(response, "feishu"))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -19,10 +19,8 @@ const accountReturn = "http://127.0.0.1:8484/settings"
 
 func assertAccountFormAction(t *testing.T, page reply, providerOrigin string) {
 	t.Helper()
-	// Form submissions include the cross-origin authorization redirect. Keep the
-	// allowlist specific to this provider, including on callback result pages.
 	policy := page.header.Get("Content-Security-Policy")
-	if !strings.Contains(policy, "; form-action 'self' "+providerOrigin+";") {
+	if !strings.Contains(policy, "; form-action "+strings.TrimSpace("'self' "+providerOrigin)+";") {
 		t.Fatalf("account form must allow only self and %s: %s", providerOrigin, policy)
 	}
 }

@@ -33,8 +33,7 @@ func beginFeishuEvent(t *testing.T, f *fixture) string {
 	f.browser = browserClient()
 	page, _ := f.loginPage("example-web", "openid")
 	started := f.submit(page.body, "feishu", url.Values{"organization": {f.member.OrganizationID}, "provider": {app}})
-	f.status(started, 303)
-	upstream, err := url.Parse(started.header.Get("Location"))
+	upstream, err := url.Parse(f.externalDestination(started, "feishu"))
 	if err != nil {
 		t.Fatal(err)
 	}

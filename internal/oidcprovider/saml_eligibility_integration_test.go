@@ -95,8 +95,7 @@ func (s *samlIdentityFixture) startExternal(method string) string {
 	s.t.Helper()
 	page := samlPage(s.t, s.fixture, s.sp)
 	start := s.submit(page.body, method, url.Values{"organization": {s.member.OrganizationID}, "provider": {s.providers[method]}})
-	s.status(start, 303)
-	location, err := url.Parse(start.header.Get("Location"))
+	location, err := url.Parse(s.externalDestination(start, method))
 	if err != nil {
 		s.t.Fatal(err)
 	}

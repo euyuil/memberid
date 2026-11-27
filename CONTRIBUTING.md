@@ -76,6 +76,8 @@ Run `sh scripts/test-integration.sh` with Docker and the pinned Go toolchain ava
 
 To reuse an existing isolated, disposable PostgreSQL Docker container dedicated to integration tests, set `MEMBERID_TEST_DATABASE_URL` to its connection URL and run `go test -race -tags=integration -timeout=10m ./...`. The timeout applies to each complete package, including the combined OIDC/SAML suite and its real password hashing under the race detector. The configured database role must be able to create and drop test databases. Each test creates a unique database and removes only that database. Do not use a production or personal working server.
 
+With the disposable test database configured and Node.js on PATH, set `MEMBERID_TEST_BROWSER` to a local Chromium-based browser executable and run `go test -tags integration ./internal/oidcprovider -run TestFeishuTopLevelBrowser -count=1`. The test uses isolated browser profiles and synthetic provider redirects for sign-in and account linking, including cancellation after navigating back.
+
 To measure console SQL calls and local HTTP latency, run
 `MEMBERID_TEST_QUERY_PROFILE=1 sh scripts/test-integration.sh`. This optional mode
 preloads the bundled `pg_stat_statements` extension in its disposable PostgreSQL

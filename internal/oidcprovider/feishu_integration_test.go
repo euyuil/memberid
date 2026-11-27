@@ -157,8 +157,7 @@ func TestOrganizationProviderManagementAndFeishuOIDC(t *testing.T) {
 			}
 		}
 		r := f.submit(page.body, "feishu", url.Values{"organization": {f.member.OrganizationID}, "provider": {id}})
-		f.status(r, 303)
-		location, err := url.Parse(r.header.Get("Location"))
+		location, err := url.Parse(f.externalDestination(r, "feishu"))
 		if err != nil {
 			t.Fatal(err)
 		}

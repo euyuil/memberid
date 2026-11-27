@@ -143,9 +143,6 @@ func (service *Service) renderLogin(w http.ResponseWriter, r *http.Request, requ
 	if data.ProviderEnabled && service.dingtalk != nil {
 		formTargets = append(formTargets, "https://login.dingtalk.com")
 	}
-	if data.ProviderEnabled && service.feishu != nil {
-		formTargets = append(formTargets, "https://accounts.feishu.cn")
-	}
 	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'nonce-"+data.Nonce+"'; form-action "+strings.Join(formTargets, " ")+"; base-uri 'none'; frame-ancestors 'none'")
 	writeHTMLPage(w, loginPage, data)
 }
