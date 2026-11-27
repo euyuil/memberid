@@ -181,7 +181,7 @@ puts 'Synthetic GitLab account linked'
 		t.Fatal(err)
 	}
 	f.docker("exec", gitlab, "gitlab-rails", "runner", "/interop/seed.rb")
-	f.login()
+	f.login(client["client_id"].(string))
 	t.Log("Unmodified GitLab CE 19.5.5 established its linked account session through the packaged MemberID provider.")
 	if os.Getenv("MEMBERID_INTEROP_HOLD") == "true" {
 		if err := writeFixtureJSON(filepath.Join(directory, "manual-ready.json"), map[string]string{"issuer": issuer, "gitlab": gitlabOrigin, "phone": "19900000001"}); err != nil {

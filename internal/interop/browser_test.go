@@ -21,7 +21,7 @@ type browserReply struct {
 	location, address, body string
 }
 
-func (f *gitlabFixture) login() {
+func (f *gitlabFixture) login(clientID string) {
 	jar, err := cookiejar.New(nil)
 	if err != nil {
 		f.t.Fatal(err)
@@ -81,7 +81,7 @@ func (f *gitlabFixture) login() {
 			}
 			if next.Scheme+"://"+next.Host == issuer && next.Path == "/oauth/authorize" {
 				query := next.Query()
-				if query.Get("client_id") != "gitlab" || query.Get("response_type") != "code" || query.Get("code_challenge_method") != "S256" || len(query.Get("code_challenge")) != 43 || query.Get("state") == "" || query.Get("nonce") == "" {
+				if query.Get("client_id") != clientID || query.Get("response_type") != "code" || query.Get("code_challenge_method") != "S256" || len(query.Get("code_challenge")) != 43 || query.Get("state") == "" || query.Get("nonce") == "" {
 					f.t.Fatal("GitLab did not request the standard bound PKCE code flow")
 				}
 				pkce = true

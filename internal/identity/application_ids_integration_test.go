@@ -4,11 +4,13 @@ package identity
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"sync"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 func TestConcurrentApplicationRegistrationIDs(t *testing.T) {
@@ -48,6 +50,14 @@ func TestConcurrentApplicationRegistrationIDs(t *testing.T) {
 			t.Fatalf("invalid or repeated registration ID %q", id)
 		}
 		seen[id] = true
+	}
+	// Force a cross-protocol collision that concurrent random allocations are
+	// unlikely to encounter. The database must reject the entire registration.
+	_, err := store.pool.Exec(ctx, `INSERT INTO saml_service_providers(id,entity_id,organization_id,revision,data)
+		VALUES ($1,'urn:test:collision','org_system',1,jsonb_build_object('id',$1::text))`, ids[0])
+	var conflict *pgconn.PgError
+	if !errors.As(err, &conflict) || conflict.Code != "23505" || conflict.ConstraintName != "application_ids_pkey" {
+		t.Fatalf("shared application ID reservation did not reject collision: %v", err)
 	}
 }
 
