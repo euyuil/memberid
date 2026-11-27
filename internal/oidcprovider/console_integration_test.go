@@ -179,7 +179,7 @@ func TestConsoleOIDCOrganizationScopeAndRevocation(t *testing.T) {
 		t.Fatal("cross organization directory")
 	}
 	consoleJSON(t, f, server, "GET", "/api/oidc-applications", "", "", 403)
-	consoleJSON(t, f, server, "POST", "/api/oidc-applications", csrf, `{"clientId":"tenant-client","displayName":"Tenant client","redirectUris":["https://example.invalid/callback"]}`, 403)
+	consoleJSON(t, f, server, "POST", "/api/oidc-applications", csrf, `{"displayName":"Tenant client","redirectUris":["https://example.invalid/callback"]}`, 403)
 	base := "/api/organizations/" + f.member.OrganizationID
 	consoleJSON(t, f, server, "POST", base+"/members/"+f.member.ID+"/password", csrf, `{"username":"example"}`, 403)
 	consoleJSON(t, f, server, "POST", base+"/members/"+f.member.ID+"/password/reset", csrf, `{}`, 403)

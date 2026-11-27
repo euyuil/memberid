@@ -51,7 +51,7 @@ func TestConcurrentApplicationRegistrationIDs(t *testing.T) {
 	}
 }
 
-func TestCutoverChecksInventoryBeforeCommit(t *testing.T) {
+func TestDatabaseUpgradeChecksApplicationInventoryBeforeCommit(t *testing.T) {
 	dsn := baselineDatabase(t)
 	ctx := t.Context()
 	conn, err := pgx.Connect(ctx, dsn)

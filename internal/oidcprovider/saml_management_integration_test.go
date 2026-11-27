@@ -65,12 +65,17 @@ func TestSAMLConsoleManagementAndInFlightInvalidation(t *testing.T) {
 	}
 	f.status(f.call(f.browser, "GET", samlURL(t, f, sp, nil), nil, nil), 400)
 	input.ID, input.EntityID, input.Revision = "console-created", "https://created.example.test", 0
-	consoleJSON(t, f, server, "POST", base, csrf, body(), 200)
+	consoleJSON(t, f, server, "POST", base, csrf, body(), 400)
+	input.ID = ""
+	created := consoleJSON(t, f, server, "POST", base, csrf, body(), 200)
+	if !identity.ValidID(created["id"].(string), identity.ApplicationKind) {
+		t.Fatal("missing generated SP ID")
+	}
 	// Retaining the browser cookie does not retain a revoked management grant.
 	if _, err := f.store.Database().Exec(t.Context(), "UPDATE oidc_grants SET revoked_at=clock_timestamp() WHERE data->>'memberId'=$1", f.member.ID); err != nil {
 		t.Fatal(err)
 	}
 	consoleJSON(t, f, server, "GET", base, "", "", 401)
-	input.ID, input.EntityID = "revoked-create", "https://revoked.example.test"
+	input.EntityID = "https://revoked.example.test"
 	consoleJSON(t, f, server, "POST", base, csrf, body(), 401)
 }
