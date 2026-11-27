@@ -100,7 +100,7 @@ func (s *samlIdentityFixture) startExternal(method string) string {
 	if err != nil {
 		s.t.Fatal(err)
 	}
-	return "/login/" + method + "/callback?" + url.Values{"state": {location.Query().Get("state")}, "code": {"synthetic-code"}}.Encode()
+	return location.Query().Get("redirect_uri") + "?" + url.Values{"state": {location.Query().Get("state")}, "code": {"synthetic-code"}}.Encode()
 }
 
 func (s *samlIdentityFixture) authenticate(method string) reply {

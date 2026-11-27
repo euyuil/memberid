@@ -15,7 +15,7 @@ import (
 	"golang.org/x/oauth2"
 )
 
-const feishuCallbackPath = "/login/feishu/callback"
+const feishuCallbackPath = "/auth/feishu/callback"
 
 type feishuAttempt = browserauth.FeishuAttempt
 

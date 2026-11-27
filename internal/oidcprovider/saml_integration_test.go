@@ -527,7 +527,7 @@ func TestSAMLExternalAuthentication(t *testing.T) {
 			start := f.submit(page.body, method, url.Values{"organization": {f.member.OrganizationID}, "provider": {providerID}})
 			f.status(start, 303)
 			location, _ := url.Parse(start.header.Get("Location"))
-			callback := "/login/" + method + "/callback?" + url.Values{"state": {location.Query().Get("state")}, "code": {"synthetic-code"}}.Encode()
+			callback := location.Query().Get("redirect_uri") + "?" + url.Values{"state": {location.Query().Get("state")}, "code": {"synthetic-code"}}.Encode()
 			f.status(f.call(browserClient(), "GET", callback, nil, nil), 400)
 			result := f.call(f.browser, "GET", callback, nil, nil)
 			f.status(result, 303)
@@ -576,7 +576,7 @@ func TestSAMLPolicyChangeDuringProviderIO(t *testing.T) {
 			t.Error(err)
 		}
 	}
-	result := f.call(f.browser, "GET", "/login/dingtalk/callback?"+url.Values{"state": {location.Query().Get("state")}, "code": {"synthetic-code"}}.Encode(), nil, nil)
+	result := f.call(f.browser, "GET", "/auth/dingtalk/callback?"+url.Values{"state": {location.Query().Get("state")}, "code": {"synthetic-code"}}.Encode(), nil, nil)
 	if strings.Contains(result.body, "SAMLResponse") {
 		t.Fatal("issued after SP disable during provider I/O")
 	}

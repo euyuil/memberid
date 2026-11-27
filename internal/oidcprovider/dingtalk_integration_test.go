@@ -97,10 +97,10 @@ func beginDingTalk(t *testing.T, f *fixture, client, scopes, organization string
 		t.Fatal(err)
 	}
 	query := location.Query()
-	if location.Scheme != "https" || location.Host != "login.dingtalk.com" || location.Path != "/oauth2/auth" || query.Get("redirect_uri") != f.server.URL+"/login/dingtalk/callback" || query.Get("scope") != "openid corpid" || query.Get("response_type") != "code" || query.Get("prompt") != "consent" || len(query.Get("state")) != 43 || query.Get("client_secret") != "" {
+	if location.Scheme != "https" || location.Host != "login.dingtalk.com" || location.Path != "/oauth2/auth" || query.Get("redirect_uri") != f.server.URL+"/auth/dingtalk/callback" || query.Get("scope") != "openid corpid" || query.Get("response_type") != "code" || query.Get("prompt") != "consent" || len(query.Get("state")) != 43 || query.Get("client_secret") != "" {
 		t.Fatal("incorrect upstream authorization")
 	}
-	return page, verifier, "/login/dingtalk/callback?" + url.Values{"state": {query.Get("state")}, "authCode": {"synthetic-code"}}.Encode()
+	return page, verifier, "/auth/dingtalk/callback?" + url.Values{"state": {query.Get("state")}, "authCode": {"synthetic-code"}}.Encode()
 }
 
 func admittedMember(t *testing.T, f *fixture, organization string) string {

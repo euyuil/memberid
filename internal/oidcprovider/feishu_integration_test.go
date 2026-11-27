@@ -104,6 +104,14 @@ func TestOrganizationProviderManagementAndFeishuOIDC(t *testing.T) {
 	create := func(name, clientID, tenant string) string {
 		return `{"displayName":"` + name + `","clientId":"` + clientID + `","tenantId":"` + tenant + `","clientSecret":"` + secret + `","expectedRevision":0,"enabled":true}`
 	}
+	visible := consoleJSON(t, f, server, "GET", base, "", "", 200)
+	if visible["feishuCallback"] != f.server.URL+"/auth/feishu/callback" || visible["dingTalkCallback"] != f.server.URL+"/auth/dingtalk/callback" {
+		t.Fatal("console advertised incorrect provider sign-in callbacks")
+	}
+	for _, provider := range []string{"dingtalk", "feishu"} {
+		f.status(f.call(f.browser, "GET", "/auth/"+provider+"/callback?state=unknown&code=synthetic", nil, nil), 400)
+		f.status(f.call(f.browser, "GET", "/login/"+provider+"/callback?state=unknown&code=synthetic", nil, nil), 404)
+	}
 	consoleJSON(t, f, server, "GET", foreign, "", "", 403)
 	consoleJSON(t, f, server, "POST", foreign+"/feishu", csrf, create("Forbidden", "cli_other", "example-tenant"), 403)
 	consoleJSON(t, f, server, "POST", base+"/feishu", "wrong-token", create("Feishu A", "cli_first", "example-tenant"), 403)
@@ -231,7 +239,7 @@ func TestOrganizationProviderManagementAndFeishuOIDC(t *testing.T) {
 	r := f.submit(page.body, "dingtalk", url.Values{"organization": {f.member.OrganizationID}, "provider": {dingB}})
 	f.status(r, 303)
 	location, _ := url.Parse(r.header.Get("Location"))
-	r = f.call(f.browser, "GET", "/login/dingtalk/callback?"+url.Values{"state": {location.Query().Get("state")}, "authCode": {"synthetic-code"}}.Encode(), nil, nil)
+	r = f.call(f.browser, "GET", "/auth/dingtalk/callback?"+url.Values{"state": {location.Query().Get("state")}, "authCode": {"synthetic-code"}}.Encode(), nil, nil)
 	f.status(r, 303)
 	page = f.call(f.browser, "GET", r.header.Get("Location"), nil, nil)
 	f.status(page, 200)

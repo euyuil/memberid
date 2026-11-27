@@ -66,6 +66,47 @@ func TestOrganizationFirstLoginBindsMethodsAndMembers(t *testing.T) {
 	f.status(f.exchange("example-web", code, verifier), http.StatusOK)
 }
 
+func TestProviderLoginNames(t *testing.T) {
+	f := newFixture(t)
+	enableDingTalk(t, f, true)
+	ctx, operator := t.Context(), identity.OperatorPrincipal()
+	third, err := f.store.CreateOrganization(ctx, operator, "", "Callback team")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, id := range map[string]string{"dingtalk": f.member.OrganizationID, "feishu": f.otherMember.OrganizationID, "callback": third.ID} {
+		if err := f.store.AssignOrganizationSlug(ctx, operator, id, name); err != nil {
+			t.Fatal(err)
+		}
+		bookmark := f.call(f.browser, "GET", "/login/"+name, nil, nil)
+		f.status(bookmark, http.StatusSeeOther)
+		if bookmark.header.Get("Location") != "/login/"+id {
+			t.Fatal("wrong bookmark destination", name)
+		}
+		page := f.openDirectLogin(bookmark.header.Get("Location"))
+		if name != "dingtalk" {
+			continue
+		}
+		start := f.submitDirect(page, "/login/"+id, "dingtalk", url.Values{"organization": {id}})
+		f.status(start, http.StatusSeeOther)
+		upstream, err := url.Parse(start.header.Get("Location"))
+		if err != nil || upstream.Query().Get("redirect_uri") != f.server.URL+"/auth/dingtalk/callback" {
+			t.Fatal("unexpected DingTalk redirect", err)
+		}
+		callback := "/auth/dingtalk/callback?" + url.Values{"state": {upstream.Query().Get("state")}, "authCode": {"synthetic-code"}}.Encode()
+		back := f.call(f.browser, "GET", callback, nil, nil)
+		f.status(back, http.StatusSeeOther)
+		page = f.call(f.browser, "GET", back.header.Get("Location"), nil, nil)
+		f.status(page, http.StatusOK)
+		member := admittedMember(t, f, id)
+		finish := f.submit(page.body, "continue", url.Values{"member": {member}})
+		f.status(finish, http.StatusSeeOther)
+		if finish.header.Get("Location") != "/account?memberId="+member {
+			t.Fatal("direct DingTalk login did not open the organization's Member account")
+		}
+	}
+}
+
 func TestOrganizationSlugLogin(t *testing.T) {
 	f := newFixture(t)
 	_, apps := enableDingTalk(t, f, true)

@@ -5,7 +5,7 @@ MemberID supports Feishu enterprise self-built applications on the mainland Feis
 ## Setup
 
 1. In the [Feishu developer console](https://open.feishu.cn/app), create, publish, and enable an enterprise self-built application. Use its availability settings to choose who can sign in. Copy the application's App ID, App Secret, and the intended Feishu tenant's Tenant Key.
-2. Register the exact MemberID issuer URL with the `/login/feishu/callback` suffix in the application's **Security Settings**, for example `https://login.example.invalid/login/feishu/callback`.
+2. Register the exact MemberID issuer URL with the `/auth/feishu/callback` suffix in the application's **Security Settings**, for example `https://login.example.invalid/auth/feishu/callback`. When upgrading from schema 35 or earlier, register the new redirect URL before switching MemberID and verify a fresh Feishu sign-in.
 3. In the [MemberID console](console.md#organization-identity-providers), select the organization, open **身份提供商** (Identity providers), and add a Feishu application. Supply a display name, Tenant Key, App ID, and App Secret. Repeat for each application. One App ID may be registered once per installation.
 4. Set `MEMBERID_FEISHU_ENABLED=true` on the OIDC process and restart it. Run the console and OIDC process with the same installation directory and database. Enable DingTalk and phone independently as needed.
 

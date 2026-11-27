@@ -8,11 +8,7 @@ import (
 var organizationSlugPattern = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
 
 func ValidOrganizationSlug(slug string) bool {
-	switch slug {
-	case "callback", "dingtalk", "feishu", "system":
-		return false
-	}
-	return len(slug) <= 63 && organizationSlugPattern.MatchString(slug)
+	return slug != "system" && len(slug) <= 63 && organizationSlugPattern.MatchString(slug)
 }
 
 // AssignOrganizationSlug reserves both identifiers in one insert. Disabled

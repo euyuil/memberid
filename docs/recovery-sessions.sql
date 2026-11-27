@@ -7,7 +7,7 @@ SELECT pg_advisory_xact_lock(5065028,1);
 DO $$
 BEGIN
     IF (SELECT count(*) FROM memberid_schema) <> 1 OR
-       (SELECT version FROM memberid_schema) NOT BETWEEN 26 AND 34 THEN
+       (SELECT version FROM memberid_schema) NOT BETWEEN 26 AND 35 THEN
         RAISE EXCEPTION 'Unsupported recovery schema';
     END IF;
     IF EXISTS (SELECT 1 FROM pg_stat_activity

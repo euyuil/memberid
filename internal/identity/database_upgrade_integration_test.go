@@ -211,6 +211,9 @@ func TestSchema30UpgradePreservesOIDCRegistrations(t *testing.T) {
 	if _, err := conn.Exec(ctx, "INSERT INTO organizations(id,name) VALUES ($1,'Synthetic tenant')", org); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := conn.Exec(ctx, "INSERT INTO organization_login_slugs(slug, organization_id) VALUES ('existing-team', $1)", org); err != nil {
+		t.Fatal(err)
+	}
 	restricted := OIDCClient{ID: "restricted", SubjectKind: "member", OrganizationID: org, Refresh: true,
 		SecretSHA256: strings.Repeat("a", 64), RedirectURIs: []string{"https://app.example.test/callback"}}
 	protected := restricted
@@ -238,6 +241,9 @@ func TestSchema30UpgradePreservesOIDCRegistrations(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer store.Close()
+	if id, err := store.LoginOrganizationIDBySlug(ctx, "existing-team"); err != nil || id != org {
+		t.Fatal("existing organization login name changed on upgrade", err)
+	}
 	for _, client := range []OIDCClient{restricted, protected} {
 		oldID := client.ID
 		for _, row := range plan {

@@ -55,7 +55,7 @@ func (service *Service) startDingTalk(w http.ResponseWriter, r *http.Request, re
 		http.Error(w, "Login transaction expired", http.StatusBadRequest)
 		return
 	}
-	query := url.Values{"client_id": {app.ClientID}, "redirect_uri": {service.configuration.Issuer + "/login/dingtalk/callback"}, "state": {state}, "response_type": {"code"}, "prompt": {"consent"}, "scope": {"openid corpid"}, "corpId": {app.CorpID}}
+	query := url.Values{"client_id": {app.ClientID}, "redirect_uri": {service.configuration.Issuer + "/auth/dingtalk/callback"}, "state": {state}, "response_type": {"code"}, "prompt": {"consent"}, "scope": {"openid corpid"}, "corpId": {app.CorpID}}
 	http.Redirect(w, r, "https://login.dingtalk.com/oauth2/auth?"+query.Encode(), http.StatusSeeOther)
 }
 
