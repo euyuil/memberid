@@ -22,7 +22,7 @@ func TestMemberEmailMailboxProfile(t *testing.T) {
 func TestSAMLAttributeAllowlist(t *testing.T) {
 	organizationID, _ := NewID(OrganizationKind)
 	sp := SAMLServiceProvider{ID: "email-sp", OrganizationID: organizationID, EntityID: "https://sp.example.test", ACSURL: "https://sp.example.test/acs", AllowUnsignedRequests: true}
-	for _, attributes := range [][]string{nil, {"Email"}, {"DisplayName", "Email"}} {
+	for _, attributes := range [][]string{nil, {"Email"}, {"DisplayName", "Email", "OrganizationID"}} {
 		sp.Attributes = attributes
 		if err := sp.Validate(false); err != nil {
 			t.Fatal(attributes, err)

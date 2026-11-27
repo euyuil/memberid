@@ -346,6 +346,7 @@ function RegistrationDialog({
         attributes: [
           ...(fields.has("displayNameAttribute") ? ["DisplayName"] : []),
           ...(fields.has("emailAttribute") ? ["Email"] : []),
+          ...(fields.has("organizationAttribute") ? ["OrganizationID"] : []),
         ],
         revision: item?.revision ?? 0,
       }
@@ -490,6 +491,19 @@ function RegistrationDialog({
                 />
                 <FieldLabel htmlFor="saml-email-attribute">
                   向应用发送受管邮箱（Email）
+                </FieldLabel>
+              </Field>
+              <Field orientation="horizontal" data-disabled={pending}>
+                <Checkbox
+                  id="saml-organization-attribute"
+                  name="organizationAttribute"
+                  nativeButton
+                  render={<button type="button" />}
+                  defaultChecked={item?.attributes?.includes("OrganizationID") ?? false}
+                  disabled={pending}
+                />
+                <FieldLabel htmlFor="saml-organization-attribute">
+                  向应用发送登录成员的组织 ID（OrganizationID）
                 </FieldLabel>
               </Field>
               <Field orientation="horizontal" data-disabled={pending}>

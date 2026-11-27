@@ -65,8 +65,10 @@ An enabled SAML installation can start without OIDC clients if it has at least o
 | Time limits | Request at most five minutes old or one minute in the future; interaction expires after ten minutes; assertion valid for at most two minutes, capped by the original session expiry |
 | Replay | Durable `(SP, request ID)` reservation; issuance and transaction consumption commit atomically; only one concurrent completion emits a response |
 | Subject | Stable pairwise `(SP, Member)` mapping; random persistent by default, or explicit unspecified with optional operator-provisioned legacy value. See [NameID mappings](saml-nameid.md). |
-| Claims | Explicitly registered `DisplayName` and administrator-managed `Email`; missing email is omitted. No mailbox-verification claim, phone, organization roles, or business permissions. See [managed email](member-email.md). |
+| Claims | Independently enabled `OrganizationID`, `DisplayName` and administrator-managed `Email`; missing email is omitted. No mailbox-verification claim, phone, organization roles, or business permissions. See [managed email](member-email.md). |
 | Authentication context | `urn:oasis:names:tc:SAML:2.0:ac:classes:unspecified`; original authentication time and session limit retained |
+
+Add `OrganizationID` to the SP's `attributes` list to release the authenticated Member's stable organization ID. The signed assertion contains one attribute with Name `OrganizationID`, NameFormat `urn:oasis:names:tc:SAML:2.0:attrname-format:basic`, and one `xs:string` value. The default is omission. Renaming the organization preserves the value. An SP can map this ID to its own workspace after verifying the assertion and use the pairwise NameID to identify the Member.
 
 The query is limited to 32 KiB, inflated XML to 256 KiB, nesting to 32 levels, XML elements to 2,048, request IDs to 256 bytes, and RelayState to 80 decoded bytes. A nonempty request ID is required. RelayState is returned as opaque text, never used as a redirect target. DTDs, directives, duplicate parameters/elements, ambiguous XML, unsupported extensions, and unsupported algorithms are rejected. No external XML resources are resolved.
 

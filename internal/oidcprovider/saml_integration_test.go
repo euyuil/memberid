@@ -26,6 +26,43 @@ import (
 	"github.com/zhizhun-tech/memberid/internal/samlprovider"
 )
 
+func TestSAMLOrganizationAttributeAfterRename(t *testing.T) {
+	f := newFixture(t)
+	sp := enableSAML(t, f)
+	complete := func(page reply) saml.Response {
+		t.Helper()
+		return verifySAMLResponse(t, f, sp, f.submit(page.body, "continue", url.Values{"member": {f.member.ID}, "consent": {"yes"}}))
+	}
+	first := complete(f.verifyPhone(samlPage(t, f, sp)))
+	sp.Attributes = append(sp.Attributes, "OrganizationID")
+	var err error
+	sp, err = f.store.PutSAMLServiceProvider(t.Context(), identity.OperatorPrincipal(), sp, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	check := func() {
+		t.Helper()
+		response := complete(samlPage(t, f, sp))
+		if response.Assertion.Subject.NameID.Value != first.Assertion.Subject.NameID.Value {
+			t.Fatal("organization attribute changed NameID")
+		}
+		for _, statement := range response.Assertion.AttributeStatements {
+			for _, attr := range statement.Attributes {
+				if attr.Name == "OrganizationID" && attr.NameFormat == "urn:oasis:names:tc:SAML:2.0:attrname-format:basic" && len(attr.Values) == 1 && attr.Values[0].Value == f.member.OrganizationID {
+					return
+				}
+			}
+		}
+		t.Fatal("missing authenticated organization")
+	}
+	check()
+	name := "Renamed organization"
+	if _, err := f.store.UpdateOrganization(t.Context(), identity.OperatorPrincipal(), f.member.OrganizationID, identity.OrganizationChange{Name: &name}); err != nil {
+		t.Fatal(err)
+	}
+	check()
+}
+
 func enableSAML(t *testing.T, f *fixture) identity.SAMLServiceProvider {
 	t.Helper()
 	key, err := rsa.GenerateKey(rand.Reader, 2048)

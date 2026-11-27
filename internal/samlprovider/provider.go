@@ -310,8 +310,8 @@ func (provider *Provider) Parse(r *http.Request, sp identity.SAMLServiceProvider
 }
 
 type Authentication struct {
-	NameID, SessionID, DisplayName, Email string
-	AuthenticatedAt, ExpiresAt            time.Time
+	NameID, SessionID, DisplayName, Email, OrganizationID string
+	AuthenticatedAt, ExpiresAt                            time.Time
 }
 
 func nameIDFormat(sp identity.SAMLServiceProvider) (saml.NameIDFormat, error) {
@@ -356,7 +356,7 @@ func (provider *Provider) Response(r *http.Request, txn *Transaction, sp identit
 		}
 		req.Assertion = &saml.Assertion{ID: "_" + rand.Text(), Version: "2.0", IssueInstant: now, Issuer: saml.Issuer{Value: idp.MetadataURL.String()}, Subject: &saml.Subject{NameID: &saml.NameID{Format: string(format), NameQualifier: idp.MetadataURL.String(), SPNameQualifier: sp.EntityID, Value: auth.NameID}, SubjectConfirmations: []saml.SubjectConfirmation{{Method: "urn:oasis:names:tc:SAML:2.0:cm:bearer", SubjectConfirmationData: &saml.SubjectConfirmationData{InResponseTo: txn.RequestID, Recipient: sp.ACSURL, NotOnOrAfter: expires}}}}, Conditions: &saml.Conditions{NotBefore: now.Add(-ClockSkew), NotOnOrAfter: expires, AudienceRestrictions: []saml.AudienceRestriction{{Audience: saml.Audience{Value: sp.EntityID}}}}, AuthnStatements: []saml.AuthnStatement{{AuthnInstant: auth.AuthenticatedAt, SessionIndex: auth.SessionID, SessionNotOnOrAfter: &auth.ExpiresAt, AuthnContext: saml.AuthnContext{AuthnContextClassRef: &saml.AuthnContextClassRef{Value: ContextUnspecified}}}}}
 		attributes := []saml.Attribute{}
-		for _, claim := range []struct{ name, value string }{{"DisplayName", auth.DisplayName}, {"Email", auth.Email}} {
+		for _, claim := range []struct{ name, value string }{{"DisplayName", auth.DisplayName}, {"Email", auth.Email}, {"OrganizationID", auth.OrganizationID}} {
 			if slices.Contains(sp.Attributes, claim.name) && claim.value != "" {
 				attributes = append(attributes, saml.Attribute{Name: claim.name, NameFormat: "urn:oasis:names:tc:SAML:2.0:attrname-format:basic", Values: []saml.AttributeValue{{Type: "xs:string", Value: claim.value}}})
 			}
