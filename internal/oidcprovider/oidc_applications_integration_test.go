@@ -39,8 +39,36 @@ func TestManageOIDCApplicationWithoutRestart(t *testing.T) {
 	payload := fmt.Sprintf(`{"clientId":"managed","displayName":"Managed application","organizationId":%q,"redirectUris":[%q],"refresh":true}`, f.member.OrganizationID, callback)
 	consoleJSON(t, f, server, "POST", base, "bad-csrf", payload, 403)
 	created := consoleJSON(t, f, server, "POST", base, csrf, payload, 200)
+	platformOwned := created["application"].(map[string]any)
+	if platformOwned["ownerOrganizationId"] != identity.SystemOrganizationID || platformOwned["organizationId"] != f.member.OrganizationID {
+		t.Fatal("wrong owner or login organization in console registration")
+	}
+	ownedClient := identity.OIDCClientRegistration{
+		DisplayName: "Organization-owned application", OwnerOrganizationID: f.member.OrganizationID,
+		Client: identity.OIDCClient{ID: "owned", SubjectKind: "member", OrganizationID: f.member.OrganizationID,
+			SecretSHA256: config.SecretHash(config.RandomSecret()), RedirectURIs: []string{callback}},
+	}
+	if _, err := f.store.CreateOIDCClient(ctx, operator, ownedClient, true); err != nil {
+		t.Fatal(err)
+	}
+	directory := consoleJSON(t, f, server, "GET", base, "", "", 200)
+	foundOwner := false
+	for _, item := range directory["items"].([]any) {
+		app := item.(map[string]any)
+		if app["clientId"] == "owned" {
+			foundOwner = app["ownerOrganizationId"] == f.member.OrganizationID && app["organizationId"] == f.member.OrganizationID
+		}
+	}
+	if !foundOwner {
+		t.Fatal("organization-owned registration missing from directory or has the wrong owner")
+	}
+	changed := consoleJSON(t, f, server, "PATCH", base+"/owned", csrf,
+		fmt.Sprintf(`{"expectedRevision":1,"displayName":"Organization-owned application","redirectUris":[%q]}`, callback), 200)["application"].(map[string]any)
+	if changed["ownerOrganizationId"] != f.member.OrganizationID || changed["organizationId"] != nil {
+		t.Fatal("editing the login scope changed the owner")
+	}
 	firstSecret := created["clientSecret"].(string)
-	list, err := json.Marshal(consoleJSON(t, f, server, "GET", base, "", "", 200))
+	list, err := json.Marshal(directory)
 	if err != nil || !strings.Contains(string(list), `"clientId":"managed"`) || strings.Contains(string(list), firstSecret) || strings.Contains(string(list), config.SecretHash(firstSecret)) {
 		t.Fatal("registered application missing or credential exposed", err)
 	}
@@ -85,6 +113,13 @@ func TestManageOIDCApplicationWithoutRestart(t *testing.T) {
 		strings.Contains(string(events), firstSecret) || strings.Contains(string(events), config.SecretHash(nextSecret)) {
 		t.Fatal("audit entry missing or credential exposed", err)
 	}
+
+	if err := f.store.SetAdministrator(ctx, operator, f.member.OrganizationID, f.member.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	consoleLogin(t, f, server, f.member.ID)
+	csrf = consoleJSON(t, f, server, "GET", "/api/session", "", "", 200)["csrf"].(string)
+	consoleJSON(t, f, server, "PATCH", base+"/owned", csrf, `{"expectedRevision":2,"enabled":false}`, 403)
 }
 
 func TestOIDCApplicationPolicyManagement(t *testing.T) {

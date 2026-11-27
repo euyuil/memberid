@@ -191,6 +191,54 @@ func TestDatabaseUpgradeAtomicFailureAndRetry(t *testing.T) {
 	}
 }
 
+func TestSchema30UpgradePreservesOIDCRegistrations(t *testing.T) {
+	ctx := t.Context()
+	dsn := baselineDatabase(t)
+	conn, err := pgx.Connect(ctx, dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close(context.Background())
+	for _, sql := range []string{upgrade27, upgrade28, upgrade29, upgrade30} {
+		if _, err := conn.Exec(ctx, sql); err != nil {
+			t.Fatal(err)
+		}
+	}
+	org, err := NewID(OrganizationKind)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := conn.Exec(ctx, "INSERT INTO organizations(id,name) VALUES ($1,'Synthetic tenant')", org); err != nil {
+		t.Fatal(err)
+	}
+	restricted := OIDCClient{ID: "restricted", SubjectKind: "member", OrganizationID: org, Refresh: true,
+		SecretSHA256: strings.Repeat("a", 64), RedirectURIs: []string{"https://app.example.test/callback"}}
+	protected := restricted
+	protected.ID, protected.OrganizationID = "console", ""
+	for _, client := range []OIDCClient{restricted, protected} {
+		if _, err := conn.Exec(ctx, "INSERT INTO oidc_clients(client_id,display_name,enabled,system,revision,registration) VALUES($1,$1,true,$2,7,$3)",
+			client.ID, client.ID == protected.ID, client); err != nil {
+			t.Fatal(err)
+		}
+	}
+	conn.Close(ctx)
+	if _, err := UpgradeDatabase(ctx, dsn, syntheticBackup); err != nil {
+		t.Fatal(err)
+	}
+	store, err := Open(ctx, dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	for _, client := range []OIDCClient{restricted, protected} {
+		got, err := store.OIDCClient(ctx, client.ID)
+		if err != nil || got.OwnerOrganizationID != SystemOrganizationID || !got.Enabled || got.DisplayName != client.ID ||
+			got.System != (client.ID == protected.ID) || got.Revision != 7 || !reflect.DeepEqual(got.Client, client) {
+			t.Fatalf("upgrade did not preserve %s registration and assign platform ownership: %v", client.ID, err)
+		}
+	}
+}
+
 func TestDatabaseUpgradeMaintenanceAndConcurrentAttempts(t *testing.T) {
 	dsn := baselineDatabase(t)
 	legacy, err := pgx.Connect(t.Context(), dsn)

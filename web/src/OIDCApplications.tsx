@@ -49,6 +49,7 @@ import { Textarea } from "@/components/ui/textarea"
 export type OIDCApplication = {
   clientId: string
   displayName: string
+  ownerOrganizationId: string
   organizationId?: string
   redirectUris: string[]
   postLogoutRedirectUris?: string[]
@@ -266,14 +267,18 @@ export function OIDCApplications({
               />
               <div className="grid grid-cols-2 gap-4">
                 <ReadField
+                  label="归属组织"
+                  value={organizationName(panel.application.ownerOrganizationId)}
+                />
+                <ReadField
                   label="允许登录的组织"
                   value={organizationName(panel.application.organizationId)}
                 />
-                <ReadField
-                  label="Refresh Token"
-                  value={panel.application.refresh ? "允许" : "不允许"}
-                />
               </div>
+              <ReadField
+                label="Refresh Token"
+                value={panel.application.refresh ? "允许" : "不允许"}
+              />
               <ReadField
                 label="身份类型"
                 value={
