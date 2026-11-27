@@ -34,6 +34,16 @@ Run the release tests with Python 3.10+ and Git:
 python3 -B -m unittest discover -s scripts -p test_release.py
 ```
 
+## Rollback and database compatibility
+
+MemberID supports forward database migrations only. A release's `rollingFrom` list records verified upgrades **from** the listed versions **to** that release. Switching back to an older image requires separate verification, even when both versions use the same schema. Check that the older version can use the current configuration, read and update records written by the newer version, and still enforce recorded credential revocations.
+
+If the older executable requires an earlier schema, restore the pre-upgrade recovery set to a new database and installation directory. Use the matching executable, configuration, keys, and any affected consumer configuration. The restored database contains data as of the backup. Keep the upgraded database intact for reconciliation. Review subsequent access changes, including revocations, and apply them to the recovered installation before reopening traffic. Follow the [database recovery procedure](database-upgrades.md#recover-an-unusable-deployment).
+
 ## Regional deployment policy
 
 China selects the latest supported **stable** release available at the start of the agreed maintenance window and pins its digest through verification. SHA builds and RCs stay out of that selection. With matching schemas and a verified rolling source, replace ready instances in the window. A schema transition follows the [database upgrade and recovery procedure](database-upgrades.md). Hold the current deployment when the path or window is insufficient. Global rollout is a separate operator decision. This release workflow has no cluster credentials or deployment step. Regional scheduling and execution belong to the deployment operator.
+
+### China staging (planned)
+
+To validate an older commit, compare its required schema with the shared staging database and apply the [rollback compatibility checks](#rollback-and-database-compatibility). If the commit requires an earlier schema, initialize a separate disposable database with that commit and seed it with test data. This preserves the shared staging data for the next deployment.
