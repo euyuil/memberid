@@ -6,9 +6,20 @@ An organization owns its Members. Each Member has a stable identifier that is in
 
 ## Identifiers
 
-Generated organization, Member, and authentication-factor identifiers use the `org_`, `mbr_`, and `af_` prefixes followed by a fixed-width opaque encoding of a UUIDv7. Clients retain the complete identifier and do not derive identity from its timestamp, prefix, or contact data. Ordinary OIDC subjects identify Members within an issuer.
+Treat each ID as an opaque, case-sensitive string. Store, compare, and return the complete value, including its prefix. Ordinary OIDC clients identify an account by `(iss, sub)`, where `sub` is the Member ID. Two issuers can each return `mbr_root` for their own installation administrator. See [OIDC account identification](oidc.md#login-and-independent-subjects).
 
-Database initialization creates the reserved organization `org_system` for platform administrator identities. It has no `kind` field, cannot be disabled, and is never a default destination for customers or unaffiliated people. Password-based installation bootstrap reserves `mbr_root` for its first Member in that organization. The Member ID is fixed and its login username starts as `root`. Every Member still belongs to one organization. A Member must have an explicit administrator assignment and current eligibility to manage MemberID. The [Member role definitions](roles.md) allow ordinary system Members and reserve system-organization administration for platform administrators. See [administration access and bootstrap](console.md).
+| Record | Ordinary ID | Reserved ID |
+| --- | --- | --- |
+| Organization | `org_` + 27 characters | `org_system` |
+| Member | `mbr_` + 27 characters | `mbr_root` |
+| Authentication factor | `af_` + 27 characters | None |
+
+The ordinary suffix encodes a UUIDv7 using the alphabet `0123456789bcdfghjkmnpqrstvwxz`. Clients reading IDs must also accept the exact reserved strings for their respective record types. A length check that requires a 27-character suffix for every record would reject both reserved IDs.
+
+- Database initialization creates `org_system`, the enabled system organization. It cannot be disabled. Customers and unaffiliated people are never assigned to it by default. Membership alone grants no management access. See [Member roles](roles.md).
+- Password-based installation bootstrap creates `mbr_root` in `org_system`. Schema-only initialization leaves that Member absent. Its ID stays fixed when the initial username `root` or its password changes. See [first-time setup](administration.md#first-time-setup).
+
+The agreed allocation policy gives MemberID sole responsibility for issuing organization and Member IDs. The current private management API still accepts caller-selected IDs for standalone creation and requires them for atomic enrollment. See [management creation and enrollment](management-api.md#organization-and-member-id-allocation).
 
 ## Factors and explicit relationships
 

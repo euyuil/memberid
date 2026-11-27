@@ -24,6 +24,17 @@ Authenticated non-GET operations emit the fixed management principal, HTTP metho
 
 ## Identity operations
 
+### Organization and Member ID allocation
+
+MemberID will allocate all new organization and Member IDs, including those created through the private management API. Existing IDs, including `org_system` and `mbr_root`, remain valid references. See the [ID formats and reserved values](identity-model.md#identifiers).
+
+| Operation | Current API | Agreed change (pending implementation) |
+| --- | --- | --- |
+| Create an organization or a Member | Omit `id` to have MemberID allocate it. The response contains the new ID. The request also accepts an unused ordinary ID. | MemberID will reject a request that supplies `id` for the new record. The existing parent organization ID still belongs in the Member creation path. [Issue #195](https://github.com/euyuil/memberid/issues/195) |
+| Enroll an organization and its first Member | Supply both new IDs. The organization ID identifies the enrollment for retries. | Supply a separate enrollment idempotency key. MemberID will allocate both IDs and return them in the receipt. Retrying the same key and inputs will return the original receipt. Reusing an accepted key with different inputs will return 409. [Issue #196](https://github.com/euyuil/memberid/issues/196) |
+
+### Current endpoints
+
 | Method and path | Input or result |
 | --- | --- |
 | `POST /v1/organizations` | Required `name`; optional `id`. Returns the created Organization with status 201. |
@@ -120,7 +131,7 @@ A Member qualifies when at least one of its explicit bindings passes the same st
 
 The candidates and eligibility gates are evaluated in one SQL statement and therefore share one database snapshot. Separate requests or batches do not share a snapshot or reserve future eligibility. This query performs no fresh upstream provider verification and does not establish an authentication time, authenticate a token's specific factor, or grant application permissions. Resource servers must still verify the presented token and check its explicit binding through `POST /v1/eligibility`. Applications retain their own permission rules and coordination for subsequent changes.
 
-Domain failures return a JSON `error` code with 400 (`invalid_request`), 401 (`unauthorized`), 403 (`ineligible` or `browser_access_denied`), 404 (`not_found`), 409 (`conflict`), 415 (`json_required`), 422 (`member_id_conflict`), 500 (`internal_error`), or 503 (`provider_unavailable`). Internal database details are not returned. Unknown routes and unsupported methods may use ordinary HTTP errors. Do not retry non-idempotent creation blindly after an uncertain network outcome: use an explicit identifier and inspect its existing record before deciding whether to retry.
+Domain failures return a JSON `error` code with 400 (`invalid_request`), 401 (`unauthorized`), 403 (`ineligible` or `browser_access_denied`), 404 (`not_found`), 409 (`conflict`), 415 (`json_required`), 422 (`member_id_conflict`), 500 (`internal_error`), or 503 (`provider_unavailable`). Internal database details are not returned. Unknown routes and unsupported methods may use ordinary HTTP errors. Repeating a standalone create after losing the response can create a second record when MemberID allocated the ID. Reconcile the outcome before retrying. For enrollment, follow the receipt and retry rules below.
 
 ## Validation and current limits
 
@@ -129,6 +140,8 @@ Integration tests exercise a real HTTP server and disposable PostgreSQL: credent
 Grant inspection and revocation are available through the [operator CLI](operations.md#inspect-and-revoke-oidc-grants). [DingTalk application configuration](dingtalk.md) is also available. Account self-service, HTTP grant administration, and automated management credential rotation are separate increments. Atomic organization enrollment is described below. This interface does not initialize or migrate a database, and introduces no deletion of organizations or Members.
 
 ## Atomic organization enrollment
+
+The following contract applies to the current implementation. The [planned enrollment change](#organization-and-member-id-allocation) introduces a separate idempotency key.
 
 Trusted integrations may use `POST /v1/organization-enrollments` to create a new organization, its initial independent Member, and an explicit binding in one database transaction. This operation requires the same installation management credential as the other management operations. It is a provisioning decision, not an authentication flow, and assigns no application role or permission.
 
