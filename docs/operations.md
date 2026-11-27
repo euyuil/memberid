@@ -10,7 +10,7 @@ memberid database init --initial-root-password-file /path/to/protected/initial-r
 
 This is an explicit installation operation. It refuses existing user relations and never resets, replaces, or migrates an existing database. Normal startup does not initialize schema.
 
-This command installs schema version 31 and provisions `org_system/root` with a generated password. The password output file must be new and in a protected directory. Running `database init` without the file option initializes only the schema and the reserved system organization. Existing schema 26–30 installations use [explicit forward upgrade and recovery](database-upgrades.md). See [first-time setup](administration.md#first-time-setup) for password delivery and recovery.
+This command installs schema version 32 and provisions `org_system/root` with a generated password. The password output file must be new and in a protected directory. Running `database init` without the file option initializes only the schema and the reserved system organization. Existing schema 26–31 installations use [explicit forward upgrade and recovery](database-upgrades.md). See [first-time setup](administration.md#first-time-setup) for password delivery and recovery.
 
 ## Check an existing database
 
@@ -92,14 +92,14 @@ An exclusive `.management-secret.lock` serializes rotations. Existing output fil
 ## Register confidential clients
 
 ```sh
-memberid client add --directory .local/memberid --id example \
+memberid client add --directory .local/memberid --name Example \
   --redirect https://app.example.invalid/callback \
   --post-logout-redirect https://app.example.invalid/signed-out \
   --refresh
-memberid client rotate-secret --directory .local/memberid --id example
+memberid client rotate-secret --directory .local/memberid --id "$CLIENT_ID"
 ```
 
-Run these commands after database initialization with `MEMBERID_DATABASE_URL` set. Each successful add or rotation writes the client identifier and newly generated secret to standard output once. Capture it directly into protected application configuration; do not publish it, retain it in ordinary logs, or commit it. The registry stores only a SHA-256 verifier of the random 256-bit secret. Duplicate registration refuses replacement. Rotation preserves client policy and replaces only the verifier.
+Run these commands after database initialization with `MEMBERID_DATABASE_URL` set. Each successful add or rotation writes the client identifier and newly generated secret to standard output once. Capture it directly into protected application configuration; do not publish it, retain it in ordinary logs, or commit it. The registry stores only a SHA-256 verifier of the random 256-bit secret. Use the returned `client_id` as `CLIENT_ID`. Registrations with the same display name receive distinct IDs. Rotation preserves client policy and replaces only the verifier.
 
 The [MemberID account linking page](account-linking.md) uses `--account-return` destinations independently of OIDC callbacks and logout. Callback, post-logout, and account-management return destinations are separately registered exact URLs; no wildcards, fragments, or URL user information are allowed. Repeat `--redirect`, `--post-logout-redirect`, or `--account-return` for additional destinations. A localhost alias or an arbitrary HTTP address does not qualify for the loopback exception.
 

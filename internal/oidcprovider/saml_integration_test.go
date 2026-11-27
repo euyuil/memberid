@@ -47,7 +47,7 @@ func enableSAML(t *testing.T, f *fixture) identity.SAMLServiceProvider {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sp, err := f.store.PutSAMLServiceProvider(t.Context(), identity.OperatorPrincipal(), identity.SAMLServiceProvider{ID: "saml-example", EntityID: "https://sp.example.test/metadata", OrganizationID: f.member.OrganizationID, ACSURL: "https://sp.example.test/acs", Enabled: true, AllowUnsignedRequests: true, Attributes: []string{"DisplayName"}}, false)
+	sp, err := f.store.PutSAMLServiceProvider(t.Context(), identity.OperatorPrincipal(), identity.SAMLServiceProvider{EntityID: "https://sp.example.test/metadata", OrganizationID: f.member.OrganizationID, ACSURL: "https://sp.example.test/acs", Enabled: true, AllowUnsignedRequests: true, Attributes: []string{"DisplayName"}}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -204,7 +204,7 @@ func TestSAMLSharedPhoneSessionAndIndependentSubjects(t *testing.T) {
 	}
 	// The other Member has the same verified phone but belongs to another organization.
 	other := sp
-	other.ID = "saml-other"
+	other.ID = ""
 	other.EntityID = "https://other.example.test/metadata"
 	other.OrganizationID = f.otherMember.OrganizationID
 	other.Revision = 0

@@ -45,6 +45,7 @@ func (s *testSender) Send(_ context.Context, _, code string) error {
 func (s *testSender) latest() string { s.mu.Lock(); defer s.mu.Unlock(); return s.code }
 
 type fixture struct {
+	consoleID           string
 	t                   *testing.T
 	server              *httptest.Server
 	service             *Service
@@ -141,7 +142,7 @@ func newFixtureWithInitializer(t *testing.T, refreshEnabled bool, initialize fun
 	server.Config.Handler = service
 	server.Start()
 	t.Cleanup(server.Close)
-	return &fixture{t, server, service, store, sender, browserClient(), member, otherMember, secret}
+	return &fixture{t: t, server: server, service: service, store: store, sender: sender, browser: browserClient(), member: member, otherMember: otherMember, secret: secret}
 }
 func seedOIDCClient(t *testing.T, store *identity.Store, client config.Client, system bool) {
 	t.Helper()

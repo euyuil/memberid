@@ -39,24 +39,24 @@ func TestConfigurationCommands(t *testing.T) {
 	if strings.Contains(stdout.String(), "PRIVATE KEY") || strings.Contains(stdout.String(), "protocolKey") {
 		t.Fatal("initialization exposed private material")
 	}
-	execute("client", "add", "--directory", directory, "--id", "example", "--redirect", "https://app.example.invalid/callback", "--refresh")
+	execute("client", "add", "--directory", directory, "--name", "example", "--redirect", "https://app.example.invalid/callback", "--refresh")
 	var first map[string]string
 	if json.Unmarshal(stdout.Bytes(), &first) != nil || len(first["client_secret"]) != 43 {
 		t.Fatal("missing one-time client credential")
 	}
-	loaded, err := store.OIDCClient(t.Context(), "example")
+	loaded, err := store.OIDCClient(t.Context(), first["client_id"])
 	if err != nil || loaded.Client.SecretSHA256 != config.SecretHash(first["client_secret"]) {
 		t.Fatal("invalid client registry")
 	}
 	if err := run(t.Context(), []string{"client", "add", "--directory", directory, "--id", "example", "--redirect", "https://app.example.invalid/callback"}, &stdout, &stderr); err == nil {
-		t.Fatal("duplicate registration replaced existing client")
+		t.Fatal("caller-supplied registration ID accepted")
 	}
-	execute("client", "rotate-secret", "--directory", directory, "--id", "example")
+	execute("client", "rotate-secret", "--directory", directory, "--id", first["client_id"])
 	var next map[string]string
 	if json.Unmarshal(stdout.Bytes(), &next) != nil || next["client_secret"] == first["client_secret"] {
 		t.Fatal("rotation reused secret")
 	}
-	loaded, err = store.OIDCClient(t.Context(), "example")
+	loaded, err = store.OIDCClient(t.Context(), first["client_id"])
 	if err != nil || loaded.Client.SecretSHA256 != config.SecretHash(next["client_secret"]) || !loaded.Client.Refresh || loaded.Client.SubjectKind != "member" {
 		t.Fatal("rotation changed client policy or failed")
 	}

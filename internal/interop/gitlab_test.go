@@ -62,7 +62,9 @@ func TestGitLab(t *testing.T) {
 	}
 	digest := sha256.Sum256(binary)
 	checksums, err := os.ReadFile(filepath.Join(packageDirectory, "SHA256SUMS"))
-	if err != nil || !strings.Contains(string(checksums), hex.EncodeToString(digest[:])+"  ./memberid\n") {
+	lines := strings.Split(strings.ReplaceAll(string(checksums), "\r\n", "\n"), "\n")
+	hash := hex.EncodeToString(digest[:])
+	if err != nil || !(slices.Contains(lines, hash+"  ./memberid") || slices.Contains(lines, hash+" *./memberid")) {
 		t.Fatal("packaged executable checksum mismatch")
 	}
 	owner := randomHex()
@@ -113,7 +115,7 @@ func TestGitLab(t *testing.T) {
 	configuration := []string{"--mount", configurationMount}
 	f.operator(nil, "database", "init")
 	f.operator(configuration, "config", "init", "--directory", "/configuration/installation", "--issuer", issuer, "--allow-loopback-http")
-	client := object(t, f.operator(configuration, "client", "add", "--directory", "/configuration/installation", "--id", "gitlab", "--redirect", gitlabOrigin+"/users/auth/openid_connect/callback"))
+	client := object(t, f.operator(configuration, "client", "add", "--directory", "/configuration/installation", "--name", "GitLab", "--redirect", gitlabOrigin+"/users/auth/openid_connect/callback"))
 	organization := object(t, f.operator(nil, "organization", "create", "--name", "Example organization"))
 	member := object(t, f.operator(nil, "member", "create", "--organization", organization["id"].(string), "--name", "Example member"))
 	f.organizationID, f.memberID = organization["id"].(string), member["id"].(string)
@@ -126,7 +128,7 @@ func TestGitLab(t *testing.T) {
 	f.start("memberid-interop-login-"+owner, "--network", "container:"+f.database, "--read-only", "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--mount", configurationMount+",readonly", "--mount", "type=bind,source="+filepath.Join(directory, "sms.pem")+",target=/etc/memberid-ca.pem,readonly", "--env", "MEMBERID_DATABASE_URL="+f.databaseURL(), "--env", "MEMBERID_PHONE_ENABLED=true", "--env", "MEMBERID_SMS_ACCESS_KEY_ID=synthetic-access", "--env", "MEMBERID_SMS_ACCESS_KEY_SECRET="+randomHex(), "--env", "MEMBERID_SMS_SIGN_NAME=synthetic-sign", "--env", "MEMBERID_SMS_TEMPLATE_CODE=synthetic-template", "--env", "HTTPS_PROXY=http://127.0.0.1:18081", "--env", "SSL_CERT_FILE=/etc/memberid-ca.pem", f.image, "serve", "--directory", "/configuration/installation", "--listen", "0.0.0.0:18082")
 	f.start("memberid-interop-edge-"+owner, "--network", "container:"+f.database, "--read-only", "--cap-drop", "ALL", "--user", fixtureUser, "--entrypoint", "/fixture", "--mount", fixtureMount, "--mount", "type=bind,source="+directory+",target=/fixture-data,readonly", "--env", "MEMBERID_INTEROP_HELPER=edge", f.image, "-test.run=^TestFixture$", "-test.timeout=45m")
 	f.waitHTTP(issuer+"/.well-known/openid-configuration", "memberid-interop-edge-"+owner)
-	provider := []any{map[string]any{"name": "openid_connect", "label": "MemberID", "args": map[string]any{"name": "openid_connect", "scope": []string{"openid", "profile"}, "response_type": "code", "issuer": issuer, "discovery": true, "client_auth_method": "basic", "uid_field": "sub", "pkce": true, "client_options": map[string]any{"identifier": "gitlab", "secret": client["client_secret"], "redirect_uri": gitlabOrigin + "/users/auth/openid_connect/callback"}}}}
+	provider := []any{map[string]any{"name": "openid_connect", "label": "MemberID", "args": map[string]any{"name": "openid_connect", "scope": []string{"openid", "profile"}, "response_type": "code", "issuer": issuer, "discovery": true, "client_auth_method": "basic", "uid_field": "sub", "pkce": true, "client_options": map[string]any{"identifier": client["client_id"], "secret": client["client_secret"], "redirect_uri": gitlabOrigin + "/users/auth/openid_connect/callback"}}}}
 	if err := writeFixtureJSON(filepath.Join(directory, "provider.json"), provider); err != nil {
 		t.Fatal(err)
 	}

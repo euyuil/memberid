@@ -1,7 +1,7 @@
 CREATE TABLE memberid_schema (
-    version integer PRIMARY KEY CHECK (version = 31)
+    version integer PRIMARY KEY CHECK (version = 32)
 );
-INSERT INTO memberid_schema(version) VALUES (31);
+INSERT INTO memberid_schema(version) VALUES (32);
 
 CREATE TABLE database_upgrades (
     to_version integer PRIMARY KEY,
@@ -139,7 +139,7 @@ CREATE TABLE saml_service_providers (
     retired_at timestamptz
 );
 CREATE TABLE saml_name_ids (
-    service_provider_id text COLLATE "C" NOT NULL REFERENCES saml_service_providers(id),
+    service_provider_id text COLLATE "C" NOT NULL REFERENCES saml_service_providers(id) ON UPDATE CASCADE,
     member_id text COLLATE "C" NOT NULL REFERENCES members(id),
     value text COLLATE "C" NOT NULL CHECK (char_length(value) BETWEEN 1 AND 256),
     source text NOT NULL DEFAULT 'generated' CHECK (source IN ('generated', 'legacy')),
@@ -159,7 +159,7 @@ CREATE TABLE authentication_sessions (
 CREATE TABLE authentication_requests (
     id text COLLATE "C" PRIMARY KEY,
     protocol text NOT NULL DEFAULT 'oidc' CHECK (protocol IN ('oidc','saml')),
-    saml_service_provider_id text COLLATE "C" REFERENCES saml_service_providers(id),
+    saml_service_provider_id text COLLATE "C" REFERENCES saml_service_providers(id) ON UPDATE CASCADE,
     saml_request_id text COLLATE "C",
     client_id text NOT NULL,
     data jsonb NOT NULL,
@@ -183,6 +183,20 @@ CREATE TABLE oidc_clients (
     CHECK (NOT system OR enabled),
     CHECK ((registration->>'client_id') IS NOT DISTINCT FROM client_id)
 );
+
+CREATE TABLE application_ids (
+    id text COLLATE "C" PRIMARY KEY
+);
+CREATE FUNCTION reserve_application_id() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    INSERT INTO application_ids(id) VALUES (to_jsonb(NEW)->>TG_ARGV[0]);
+    RETURN NEW;
+END;
+$$;
+CREATE TRIGGER oidc_reserve_application_id AFTER INSERT ON oidc_clients
+    FOR EACH ROW EXECUTE FUNCTION reserve_application_id('client_id');
+CREATE TRIGGER saml_reserve_application_id AFTER INSERT ON saml_service_providers
+    FOR EACH ROW EXECUTE FUNCTION reserve_application_id('id');
 
 CREATE TABLE oidc_grants (
     id text COLLATE "C" PRIMARY KEY,

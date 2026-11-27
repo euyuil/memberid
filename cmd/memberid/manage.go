@@ -14,9 +14,9 @@ import (
 
 func manage(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	if len(args) < 2 {
-		return errors.New("usage: memberid database <init|check|upgrade-plan|upgrade|backup-check> | organization <create|set-slug> | member <create|block|unblock>")
+		return errors.New("usage: memberid database <init|check|application-id-plan|upgrade-plan|upgrade|backup-check> | organization <create|set-slug> | member <create|block|unblock>")
 	}
-	if args[0] == "database" && (args[1] == "upgrade-plan" || args[1] == "upgrade" || args[1] == "backup-check") {
+	if args[0] == "database" && (args[1] == "application-id-plan" || args[1] == "upgrade-plan" || args[1] == "upgrade" || args[1] == "backup-check") {
 		return databaseUpgrade(ctx, args[1:], stdout, stderr)
 	}
 	if args[0] == "factor" || args[0] == "member" && args[1] == "bind-factor" {
@@ -34,7 +34,7 @@ func manage(ctx context.Context, args []string, stdout, stderr io.Writer) error 
 	}
 	if args[0] == "database" {
 		if args[1] != "init" && args[1] != "check" || args[1] == "check" && len(args) != 2 {
-			return errors.New("usage: memberid database <init|check|upgrade-plan|upgrade|backup-check>")
+			return errors.New("usage: memberid database <init|check|application-id-plan|upgrade-plan|upgrade|backup-check>")
 		}
 		if args[1] == "check" {
 			store, err := identity.Open(ctx, databaseURL)

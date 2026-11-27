@@ -38,7 +38,7 @@ func TestConsoleMemberGrantsAreScopedMetadata(t *testing.T) {
 		}
 		if item["clientId"] == "example-web" {
 			appIDs = append(appIDs, item["id"].(string))
-		} else if item["clientId"] != "console" {
+		} else if item["clientId"] != f.consoleID {
 			t.Fatal(item)
 		}
 	}

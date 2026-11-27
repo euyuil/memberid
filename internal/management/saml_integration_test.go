@@ -15,7 +15,7 @@ func TestSAMLRegistrationManagementHTTP(t *testing.T) {
 	org, _ := f.provision(t)
 	other, _ := f.provision(t)
 	base := "/v1/organizations/" + org.ID + "/saml-service-providers"
-	input := identity.SAMLServiceProviderInput{ID: "example-sp", DisplayName: "Example SP", EntityID: "https://sp.example.test/metadata", ACSURL: "https://sp.example.test/acs", Enabled: true, AllowUnsignedRequests: true, SigningCertificates: []string{}, Attributes: []string{}}
+	input := identity.SAMLServiceProviderInput{DisplayName: "Example SP", EntityID: "https://sp.example.test/metadata", ACSURL: "https://sp.example.test/acs", Enabled: true, AllowUnsignedRequests: true, SigningCertificates: []string{}, Attributes: []string{}}
 	body := func() string {
 		data, err := json.Marshal(input)
 		if err != nil {
@@ -29,6 +29,7 @@ func TestSAMLRegistrationManagementHTTP(t *testing.T) {
 		t.Fatal(sp)
 	}
 	f.call(t, "POST", base, body(), 409, nil)
+	input.ID = sp.ID
 	f.call(t, "GET", base+"/"+input.ID, "", 200, &sp)
 	f.call(t, "GET", "/v1/organizations/"+other.ID+"/saml-service-providers/"+input.ID, "", 404, nil)
 	var page identity.Page[identity.SAMLServiceProvider]

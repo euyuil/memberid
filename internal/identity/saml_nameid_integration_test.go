@@ -13,7 +13,7 @@ import (
 
 func nameIDProvider(t *testing.T, store *Store, organizationID, id, format string) SAMLServiceProvider {
 	t.Helper()
-	sp, err := store.PutSAMLServiceProvider(t.Context(), OperatorPrincipal(), SAMLServiceProvider{ID: id, OrganizationID: organizationID, EntityID: "https://" + id + ".example.test", ACSURL: "https://sp.example.test/acs", NameIDFormat: format, AllowUnsignedRequests: true, Enabled: true}, false)
+	sp, err := store.PutSAMLServiceProvider(t.Context(), OperatorPrincipal(), SAMLServiceProvider{OrganizationID: organizationID, EntityID: "https://" + id + ".example.test", ACSURL: "https://sp.example.test/acs", NameIDFormat: format, AllowUnsignedRequests: true, Enabled: true}, false)
 	if err != nil {
 		t.Fatal(err)
 	}

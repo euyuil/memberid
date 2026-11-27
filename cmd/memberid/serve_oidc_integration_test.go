@@ -29,7 +29,7 @@ func TestOIDCStartsWithoutPhoneCredentials(t *testing.T) {
 	if err := config.Initialize(directory, "https://login.example.invalid", false); err != nil {
 		t.Fatal(err)
 	}
-	if err := run(t.Context(), []string{"client", "add", "--directory", directory, "--id", "example-web", "--redirect", "https://app.example.invalid/callback"}, io.Discard, io.Discard); err != nil {
+	if err := run(t.Context(), []string{"client", "add", "--directory", directory, "--name", "example-web", "--redirect", "https://app.example.invalid/callback"}, io.Discard, io.Discard); err != nil {
 		t.Fatal(err)
 	}
 	handler, closeStore, err := authenticationHandler(t.Context(), directory)

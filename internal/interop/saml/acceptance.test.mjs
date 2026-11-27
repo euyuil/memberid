@@ -468,7 +468,7 @@ test(
     writeFileSync(
       spFile,
       JSON.stringify({
-        id: "independent-sp",
+        ...(upgradeBaseline ? { id: "independent-sp" } : {}),
         organizationId: organization.id,
         entityId: `${spOrigin}/metadata`,
         acsUrl: acs,
@@ -476,7 +476,9 @@ test(
         signingCertificates: [spKeys.cert],
       }),
     );
-    cli("saml", "sp", "apply", "--directory", installation, "--file", spFile);
+    const initialSP = JSON.parse(
+      cli("saml", "sp", "apply", "--directory", installation, "--file", spFile),
+    );
     const probe = net.createServer();
     await new Promise((resolve) => probe.listen(0, "127.0.0.1", resolve));
     upstreamPort = probe.address().port;
@@ -635,7 +637,7 @@ test(
             "--directory",
             installation,
             "--id",
-            "independent-sp",
+            initialSP.id,
           ),
         );
         registration.attributes = ["Email"];
@@ -679,7 +681,7 @@ test(
         writeFileSync(
           file,
           JSON.stringify({
-            id: "legacy-sp",
+            ...(upgradeBaseline ? { id: "legacy-sp" } : {}),
             organizationId: organization.id,
             entityId: `${spOrigin}/legacy-metadata`,
             acsUrl: acs,
@@ -705,7 +707,7 @@ test(
           "--organization",
           organization.id,
           "--sp",
-          "legacy-sp",
+          registration.id,
           "--member",
           member.id,
         ];
@@ -907,15 +909,25 @@ test(
         const snapshot = () =>
           Object.fromEntries(
             pg(
-              "SELECT tablename FROM pg_tables WHERE schemaname='public' AND tablename NOT IN ('memberid_schema','database_upgrades','feishu_memberships','oidc_clients','organization_login_slugs') ORDER BY tablename",
+              "SELECT tablename FROM pg_tables WHERE schemaname='public' AND tablename NOT IN ('memberid_schema','database_upgrades','feishu_memberships','oidc_clients','organization_login_slugs','application_ids') ORDER BY tablename",
             )
               .split(/\r?\n/)
               .map((name) => {
                 assert.match(name, /^[a-z_]+$/);
+                // Compare every field except the columns intentionally changed by cutover.
+                const row =
+                  {
+                    oidc_grants: "to_jsonb(t) - 'revoked_at'",
+                    authentication_requests:
+                      "to_jsonb(t) - 'consumed_at' - 'saml_service_provider_id'",
+                    saml_service_providers:
+                      "(to_jsonb(t) - 'id') #- '{data,id}'",
+                    saml_name_ids: "to_jsonb(t) - 'service_provider_id'",
+                  }[name] ?? "to_jsonb(t)";
                 return [
                   name,
                   pg(
-                    `SELECT md5(coalesce(jsonb_agg(to_jsonb(t) ORDER BY to_jsonb(t)::text),'[]'::jsonb)::text) FROM public.${name} t`,
+                    `SELECT md5(coalesce(jsonb_agg(${row} ORDER BY (${row})::text),'[]'::jsonb)::text) FROM public.${name} t`,
                   ),
                 ];
               }),
@@ -949,20 +961,26 @@ test(
             .update(verifier)
             .digest("base64url"),
         }).toString();
-        const start = await browser(authorization);
-        const page = await browser(new URL(start.headers.location, issuer));
-        const completed = await browser(`${issuer}/login`, {
-          request: hidden(page.body, "request"),
-          csrf: hidden(page.body, "csrf"),
-          action: "continue",
-          member: member.id,
-          consent: "yes",
-        });
-        const redirected = await browser(
-          new URL(completed.headers.location, issuer),
-        );
-        const callback = new URL(redirected.headers.location, issuer);
-        assert.equal(callback.searchParams.get("state"), "upgrade-state");
+        async function authorizeClient(clientID) {
+          authorization.searchParams.set("client_id", clientID);
+          const start = await browser(authorization);
+          const page = await browser(new URL(start.headers.location, issuer));
+          const completed = await browser(`${issuer}/login`, {
+            request: hidden(page.body, "request"),
+            csrf: hidden(page.body, "csrf"),
+            action: "continue",
+            member: member.id,
+            consent: "yes",
+          });
+          const redirected = await browser(
+            new URL(completed.headers.location, issuer),
+          );
+          const callback = new URL(redirected.headers.location, issuer);
+          assert.equal(callback.searchParams.get("state"), "upgrade-state");
+          return callback.searchParams.get("code");
+        }
+        const code = await authorizeClient("upgrade-client");
+        const pendingCode = await authorizeClient("upgrade-client");
         const authHeader = {
           Authorization: `Basic ${Buffer.from(`upgrade-client:${oidcSecret}`).toString("base64")}`,
         };
@@ -970,7 +988,7 @@ test(
           discovery.token_endpoint,
           {
             grant_type: "authorization_code",
-            code: callback.searchParams.get("code"),
+            code,
             redirect_uri: `${spOrigin}/oidc-callback`,
             code_verifier: verifier,
           },
@@ -998,11 +1016,27 @@ test(
         env.MEMBERID_TEST_PGDUMP_CONTAINER = database;
         executable = upgradedExecutable;
         const recovery = path.join(directory, "upgrade-recovery");
+        const manifestFile = path.join(directory, "application-ids.json");
+        cli(
+          "database",
+          "application-id-plan",
+          "--directory",
+          installation,
+          "--output-file",
+          manifestFile,
+        );
+        const manifest = JSON.parse(readFileSync(manifestFile, "utf8"));
+        const clientID = manifest.find(
+          (row) => row.protocol === "oidc" && row.oldId === "upgrade-client",
+        ).newId;
+        assert.match(clientID, /^app_[0-9bcdfghjkmnpqrstvwxz]{27}$/);
         const upgradeArgs = [
           "database",
           "upgrade",
           "--directory",
           installation,
+          "--application-id-manifest",
+          manifestFile,
           "--backup-directory",
           recovery,
           "--maintenance-confirmed",
@@ -1011,12 +1045,12 @@ test(
         ];
         const upgraded = JSON.parse(cli(...upgradeArgs));
         assert.equal(upgraded.upgraded, true);
-        assert.equal(upgraded.currentVersion, 31);
-        t.diagnostic("upgrade rehearsal: schema 31 committed");
+        assert.equal(upgraded.currentVersion, 32);
+        t.diagnostic("upgrade rehearsal: schema 32 committed");
         assert.deepEqual(snapshot(), before);
         assert.equal(
           pg(
-            "SELECT owner_organization_id FROM oidc_clients WHERE client_id='upgrade-client'",
+            "SELECT owner_organization_id FROM oidc_clients WHERE display_name='upgrade-client'",
           ),
           "org_system",
         );
@@ -1025,7 +1059,7 @@ test(
           "add",
           "--directory",
           installation,
-          "--id",
+          "--name",
           "owner-fixture",
           "--owner-organization",
           organization.id,
@@ -1036,7 +1070,7 @@ test(
         );
         assert.equal(
           pg(
-            "SELECT owner_organization_id = registration->>'organizationId' FROM oidc_clients WHERE client_id='owner-fixture'",
+            "SELECT owner_organization_id = registration->>'organizationId' FROM oidc_clients WHERE display_name='owner-fixture'",
           ),
           "t",
         );
@@ -1063,21 +1097,51 @@ test(
         const alias = await browser(`${issuer}/login/example-team`);
         assert.equal(alias.status, 303);
         assert.equal(alias.headers.location, `/login/${organization.id}`);
-        const refreshed = await browser(
-          discovery.token_endpoint,
-          { grant_type: "refresh_token", refresh_token: tokens.refresh_token },
-          authHeader,
+        const newAuth = {
+          Authorization: `Basic ${Buffer.from(`${clientID}:${oidcSecret}`).toString("base64")}`,
+        };
+        const refresh = (value, headers) =>
+          browser(
+            discovery.token_endpoint,
+            { grant_type: "refresh_token", refresh_token: value },
+            headers,
+          );
+        const exchange = (value, headers) =>
+          browser(
+            discovery.token_endpoint,
+            {
+              grant_type: "authorization_code",
+              code: value,
+              redirect_uri: `${spOrigin}/oidc-callback`,
+              code_verifier: verifier,
+            },
+            headers,
+          );
+        assert.equal(
+          (await refresh(tokens.refresh_token, authHeader)).status,
+          401,
         );
-        assert.equal(refreshed.status, 200);
-        const renewed = JSON.parse(
+        assert.equal(
+          (await refresh(tokens.refresh_token, newAuth)).status,
+          400,
+        );
+        assert.equal((await exchange(pendingCode, newAuth)).status, 400);
+        const fresh = await exchange(await authorizeClient(clientID), newAuth);
+        assert.equal(fresh.status, 200);
+        const freshTokens = JSON.parse(fresh.body);
+        const renewed = await refresh(freshTokens.refresh_token, newAuth);
+        assert.equal(renewed.status, 200);
+        const freshClaims = JSON.parse(
           Buffer.from(
-            JSON.parse(refreshed.body).id_token.split(".")[1],
+            JSON.parse(renewed.body).id_token.split(".")[1],
             "base64url",
-          ).toString(),
+          ),
         );
-        assert.equal(renewed.sub, claims.sub);
-        assert.equal(renewed.auth_time, claims.auth_time);
-        t.diagnostic("upgrade rehearsal: original OIDC grant refreshed");
+        assert.equal(freshClaims.sub, claims.sub);
+        assert.equal(freshClaims.iss, claims.iss);
+        t.diagnostic(
+          "cutover rejected old credentials and preserved the OIDC account on a fresh grant",
+        );
         assert.equal((await browser(acs, await responseForm())).status, 303);
         assert.equal(
           JSON.parse((await browser(`${spOrigin}/session`)).body).nameID,

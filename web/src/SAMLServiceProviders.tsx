@@ -334,7 +334,7 @@ function RegistrationDialog({
       if (!unsigned && !certificates.length)
         throw new Error("要求签名的应用至少需要一个 SP 公共证书。")
       const input = {
-        id: item?.id ?? String(fields.get("id")).trim(),
+        ...(item ? { id: item.id } : {}),
         displayName: String(fields.get("displayName")).trim(),
         entityId: item?.entityId ?? String(fields.get("entityId")).trim(),
         acsUrl: String(fields.get("acsUrl")).trim(),
@@ -391,18 +391,7 @@ function RegistrationDialog({
                   readOnly={pending}
                 />
               </Field>
-              <Field>
-                <FieldLabel htmlFor="saml-id">应用 ID</FieldLabel>
-                <Input
-                  id="saml-id"
-                  name="id"
-                  required
-                  maxLength={64}
-                  pattern="[A-Za-z0-9_-]+"
-                  defaultValue={item?.id}
-                  readOnly={pending || !!item}
-                />
-              </Field>
+              {item && <RecordIdentifier value={item.id} label="应用 ID" />}
               <Field>
                 <FieldLabel htmlFor="saml-entity">Entity ID</FieldLabel>
                 <Input

@@ -21,6 +21,7 @@ const (
 	OrganizationKind Kind = "org"
 	MemberKind       Kind = "mbr"
 	FactorKind       Kind = "af"
+	ApplicationKind  Kind = "app"
 	idAlphabet            = "0123456789bcdfghjkmnpqrstvwxz"
 	idWidth               = 27
 )
@@ -79,7 +80,7 @@ func ValidID(id string, kind Kind) bool {
 }
 
 func knownKind(kind Kind) bool {
-	return kind == OrganizationKind || kind == MemberKind || kind == FactorKind
+	return kind == OrganizationKind || kind == MemberKind || kind == FactorKind || kind == ApplicationKind
 }
 
 // ValidUUID validates the canonical textual shape used by opaque binding and protocol identifiers.
