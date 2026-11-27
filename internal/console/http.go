@@ -25,7 +25,10 @@ import (
 //go:embed all:static
 var assets embed.FS
 
-const sessionMaxAge = 24 * time.Hour
+const (
+	loginMaxAge   = 4 * time.Hour
+	sessionMaxAge = 24 * time.Hour
+)
 
 // AssetsReady lets the executable reject an incomplete source-only console build.
 func AssetsReady() bool {
@@ -143,7 +146,7 @@ func (s *Service) beginLogin(w http.ResponseWriter, r *http.Request, login conso
 		return "", err
 	}
 	s.cookie(w, "login", browser, 300)
-	options = append(options, oauth2.S256ChallengeOption(login.Verifier), oauth2.SetAuthURLParam("nonce", login.Nonce), oauth2.SetAuthURLParam("max_age", strconv.Itoa(int(sessionMaxAge/time.Second))))
+	options = append(options, oauth2.S256ChallengeOption(login.Verifier), oauth2.SetAuthURLParam("nonce", login.Nonce), oauth2.SetAuthURLParam("max_age", strconv.Itoa(int(loginMaxAge/time.Second))))
 	return s.party.OAuthConfig().AuthCodeURL(state, options...), nil
 }
 
