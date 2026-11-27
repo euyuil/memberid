@@ -159,7 +159,7 @@ func TestOIDCSharingWithdrawal(t *testing.T) {
 	put(owner, "publication", true, 200)
 	csrf = login(b)
 	r, _ := page(b)
-	if !strings.Contains(r.body, "Enter a valid organization ID.") {
+	if !strings.Contains(r.body, "Enter a valid organization login name or ID.") {
 		t.Fatal("unsubscribed consumer selected")
 	}
 	var duplicate sync.WaitGroup
@@ -206,7 +206,7 @@ func TestOIDCSharingWithdrawal(t *testing.T) {
 	put(owner, "publication", true, 200)
 	for _, m := range []identity.Member{b, c} {
 		r, _ := page(m)
-		if !strings.Contains(r.body, "Enter a valid organization ID.") {
+		if !strings.Contains(r.body, "Enter a valid organization login name or ID.") {
 			t.Fatal("republishing restored a consumer")
 		}
 	}

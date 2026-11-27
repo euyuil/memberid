@@ -66,7 +66,7 @@ A SaaS issuing distinct entity IDs and trust configurations per customer uses se
 
 For a SaaS with a per-tenant IdP setting, give the tenant its metadata URL `{issuer}/saml/organizations/{organizationID}/metadata`. It advertises HTTP-Redirect SSO at `{issuer}/saml/organizations/{organizationID}/sso`. Use the permanent organization ID. The SP sends its ordinary AuthnRequest to this URL and sets its exact `Destination` to the same URL. The IdP entity ID remains `{issuer}/saml/metadata`, with the same signing certificate. The SP entity ID, ACS, request signing policy and NameIDs also stay the same. Organization metadata describes the endpoint and does not establish that the tenant has enabled the application.
 
-A SaaS with one IdP setting continues to use the common metadata and SSO URL. Both launches return the response to the registered ACS. When enabled, the signed `OrganizationID` attribute tells the application which organization the authenticated Member belongs to. RelayState is opaque. A bare `/login/{organizationID}` bookmark opens the Member account flow.
+A SaaS with one IdP setting continues to use the common metadata and SSO URL. A Member can select an eligible organization by its login name or permanent ID on the common sign-in page. Both launches return the response to the registered ACS. When enabled, the signed `OrganizationID` attribute tells the application which organization the authenticated Member belongs to. RelayState is opaque. A bare `/login/{organizationID}` bookmark opens the Member account flow.
 
 ## Protocol contract
 

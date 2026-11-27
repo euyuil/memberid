@@ -82,10 +82,10 @@ func TestOrganizationLoginLookupErrors(t *testing.T) {
 		}
 	}
 	checkResponse(f.call(f.browser, "GET", "/login/disabled-team", nil, nil), http.StatusNotFound, "Organization login is unavailable")
-	for _, organizationID := range []string{"invalid id", unknownID, f.otherMember.OrganizationID} {
+	for _, organizationID := range []string{"invalid id", "unknown-name", "disabled-team", "Disabled-Team", unknownID, f.otherMember.OrganizationID} {
 		response := selectOrganization(organizationID)
 		f.status(response, http.StatusOK)
-		if !strings.Contains(response.body, "Enter a valid organization ID.") {
+		if !strings.Contains(response.body, "Enter a valid organization login name or ID.") {
 			t.Fatalf("missing organization ID validation message for %q", organizationID)
 		}
 	}
@@ -118,28 +118,35 @@ func TestDirectOrganizationPasswordLoginOpensMemberAccount(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	page := f.openDirectLogin("/login")
-	if !strings.Contains(page.body, `value="choose-organization"`) || strings.Contains(page.body, `id="username"`) {
-		t.Fatal("direct login did not start with organization selection")
+	const loginName = "dingtalk"
+	if err := f.store.AssignOrganizationSlug(t.Context(), identity.OperatorPrincipal(), f.member.OrganizationID, loginName); err != nil {
+		t.Fatal(err)
 	}
-	path := "/login/" + f.member.OrganizationID
-	selected := f.submitDirect(page, "/login", "choose-organization", url.Values{"organization": {f.member.OrganizationID}})
-	f.status(selected, http.StatusSeeOther)
-	if selected.header.Get("Location") != path {
-		t.Fatal("organization selection did not redirect to its stable entry URL")
-	}
-	page = f.openDirectLogin(path)
-	f.checkDirectCount(0)
-	result := f.submitDirect(page, path, "password", url.Values{"username": {"example"}, "password": {password}})
-	f.status(result, http.StatusSeeOther)
-	f.checkDirectCount(1)
-	if result.header.Get("Location") != "/account?memberId="+f.member.ID {
-		t.Fatalf("direct password login redirected to %q", result.header.Get("Location"))
-	}
-	account := f.call(f.browser, "GET", result.header.Get("Location"), nil, nil)
-	f.status(account, http.StatusOK)
-	if !strings.Contains(account.body, "Example Member") {
-		t.Fatal("direct login did not open the Member account")
+	for previous, value := range []string{f.member.OrganizationID, loginName} {
+		f.browser = browserClient()
+		page := f.openDirectLogin("/login")
+		if !strings.Contains(page.body, `value="choose-organization"`) || strings.Contains(page.body, `id="username"`) {
+			t.Fatal("direct login did not start with organization selection")
+		}
+		path := "/login/" + f.member.OrganizationID
+		selected := f.submitDirect(page, "/login", "choose-organization", url.Values{"organization": {value}})
+		f.status(selected, http.StatusSeeOther)
+		if selected.header.Get("Location") != path {
+			t.Fatal("organization selection did not redirect to its stable entry URL")
+		}
+		page = f.openDirectLogin(path)
+		f.checkDirectCount(previous)
+		result := f.submitDirect(page, path, "password", url.Values{"username": {"example"}, "password": {password}})
+		f.status(result, http.StatusSeeOther)
+		f.checkDirectCount(previous + 1)
+		if result.header.Get("Location") != "/account?memberId="+f.member.ID {
+			t.Fatalf("direct password login redirected to %q", result.header.Get("Location"))
+		}
+		account := f.call(f.browser, "GET", result.header.Get("Location"), nil, nil)
+		f.status(account, http.StatusOK)
+		if !strings.Contains(account.body, "Example Member") {
+			t.Fatal("direct login did not open the Member account")
+		}
 	}
 	var grants int
 	if err := f.store.Database().QueryRow(t.Context(), "SELECT count(*) FROM oidc_grants").Scan(&grants); err != nil || grants != 0 {

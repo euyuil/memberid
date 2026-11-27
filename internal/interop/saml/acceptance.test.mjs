@@ -1302,10 +1302,19 @@ test(
             spFile,
           );
         }
-        function organizationLogin(label) {
+        function organizationLogin(label, loginName) {
           const org = JSON.parse(
             cli("organization", "create", "--name", label),
           );
+          if (loginName)
+            cli(
+              "organization",
+              "set-slug",
+              "--organization",
+              org.id,
+              "--slug",
+              loginName,
+            );
           const actor = JSON.parse(
             cli("member", "create", "--organization", org.id, "--name", label),
           );
@@ -1335,7 +1344,7 @@ test(
             const agent = client(tls.cert);
             const form = await responseForm({
               agent,
-              loginOrganization: org.id,
+              loginOrganization: scoped ? org.id : (loginName ?? org.id),
               scoped,
               memberId: actor.id,
               username: "shared-member",
@@ -1351,7 +1360,7 @@ test(
           }
           return { id: org.id, use, signIn };
         }
-        const b = organizationLogin("Subscriber B"),
+        const b = organizationLogin("Subscriber B", "subscriber-b"),
           c = organizationLogin("Subscriber C");
         configure({ published: true, attributes: ["OrganizationID"] });
         b.use(true);

@@ -115,7 +115,7 @@ a { color: var(--primary); }
 {{if .OrganizationRequired}}
 <form method="post" action="{{.Action}}">
 <input type="hidden" name="request" value="{{.Request.GetID}}"><input type="hidden" name="csrf" value="{{.Request.CSRF}}">
-<label for="organization">Organization ID</label><input id="organization" name="organization" autocomplete="off" pattern="org_([0-9bcdfghjkmnpqrstvwxz]{27}|system)" maxlength="31" required autofocus>
+<label for="organization">Organization login name or ID</label><input id="organization" name="organization" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="63" required autofocus>
 <button name="action" value="choose-organization">Continue</button>
 </form>
 {{else}}
