@@ -3,53 +3,49 @@
 package oidcprovider
 
 import (
-	"fmt"
 	"net/url"
 	"slices"
 	"strings"
 	"testing"
 
+	"github.com/zhizhun-tech/memberid/internal/config"
 	"github.com/zhizhun-tech/memberid/internal/identity"
 )
 
-func TestOIDCOrganizationScope(t *testing.T) {
+func TestMemberTokenOrganization(t *testing.T) {
 	f := newFixture(t)
 	ctx, op := t.Context(), identity.OperatorPrincipal()
-	a, b := f.member, f.otherMember // Distinct Members bound to the same verified phone.
-	for _, m := range []identity.Member{a, b} {
-		if err := f.store.SetAdministrator(ctx, op, m.OrganizationID, m.ID, true); err != nil {
+	owner, err := f.store.CreateOrganization(ctx, op, "", "Application owner")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, c := f.member, f.otherMember // Two Members of the same person, bound to the same phone.
+	another, err := f.store.CreateMember(ctx, op, b.OrganizationID, "", "Second employee")
+	if err != nil {
+		t.Fatal(err)
+	}
+	password, err := f.store.SetMemberPassword(ctx, op, b.OrganizationID, another.ID, "second")
+	if err != nil {
+		t.Fatal(err)
+	}
+	management := identity.NewManagementService(f.store, nil, nil, 0)
+	app, err := management.CreateOIDCApplication(ctx, op, owner.ID, identity.OIDCApplication{
+		DisplayName: "Workspace", RedirectURIs: []string{callback}, Refresh: true,
+	}, config.SecretHash(f.secret), true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := app.ClientID
+	if err := management.SetOIDCPublication(ctx, op, owner.ID, id, true); err != nil {
+		t.Fatal(err)
+	}
+	for _, m := range []identity.Member{b, c} {
+		if err := management.SetOIDCEnablement(ctx, op, m.OrganizationID, id, true); err != nil {
 			t.Fatal(err)
 		}
 	}
-	another, err := f.store.CreateMember(ctx, op, a.OrganizationID, "", "Second employee")
-	if err != nil {
-		t.Fatal(err)
-	}
-	password, err := f.store.SetMemberPassword(ctx, op, a.OrganizationID, another.ID, "second")
-	if err != nil {
-		t.Fatal(err)
-	}
-	server := consoleFixture(t, f)
-	login := func(m identity.Member) string {
-		t.Helper()
-		consoleLogin(t, f, server, m.ID)
-		return consoleJSON(t, f, server, "GET", "/api/session", "", "", 200)["csrf"].(string)
-	}
-	base := func(m identity.Member) string { return "/api/organizations/" + m.OrganizationID + "/oidc-applications" }
-	csrf := login(a)
-	app := consoleJSON(t, f, server, "POST", base(a), csrf, fmt.Sprintf(`{"displayName":"Workspace","redirectUris":[%q],"refresh":true}`, callback), 200)
-	meta := app["application"].(map[string]any)
-	if meta["allowOrganizationScope"] != false {
-		t.Fatal("default must be off")
-	}
-	id := meta["clientId"].(string)
-	f.secret = app["clientSecret"].(string)
-	consoleJSON(t, f, server, "PUT", base(a)+"/"+id+"/publication", csrf, `{"enabled":true}`, 200)
-	csrf = login(b)
-	consoleJSON(t, f, server, "PUT", base(b)+"/"+id+"/enablement", csrf, `{"enabled":true}`, 200)
-	csrf = login(a)
-	const ordinary = "openid profile offline_access"
-	const withOrg = ordinary + " " + identity.OrganizationScope
+
+	const retired = "memberid.organization"
 	token := func(m identity.Member, scope string) map[string]any {
 		t.Helper()
 		r, verifier := f.authorization(id, scope, nil)
@@ -62,87 +58,73 @@ func TestOIDCOrganizationScope(t *testing.T) {
 		} else if strings.Contains(r.body, `id="phone"`) {
 			r = f.verifyPhone(r)
 		}
+		if !strings.Contains(r.body, "Requested identity information: openid") || strings.Contains(r.body, retired) {
+			t.Fatal("unexpected consent scope list")
+		}
 		result := f.exchange(id, f.complete(r, m.ID), verifier)
 		f.status(result, 200)
 		return jsonObject(t, result)
 	}
-	check := func(tokens map[string]any, m identity.Member, want bool) {
+	check := func(tokens map[string]any, m identity.Member, wantScope string) {
 		t.Helper()
-		claims := f.signedClaims(tokens["id_token"].(string))
-		audiences, _ := claims["aud"].([]any)
-		if !slices.Contains(audiences, any(id)) {
-			t.Fatal("ID token not addressed to client")
-		}
-		org, exists := claims["organizationId"]
-		if claims["sub"] != m.ID || claims["iss"] != f.server.URL || exists != want || want && org != m.OrganizationID {
-			t.Fatal("unexpected signed organization or subject", m.ID, want)
-		}
-		access := f.signedClaims(tokens["access_token"].(string))
-		info := f.userinfo(tokens["access_token"].(string))
-		f.status(info, 200)
-		user := jsonObject(t, info)
-		if access["organizationId"] != nil || user["organizationId"] != nil {
-			t.Fatal("organization claim escaped the ID token")
-		}
-		for _, values := range []map[string]any{claims, access, user} {
-			for _, key := range []string{"authentication", "memberId", "factorId", "bindingId", "memberships", "roles"} {
-				if _, ok := values[key]; ok {
-					t.Fatal("unexpected claim", key)
+		for token, audience := range map[string]string{"id_token": id, "access_token": f.server.URL + "/oauth/userinfo"} {
+			claims := f.signedClaims(tokens[token].(string))
+			aud, _ := claims["aud"].([]any)
+			if !slices.Contains(aud, any(audience)) || claims["iss"] != f.server.URL || claims["sub"] != m.ID || claims["org_id"] != m.OrganizationID {
+				t.Fatalf("incorrect audience, issuer, subject or organization in %s", token)
+			}
+			if token == "access_token" && (len(aud) != 1 || claims["scope"] != wantScope || claims["tokenUse"] != "access") {
+				t.Fatal("unexpected access token audience, scope or use")
+			}
+			for _, key := range []string{"organizationId", "authentication", "memberId", "factorId", "bindingId", "memberships", "roles"} {
+				if _, ok := claims[key]; ok {
+					t.Fatalf("unexpected %s in %s", key, token)
 				}
 			}
 		}
-	}
-	advertised := func(want bool) {
-		t.Helper()
-		discovery := jsonObject(t, f.call(f.browser, "GET", "/.well-known/openid-configuration", nil, nil))
-		scopes, _ := discovery["scopes_supported"].([]any)
-		claims, _ := discovery["claims_supported"].([]any)
-		if slices.Contains(scopes, any(identity.OrganizationScope)) != want || slices.Contains(claims, any("organizationId")) != want {
-			t.Fatal("discovery mismatch")
+		info := f.userinfo(tokens["access_token"].(string))
+		f.status(info, 200)
+		user := jsonObject(t, info)
+		if user["org_id"] != nil || user["organizationId"] != nil {
+			t.Fatal("organization claim appeared in UserInfo")
 		}
 	}
-	advertised(false)
-	check(token(a, ordinary), a, false)
-	// The protocol library drops an unregistered optional scope before consent.
-	check(token(a, withOrg), a, false)
-	set := func(enabled bool) {
-		t.Helper()
-		reg, err := f.store.OIDCClient(ctx, id)
-		if err != nil {
-			t.Fatal(err)
-		}
-		body := fmt.Sprintf(`{"displayName":"Workspace","redirectUris":[%q],"refresh":true,"expectedRevision":%d,"allowOrganizationScope":%t}`, callback, reg.Revision, enabled)
-		got := consoleJSON(t, f, server, "PATCH", base(a)+"/"+id, csrf, body, 200)["application"].(map[string]any)
-		if got["allowOrganizationScope"] != enabled {
-			t.Fatal("opt-in did not persist")
-		}
-	}
-	set(true)
-	advertised(true)
-	plain := token(b, ordinary)
-	check(plain, b, false)
-	check(token(a, withOrg), a, true)
-	original := token(b, withOrg)
-	check(original, b, true)
-	name := "Renamed consumer"
-	if _, err = f.store.UpdateOrganization(ctx, op, b.OrganizationID, identity.OrganizationChange{Name: &name}); err != nil {
+	check(token(b, "openid"), b, "openid")
+	// A registration saved by the previous release can still contain its opt-in.
+	if _, err := f.store.Database().Exec(ctx, `UPDATE oidc_clients SET registration = registration || '{"allowOrganizationScope":true}' WHERE client_id=$1`, id); err != nil {
 		t.Fatal(err)
 	}
-	refresh := f.refresh(id, original["refresh_token"].(string), "")
-	f.status(refresh, 200)
-	renewed := jsonObject(t, refresh)
-	check(renewed, b, true)
-	narrowed := f.refresh(id, renewed["refresh_token"].(string), "openid profile")
-	f.status(narrowed, 200)
-	check(jsonObject(t, narrowed), b, false)
-	ownerBrowser := f.browser
+	discovery := jsonObject(t, f.call(f.browser, "GET", "/.well-known/openid-configuration", nil, nil))
+	scopes := discovery["scopes_supported"].([]any)
+	claims := discovery["claims_supported"].([]any)
+	if slices.Contains(scopes, any(retired)) || slices.Contains(claims, any("organizationId")) || !slices.Contains(claims, any("org_id")) {
+		t.Fatal("unexpected organization discovery metadata")
+	}
+
+	check(token(c, "openid "+retired), c, "openid")
+	phoneBrowser := f.browser
 	f.browser = browserClient()
-	check(token(another, withOrg), another, true)
-	f.browser = ownerBrowser
-	scoped := token(a, withOrg)
-	set(false)
-	advertised(false)
-	set(true)
-	f.invalidRefresh(id, scoped["refresh_token"].(string))
-	f.status(f.refresh(id, plain["refresh_token"].(string), ""), 200)
+	check(token(another, "openid"), another, "openid")
+	f.browser = phoneBrowser
+
+	const optional = "openid profile offline_access"
+	original := token(c, optional)
+	check(original, c, optional)
+	name := "Renamed consumer"
+	if _, err = f.store.UpdateOrganization(ctx, op, c.OrganizationID, identity.OrganizationChange{Name: &name}); err != nil {
+		t.Fatal(err)
+	}
+	// Model a refresh token issued before the scope was retired.
+	secret := original["refresh_token"].(string)
+	updated, err := f.store.Database().Exec(ctx, `UPDATE oidc_refresh_tokens SET data=jsonb_set(data,'{scopes}',(data->'scopes') || to_jsonb($1::text)) WHERE secret_hash=$2`, retired, config.SecretHash(secret))
+	if err != nil || updated.RowsAffected() != 1 {
+		t.Fatal("could not seed the legacy refresh scope", err)
+	}
+	response := f.refresh(id, secret, "")
+	f.status(response, 200)
+	renewed := jsonObject(t, response)
+	check(renewed, c, optional)
+	response = f.refresh(id, renewed["refresh_token"].(string), "openid")
+	f.status(response, 200)
+	check(jsonObject(t, response), c, "openid")
 }

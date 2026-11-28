@@ -16,7 +16,7 @@ Discover configuration at `ISSUER/.well-known/openid-configuration`.
 | Token revocation | `/oauth/revoke` |
 | RP-initiated logout | `/oauth/logout` |
 
-Authorization uses `response_type=code`, mandatory PKCE `S256`, and the `openid` scope. Token exchange, introspection, and revocation require a form-encoded POST body and `client_secret_basic`. Query-string credentials, body client secrets, and combined client-authentication methods are rejected. ID Tokens and JWT access tokens use RS256 and a public-key-derived `kid`. Discovery advertises only the enabled profile, including registered evidence scopes and the organization scope when at least one enabled Member client permits it.
+Authorization uses `response_type=code`, mandatory PKCE `S256`, and the `openid` scope. Token exchange, introspection, and revocation require a form-encoded POST body and `client_secret_basic`. Query-string credentials, body client secrets, and combined client-authentication methods are rejected. ID Tokens and JWT access tokens use RS256 and a public-key-derived `kid`. Discovery advertises only the enabled profile, including the `org_id` claim and the evidence scopes of enabled clients.
 
 Authorization responses support `query` (the default) and `fragment`, as advertised in Discovery. `form_post` and other response modes are not enabled and receive `invalid_request` before login. Clients must select one of the advertised modes; successful responses and interaction errors use that selected mode.
 
@@ -32,7 +32,7 @@ Authorization requests using `request_uri` receive `request_uri_not_supported`, 
 
 MemberID validates the application's authorization request and redirects the browser to a short-lived internal login URL. Its authenticated, encrypted context is bound to the issuer and the HttpOnly browser cookie. Form submissions also require the exact issuer Origin and a transaction-specific CSRF value. Logs at the issuer and reverse proxy should omit login query strings.
 
-An application opening a specific workspace can add the optional MemberID authorization parameter `memberid_organization={organizationID}` to its normal `/oauth/authorize` request. Use the permanent organization ID. Keep the usual client ID, redirect URI, state, nonce and S256 PKCE. The server binds the selected organization to the validated authorization transaction before displaying login. An unavailable organization or one outside the client's admission policy cannot complete that launch. Omit the parameter on the application's generic homepage. To receive the signed-in organization in the ID Token, separately enable and request `memberid.organization`.
+An application opening a specific workspace can add the optional MemberID authorization parameter `memberid_organization={organizationID}` to its normal `/oauth/authorize` request. Use the permanent organization ID. Keep the usual client ID, redirect URI, state, nonce and S256 PKCE. The server binds the selected organization to the validated authorization transaction before displaying login. An unavailable organization or one outside the client's admission policy cannot complete that launch. Omit the parameter on the application's generic homepage. Both Member tokens identify the selected Member's organization.
 
 Opening the login page and selecting an organization create no authorization request row. A Member client with a registered organization goes directly to `/login/{organizationID}`. At the common `/login` entry, submit a password together with `username@slug` or `username@<full-organization-ID>` to sign in to one eligible organization in a single submission. With only a short username, or to use SMS, DingTalk or Feishu, enter the organization's login name or permanent ID in the organization form first. The same account shares a password attempt limit across entry points and suffix spellings. The selected page carries the permanent organization ID. Two selections from the same initial page share one interaction. Starting password, SMS, DingTalk, or Feishu authentication fixes the organization in PostgreSQL for the remainder of that interaction.
 
@@ -72,13 +72,11 @@ uses this standard authorization flow and separately checks management access.
 
 A separately registered `subjectKind=factor` client may receive a verified phone-factor subject before membership exists. This policy requires an operator-selected evidence scope and fixed audience. It does not create a Member or grant access to an organization. Ordinary clients cannot request this subject mode themselves.
 
-## Current organization in the ID token
+## Member organization in ID and access tokens
 
-A Member client can request the MemberID extension scope `memberid.organization`. Its administrator must first enable **允许应用读取登录组织 ID** on the registration (or supply `--allow-organization-scope` at registration with `client add`). The default is off. The same opt-in applies to owner-only, shared and unrestricted Member clients. A requested but unregistered optional scope is omitted from the grant. To obtain the organization ID the authorization request must include `openid memberid.organization`. The normal interactive consent or configured administrative preauthorization applies.
+Request `openid` to sign in a Member. The signed ID token and access token each carry `org_id`, the immutable organization ID of the Member identified by `sub`. Both values come from the grant, including when a shared application belongs to another organization. Two Members of one organization share its `org_id` and have distinct subjects. A person using separate Members of different organizations receives distinct subjects and organization IDs. A valid refresh retains the same organization even after optional scopes are dropped or the organization is renamed. Factor-only tokens omit `org_id`. UserInfo continues to return the requested profile claims.
 
-When granted, the signed ID token includes the authenticated Member's immutable organization ID as `organizationId`. The standard `sub` identifies that Member within the issuer. Two Members of one organization receive the same organization ID. The same person using separate Members of different organizations receives distinct subjects and organization IDs. Renaming an organization preserves its ID. Use `profile` and UserInfo for display names.
-
-A standard refresh retains this claim while the scope remains granted. Narrowing the refresh request to `openid` omits it. Removing the registration opt-in revokes grants containing this scope. The scope adds no claim to the access token or UserInfo and releases no factor, binding, role or membership list. The separate evidence scope retains its configured audience and access-token disclosure.
+**Client migration.** Remove `memberid.organization` from authorization and refresh requests and read `org_id` in newly issued tokens. Authorization ignores the retired scope if an older client still requests it alongside `openid`. A refresh can omit `scope` to retain the remaining scopes of an existing grant. Remove `--allow-organization-scope` from registration scripts and `allowOrganizationScope` from management requests. During a rollout, clients that accept older, still-valid tokens can temporarily read the former `organizationId` claim when present after validation. The management API retains its existing `organizationId` field.
 
 The following Go callback uses the same verification path as the MemberID console. Configure `party` with the exact expected issuer and client ID, issuer discovery and JWKS, and a nonce verifier bound to the stored authorization transaction. Check the returned state and retrieve the original PKCE verifier before exchanging the code.
 
@@ -88,9 +86,9 @@ if err != nil {
     return err
 }
 claims := tokens.IDTokenClaims // Verified signature, issuer, audience, expiry and nonce.
-organizationID, ok := claims.Claims["organizationId"].(string)
+organizationID, ok := claims.Claims["org_id"].(string)
 if !ok || organizationID == "" {
-    return errors.New("this workspace requires the organization scope")
+    return errors.New("missing Member organization in ID token")
 }
 return openWorkspace(claims.Issuer, claims.Subject, organizationID)
 ```
@@ -103,7 +101,7 @@ Relying parties must verify the exact issuer, RS256 signature against the issuer
 
 ID Tokens authenticate the user to a client. They do not work as UserInfo or application API bearer credentials. Access-token consumers must separately require the expected issuer, resource audience, valid lifetime and signature, `tokenUse=access`, and their own permissions. Token type and permissions cannot be inferred merely from a valid signature or matching subject.
 
-For a registered evidence scope, the access token includes `authentication` facts (`factorId`, `factorType`, `method`, `authenticatedAt`, `expiresAt`), plus `organizationId`, `memberId`, and `bindingId` when a Member is selected. This is an optional identity-claim extension to the standard access token, not another credential or authorization protocol. No business roles, administrative privileges, or resource grants are issued by MemberID.
+With only `openid`, the access token audience is the issuer’s `/oauth/userinfo` endpoint. An API must require its own audience even when a token contains `org_id`. When the registered evidence scope is granted, its configured resource audience receives an access token that includes `authentication` facts (`factorId`, `factorType`, `method`, `authenticatedAt`, `expiresAt`), plus `memberId` and `bindingId` when a Member is selected. This is an optional identity-claim extension to the standard access token, not another credential or authorization protocol. No business roles, administrative privileges, or resource grants are issued by MemberID.
 
 The [token and server-side authorization design](authorization-boundaries.md)
 records the agreed management boundary: tokens carry their documented identity

@@ -6,6 +6,7 @@ import (
 	"crypto/rsa"
 	"crypto/subtle"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
@@ -80,31 +81,41 @@ func (c client) RestrictAdditionalAccessTokenScopes() func([]string) []string {
 	return func(scopes []string) []string { return scopes }
 }
 func (c client) IsScopeAllowed(scope string) bool {
-	if scope == identity.OrganizationScope {
-		return c.registration.AllowOrganizationScope && c.registration.SubjectKind == "member"
-	}
 	return c.registration.EvidenceScope != "" && scope == c.registration.EvidenceScope
 }
 func (c client) IDTokenUserinfoClaimsAssertion() bool { return false }
 func (c client) ClockSkew() time.Duration             { return 0 }
 
+// Stored grants, tokens and pending logins can predate the retirement of the
+// organization scope. Drop only that scope before consent or eligibility checks.
+type grantScopes []string
+
+func (scopes *grantScopes) UnmarshalJSON(data []byte) error {
+	var stored []string
+	if err := json.Unmarshal(data, &stored); err != nil {
+		return err
+	}
+	*scopes = slices.DeleteFunc(stored, func(scope string) bool { return scope == "memberid.organization" })
+	return nil
+}
+
 type grant struct {
-	InteractionID  string    `json:"interactionId,omitempty"`
-	ID             string    `json:"id"`
-	ClientID       string    `json:"clientId"`
-	ClientName     string    `json:"clientName,omitempty"`
-	SessionID      string    `json:"sessionId"`
-	FactorID       string    `json:"factorId"`
-	FactorType     string    `json:"factorType"`
-	MemberID       string    `json:"memberId,omitempty"`
-	OrganizationID string    `json:"organizationId,omitempty"`
-	EnablementID   string    `json:"enablementId,omitempty"`
-	BindingID      string    `json:"bindingId,omitempty"`
-	Method         string    `json:"method"`
-	AuthTime       time.Time `json:"authTime"`
-	AbsoluteExpiry time.Time `json:"absoluteExpiry"`
-	Scopes         []string  `json:"scopes"`
-	Audience       []string  `json:"audience"`
+	InteractionID  string      `json:"interactionId,omitempty"`
+	ID             string      `json:"id"`
+	ClientID       string      `json:"clientId"`
+	ClientName     string      `json:"clientName,omitempty"`
+	SessionID      string      `json:"sessionId"`
+	FactorID       string      `json:"factorId"`
+	FactorType     string      `json:"factorType"`
+	MemberID       string      `json:"memberId,omitempty"`
+	OrganizationID string      `json:"organizationId,omitempty"`
+	EnablementID   string      `json:"enablementId,omitempty"`
+	BindingID      string      `json:"bindingId,omitempty"`
+	Method         string      `json:"method"`
+	AuthTime       time.Time   `json:"authTime"`
+	AbsoluteExpiry time.Time   `json:"absoluteExpiry"`
+	Scopes         grantScopes `json:"scopes"`
+	Audience       []string    `json:"audience"`
 }
 
 func (g *grant) GetAMR() []string       { return []string{g.Method} }

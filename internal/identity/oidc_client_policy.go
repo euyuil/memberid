@@ -9,10 +9,6 @@ import (
 	"strings"
 )
 
-// OrganizationScope releases the authenticated Member's organization in the ID token.
-// The dot keeps it distinct from every existing evidence scope.
-const OrganizationScope = "memberid.organization"
-
 // OIDCClient is the protocol policy and credential verifier for one registered client.
 type OIDCClient struct {
 	ID                     string   `json:"client_id"`
@@ -25,7 +21,6 @@ type OIDCClient struct {
 	EvidenceScope          string   `json:"evidenceScope,omitempty"`
 	EvidenceAudience       string   `json:"evidenceAudience,omitempty"`
 	Refresh                bool     `json:"refresh,omitempty"`
-	AllowOrganizationScope bool     `json:"allowOrganizationScope,omitempty"`
 	Preauthorized          bool     `json:"preauthorized,omitempty"`
 }
 
@@ -81,7 +76,7 @@ func validateClients(clients []OIDCClient, allowLoopback, legacy bool) error {
 				return errors.New("evidence audience must be an exact resource URL")
 			}
 		}
-		if client.SubjectKind == "factor" && (client.OrganizationID != "" || client.EvidenceScope == "" || client.AllowOrganizationScope) {
+		if client.SubjectKind == "factor" && (client.OrganizationID != "" || client.EvidenceScope == "") {
 			return errors.New("factor clients require explicit evidence policy and cannot claim organization membership")
 		}
 	}

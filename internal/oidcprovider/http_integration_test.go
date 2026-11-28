@@ -543,6 +543,12 @@ func TestFactorSubjectAndAuthenticationAge(t *testing.T) {
 	if !ok || evidence["factorType"] != "phone" || claims["sub"] != evidence["factorId"] || claims["memberId"] != nil || claims["organizationId"] != nil || len(audience) != 1 || audience[0] != "https://registration.example.test" {
 		t.Fatal("invalid factor evidence", claims)
 	}
+	for _, token := range []string{"id_token", "access_token"} {
+		claims := f.signedClaims(tokens[token].(string))
+		if _, ok := claims["org_id"]; ok {
+			t.Fatalf("factor-only %s contains org_id", token)
+		}
+	}
 	// max_age must check the original authentication, not the time of this SSO request.
 	if _, err := f.store.Database().Exec(t.Context(), `UPDATE authentication_sessions SET verification=jsonb_set(verification,'{authenticatedAt}',to_jsonb(to_char(clock_timestamp()-interval '2 hours','YYYY-MM-DD"T"HH24:MI:SS"Z"')))`); err != nil {
 		t.Fatal(err)

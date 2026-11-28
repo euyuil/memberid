@@ -146,7 +146,7 @@ func TestDingTalkOnlyOIDCLoginRefreshAndIndependentSubjects(t *testing.T) {
 	tokens := jsonObject(t, tokensResponse)
 	claims := f.signedClaims(tokens["access_token"].(string))
 	idClaims := f.signedClaims(tokens["id_token"].(string))
-	if claims["sub"] != memberID || idClaims["sub"] != memberID || claims["organizationId"] != f.member.OrganizationID || claims["authentication"].(map[string]any)["factorType"] != "dingtalk" {
+	if claims["sub"] != memberID || idClaims["sub"] != memberID || claims["org_id"] != f.member.OrganizationID || claims["authentication"].(map[string]any)["factorType"] != "dingtalk" {
 		t.Fatal("incorrect independent Member evidence")
 	}
 	for _, name := range []string{"departments", "departmentIds", "email", "phone_number", "roles", "owner"} {

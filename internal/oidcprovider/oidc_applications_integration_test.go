@@ -40,6 +40,9 @@ func TestManageOIDCApplicationWithoutRestart(t *testing.T) {
 	consoleJSON(t, f, server, "POST", base, "bad-csrf", payload, 403)
 	created := consoleJSON(t, f, server, "POST", base, csrf, payload, 200)
 	platformOwned := created["application"].(map[string]any)
+	if _, ok := platformOwned["allowOrganizationScope"]; ok {
+		t.Fatal("registration returned the retired organization scope toggle")
+	}
 	managed := platformOwned["clientId"].(string)
 	if platformOwned["ownerOrganizationId"] != f.store.SystemOrganizationID() || platformOwned["organizationId"] != f.member.OrganizationID {
 		t.Fatal("wrong owner or login organization in console registration")
@@ -284,8 +287,8 @@ func TestOIDCApplicationPolicyManagement(t *testing.T) {
 		claims := f.signedClaims(access.(string))
 		aud, _ := claims["aud"].([]any)
 		authn, _ := claims["authentication"].(map[string]any)
-		if len(aud) != 1 || aud[0] != wantAudience || claims["organizationId"] != f.member.OrganizationID || claims["memberId"] != f.member.ID ||
-			claims["bindingId"] == nil || authn["factorType"] != "phone" || authn["factorId"] == nil {
+		if len(aud) != 1 || aud[0] != wantAudience || claims["org_id"] != f.member.OrganizationID || claims["memberId"] != f.member.ID ||
+			claims["organizationId"] != nil || claims["bindingId"] == nil || authn["factorType"] != "phone" || authn["factorId"] == nil {
 			t.Fatal("unexpected evidence token claims")
 		}
 	}

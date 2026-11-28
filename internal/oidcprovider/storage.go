@@ -61,7 +61,7 @@ func (s *storage) CreateAuthRequest(ctx context.Context, input *oidc.AuthRequest
 	if registered.registration.EvidenceScope != "" && slices.Contains(input.Scopes, registered.registration.EvidenceScope) {
 		audience = registered.registration.EvidenceAudience
 	}
-	request := &authorizationRequest{ClientRevision: registered.revision, grant: grant{InteractionID: newID(), ID: newID(), ClientID: input.ClientID, ClientName: registered.displayName, Scopes: input.Scopes, Audience: []string{audience}}, Input: *input, HintSubject: hintSubject, Interaction: browserauth.Interaction{BrowserHash: config.SecretHash(browser), CSRF: config.RandomSecret()}}
+	request := &authorizationRequest{ClientRevision: registered.revision, grant: grant{InteractionID: newID(), ID: newID(), ClientID: input.ClientID, ClientName: registered.displayName, Scopes: grantScopes(input.Scopes), Audience: []string{audience}}, Input: *input, HintSubject: hintSubject, Interaction: browserauth.Interaction{BrowserHash: config.SecretHash(browser), CSRF: config.RandomSecret()}}
 	request.Input.IDTokenHint = "" // The OP already validated the hint and supplied its subject.
 	request.ProviderOrganizationID = registered.registration.OrganizationID
 	if organizationID, present := ctx.Value(launchOrganizationKey{}).(string); present {
@@ -389,11 +389,13 @@ func (s *storage) GetPrivateClaimsFromRequest(ctx context.Context, input op.Toke
 	if err != nil {
 		return nil, err
 	}
+	if g.MemberID != "" {
+		claims["org_id"] = g.OrganizationID
+	}
 	if registered.registration.EvidenceScope != "" && slices.Contains(g.Scopes, registered.registration.EvidenceScope) {
 		evidence := map[string]any{"factorId": g.FactorID, "factorType": g.FactorType, "method": g.Method, "authenticatedAt": g.AuthTime.Unix(), "expiresAt": g.AbsoluteExpiry.Unix()}
 		claims["authentication"] = evidence
 		if g.MemberID != "" {
-			claims["organizationId"] = g.OrganizationID
 			claims["memberId"] = g.MemberID
 			claims["bindingId"] = g.BindingID
 		}
@@ -408,15 +410,8 @@ func (s *storage) SetUserinfoFromRequest(ctx context.Context, info *oidc.UserInf
 	if err != nil {
 		return err
 	}
-	if slices.Contains(scopes, identity.OrganizationScope) && g.MemberID != "" {
-		registered, err := s.client(ctx, g.ClientID)
-		if err != nil {
-			return err
-		}
-		if !registered.IsScopeAllowed(identity.OrganizationScope) {
-			return oidc.ErrInvalidScope()
-		}
-		info.AppendClaims("organizationId", g.OrganizationID)
+	if g.MemberID != "" {
+		info.AppendClaims("org_id", g.OrganizationID)
 	}
 	info.AppendClaims("sid", g.SessionID)
 	return s.userinfo(ctx, info, g, scopes)
@@ -460,7 +455,7 @@ func (s *storage) SetIntrospectionFromToken(ctx context.Context, info *oidc.Intr
 	info.Subject = subject
 	info.ClientID = g.ClientID
 	info.Audience = g.Audience
-	info.Scope = g.Scopes
+	info.Scope = g.GetScopes()
 	return nil
 }
 func (s *storage) RevokeToken(ctx context.Context, id, subject, clientID string) *oidc.Error {

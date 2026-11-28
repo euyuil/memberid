@@ -34,7 +34,6 @@ func (s *Service) registerOIDCApplicationRoutes(installation *config.Loaded) {
 			AccountReturnURIs      []string `json:"accountReturnUris"`
 			EvidenceScope          string   `json:"evidenceScope"`
 			EvidenceAudience       string   `json:"evidenceAudience"`
-			AllowOrganizationScope bool     `json:"allowOrganizationScope"`
 			Preauthorized          bool     `json:"preauthorized"`
 			Refresh                bool     `json:"refresh"`
 		}
@@ -47,8 +46,7 @@ func (s *Service) registerOIDCApplicationRoutes(installation *config.Loaded) {
 				DisplayName: input.DisplayName, OrganizationID: input.OrganizationID,
 				RedirectURIs: input.RedirectURIs, PostLogoutRedirectURIs: input.PostLogoutRedirectURIs, Refresh: input.Refresh,
 				AccountReturnURIs: input.AccountReturnURIs, Preauthorized: input.Preauthorized,
-				AllowOrganizationScope: input.AllowOrganizationScope,
-				EvidenceScope:          input.EvidenceScope, EvidenceAudience: input.EvidenceAudience,
+				EvidenceScope: input.EvidenceScope, EvidenceAudience: input.EvidenceAudience,
 			}, config.SecretHash(secret), installation.AllowLoopbackHTTP)
 		respond(w, oidcApplicationResult{value, secret}, err)
 	}
