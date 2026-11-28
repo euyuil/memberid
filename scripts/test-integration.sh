@@ -1,6 +1,9 @@
 #!/bin/sh
 set -eu
 export GOWORK=off
+npm --prefix web ci
+npm --prefix web run build
+
 image=postgres:18.6@sha256:bd5dfa494a5a259704365813dbfa5fa6b3e69be7348d43b547f540c730478583
 owner="memberid-integration-$$-$(date +%s)"
 created=0
