@@ -22,7 +22,7 @@ func TestOIDCOrganizationLaunch(t *testing.T) {
 	}
 	app, err := f.store.CreateOIDCClient(ctx, operator, identity.OIDCClientRegistration{
 		OwnerOrganizationID: a.OrganizationID, DisplayName: "Shared workspace",
-		Client: identity.OIDCClient{SecretSHA256: config.SecretHash(f.secret), SubjectKind: "member", OrganizationID: a.OrganizationID, RedirectURIs: []string{callback}, AllowOrganizationScope: true},
+		Client: identity.OIDCClient{SecretSHA256: config.SecretHash(f.secret), SubjectKind: "member", OrganizationID: a.OrganizationID, RedirectURIs: []string{callback}},
 	}, true)
 	if err != nil {
 		t.Fatal(err)
@@ -32,7 +32,7 @@ func TestOIDCOrganizationLaunch(t *testing.T) {
 		t.Fatal(err)
 	}
 	parameter := url.Values{"memberid_organization": {b.OrganizationID}}
-	const scope = "openid memberid.organization"
+	const scope = "openid"
 	denied := func(client string, params url.Values) {
 		t.Helper()
 		start, _ := f.authorization(client, scope, params)
@@ -108,7 +108,7 @@ func TestOIDCOrganizationLaunch(t *testing.T) {
 		result := f.exchange(app.ClientID, f.complete(page, b.ID), verifier)
 		f.status(result, 200)
 		claims := f.signedClaims(jsonObject(t, result)["id_token"].(string))
-		if claims["organizationId"] != b.OrganizationID || claims["sub"] != b.ID || claims["nonce"] != "example-nonce" {
+		if claims["org_id"] != b.OrganizationID || claims["sub"] != b.ID || claims["nonce"] != "example-nonce" {
 			t.Fatal("incorrect signed organization, Member or nonce")
 		}
 	}

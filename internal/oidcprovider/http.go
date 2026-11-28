@@ -69,7 +69,7 @@ func New(configuration *config.Loaded, store *identity.Store, phone *identity.Ph
 	if configuration.AllowLoopbackHTTP {
 		options = append(options, op.WithAllowInsecure())
 	}
-	provider, err := op.NewProvider(&op.Config{CryptoKey: key, CodeMethodS256: true, GrantTypeRefreshToken: true, SupportedScopes: []string{"openid", "profile", "email", "phone", "offline_access"}, SupportedClaims: []string{"iss", "sub", "aud", "exp", "iat", "auth_time", "nonce", "amr", "at_hash", "c_hash", "client_id", "azp", "sid", "name", "preferred_username", "phone_number", "phone_number_verified"}, DefaultLogoutRedirectURI: configuration.Issuer + "/signed-out"}, service.storage, op.StaticIssuer(configuration.Issuer), options...)
+	provider, err := op.NewProvider(&op.Config{CryptoKey: key, CodeMethodS256: true, GrantTypeRefreshToken: true, SupportedScopes: []string{"openid", "profile", "email", "phone", "offline_access"}, SupportedClaims: []string{"iss", "sub", "aud", "exp", "iat", "auth_time", "nonce", "amr", "at_hash", "c_hash", "client_id", "azp", "sid", "name", "preferred_username", "phone_number", "phone_number_verified", "org_id"}, DefaultLogoutRedirectURI: configuration.Issuer + "/signed-out"}, service.storage, op.StaticIssuer(configuration.Issuer), options...)
 	if err != nil {
 		return nil, err
 	}
@@ -251,10 +251,6 @@ func (service *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		metadata.ScopesSupported = append([]string{"openid", "profile", "email", "phone"}, capabilities.EvidenceScopes...)
-		if capabilities.OrganizationScope {
-			metadata.ScopesSupported = append(metadata.ScopesSupported, identity.OrganizationScope)
-			metadata.ClaimsSupported = append(metadata.ClaimsSupported, "organizationId")
-		}
 		if capabilities.Refresh {
 			metadata.ScopesSupported = append(metadata.ScopesSupported, "offline_access")
 			metadata.GrantTypesSupported = append(metadata.GrantTypesSupported, oidc.GrantTypeRefreshToken)
