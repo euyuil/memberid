@@ -126,6 +126,8 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - name: Install reviewed Node LTS
+        run: sh scripts/ci-node.sh
       - name: Test with disposable PostgreSQL
         run: sh scripts/test-integration.sh
 
